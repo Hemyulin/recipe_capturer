@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class RecipeListPage extends StatelessWidget {
-  const RecipeListPage({Key? key, required this.title}) : super(key: key);
+  const RecipeListPage({super.key, required this.title});
 
   final String title;
 
