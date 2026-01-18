@@ -8,7 +8,6 @@ plugins {
 android {
     namespace = "com.example.recipe_capturer"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
