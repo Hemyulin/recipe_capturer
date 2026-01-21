@@ -1,8 +1,13 @@
 class Recipe {
   final String title;
 
-  Recipe(this.title);
+  Recipe._(this.title);
+
   factory Recipe.create(String title) {
-    return Recipe(title.trim());
+    final t = title.trim();
+    if (t.isEmpty) {
+      throw ArgumentError('Titel kann nicht leer sein!');
+    }
+    return Recipe._(t);
   }
 }
