@@ -6,11 +6,11 @@ final router = GoRouter(
   routes: [
     GoRoute(
       path: '/',
-      builder: (context, state) => RecipeListPage(title: 'Recipes'),
+      builder: (context, state) => RecipeListPage(title: 'Rezepte'),
     ),
     GoRoute(
       path: '/new',
-      builder: (context, state) => NewRecipePage(title: 'New Recipe Page'),
+      builder: (context, state) => NewRecipePage(title: 'Neue Rezeptenseite'),
     ),
   ],
 );

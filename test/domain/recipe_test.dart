@@ -7,9 +7,8 @@ void main() {
     expect(recipe.title, 'test title');
   });
 
-  test('Recipe.create allows empty string', () {
-    final recipe = Recipe.create('');
-    expect(recipe.title, '');
+  test('Recipe.create throws on empty title', () {
+    expect(() => Recipe.create('     '), throwsArgumentError);
   });
 
   //   test('Recipe.create contains creation timestamp', () {
