@@ -12,27 +12,29 @@ class RecipeListPage extends StatefulWidget {
 }
 
 class _RecipeListPageState extends State<RecipeListPage> {
-  Recipe? lastRecipe;
+  List<Recipe> recipes = [];
 
   @override
   Widget build(BuildContext context) {
+    final Widget content = recipes.isEmpty
+        ? Text('Keine Rezepte vorhanden')
+        : ListView(
+            children: recipes
+                .map((recipe) => Card(child: Text(recipe.title)))
+                .toList(),
+          );
+
     return Scaffold(
       appBar: AppBar(title: Text(widget.title)),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
           final recipe = await context.push<Recipe>('/new');
           if (recipe == null) return;
-          setState(() => lastRecipe = recipe);
+          setState(() => recipes.add(recipe));
         },
         child: const Icon(Icons.add),
       ),
-      body: Center(
-        child: Text(
-          lastRecipe == null
-              ? 'Keine Rezepte vorhanden'
-              : 'Letzes Rezept: ${lastRecipe!.title}',
-        ),
-      ),
+      body: Center(child: content),
     );
   }
 }
