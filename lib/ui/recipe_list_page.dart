@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:recipe_capturer/data/recipe_repository.dart';
 import 'package:recipe_capturer/domain/recipe.dart';
+import 'package:recipe_capturer/ui/recipe_card.dart';
 
 class RecipeListPage extends StatefulWidget {
   const RecipeListPage({super.key, required this.title, required this.repo});
@@ -29,9 +30,26 @@ class _RecipeListPageState extends State<RecipeListPage> {
   @override
   Widget build(BuildContext context) {
     final Widget content = recipesSnapshot.isEmpty
-        ? const Text('Keine Rezepte vorhanden')
-        : ListView(
-            children: recipesSnapshot.map((recipe) => Card(child: Text(recipe.title))).toList(),
+        ? Center(child: const Text('Keine Rezepte vorhanden'))
+        : ListView.builder(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            itemCount: recipesSnapshot.length,
+            itemBuilder: (context, index) {
+              final recipe = recipesSnapshot[index];
+              return Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                child: RecipeCard(
+                  recipe: recipe,
+                  onDelete: () {
+                    widget.repo.deleteById(recipe.id);
+                    _refresh();
+                  },
+                ),
+              );
+            },
           );
 
     return Scaffold(
@@ -43,7 +61,7 @@ class _RecipeListPageState extends State<RecipeListPage> {
         },
         child: const Icon(Icons.add),
       ),
-      body: Center(child: content),
+      body: content,
     );
   }
 }
