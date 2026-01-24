@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:recipe_capturer/data/recipe_repository.dart';
 import 'package:recipe_capturer/domain/recipe.dart';
 
 class NewRecipePage extends StatefulWidget {
-  const NewRecipePage({super.key, required this.title});
+  const NewRecipePage({super.key, required this.title, required this.repo});
 
   final String title;
+  final RecipeRepository repo;
 
   @override
   State<NewRecipePage> createState() => _NewRecipePageState();
@@ -30,10 +32,9 @@ class _NewRecipePageState extends State<NewRecipePage> {
             icon: const Icon(Icons.save),
             onPressed: () {
               try {
-                final raw = _titleController.text;
-                debugPrint('RAW TITLE: "$raw" (len=${raw.length})');
                 final recipe = Recipe.create(_titleController.text);
-                context.pop(recipe);
+                widget.repo.add(recipe);
+                context.pop(true);
               } catch (_) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
