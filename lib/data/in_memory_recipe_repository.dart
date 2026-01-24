@@ -13,4 +13,9 @@ class InMemoryRecipeRepository implements RecipeRepository {
   void add(Recipe recipe) {
     _recipe.add(recipe);
   }
+
+  @override
+  void deleteById(String id) {
+    _recipe.removeWhere((r) => r.id == id);
+  }
 }
