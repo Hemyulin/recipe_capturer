@@ -23,8 +23,10 @@ class _RecipeListPageState extends State<RecipeListPage> {
     _refresh();
   }
 
-  void _refresh() {
-    setState(() => recipesSnapshot = widget.repo.getAll());
+  Future<void> _refresh() async {
+    final snapshot = await widget.repo.getAll();
+    if (!mounted) return;
+    setState(() => recipesSnapshot = snapshot);
   }
 
   @override
@@ -43,9 +45,9 @@ class _RecipeListPageState extends State<RecipeListPage> {
                 ),
                 child: RecipeCard(
                   recipe: recipe,
-                  onDelete: () {
-                    widget.repo.deleteById(recipe.id);
-                    _refresh();
+                  onDelete: () async {
+                    await widget.repo.deleteById(recipe.id);
+                    await _refresh();
                   },
                 ),
               );
@@ -57,7 +59,7 @@ class _RecipeListPageState extends State<RecipeListPage> {
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
           final saved = await context.push<bool>('/new');
-          if (saved == true) _refresh();
+          if (saved == true) await _refresh();
         },
         child: const Icon(Icons.add),
       ),
