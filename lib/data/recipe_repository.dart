@@ -1,9 +1,9 @@
 import '../domain/recipe.dart';
 
 abstract interface class RecipeRepository {
-  List<Recipe> getAll();
+  Future<List<Recipe>> getAll();
 
-  void add(Recipe recipe);
+  Future<void> add(Recipe recipe);
 
-  void deleteById(String id);
+  Future<void> deleteById(String id);
 }

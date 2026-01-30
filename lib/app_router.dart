@@ -1,9 +1,9 @@
 import 'package:go_router/go_router.dart';
-import 'package:recipe_capturer/data/in_memory_recipe_repository.dart';
+import 'package:recipe_capturer/data/file_recipe_repository.dart';
 import 'package:recipe_capturer/ui/new_recipe_page.dart';
 import 'package:recipe_capturer/ui/recipe_list_page.dart';
 
-final repo = InMemoryRecipeRepository();
+final repo = FileRecipeRepository();
 
 final router = GoRouter(
   routes: [

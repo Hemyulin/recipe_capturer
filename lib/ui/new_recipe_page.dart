@@ -30,12 +30,15 @@ class _NewRecipePageState extends State<NewRecipePage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.save),
-            onPressed: () {
+            onPressed: () async {
               try {
                 final recipe = Recipe.create(_titleController.text);
-                widget.repo.add(recipe);
+                await widget.repo.add(recipe);
+
+                if (!context.mounted) return;
                 context.pop(true);
               } catch (_) {
+                if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('Rezepttitel kann nicht leer sein!'),
