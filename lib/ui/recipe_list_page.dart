@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:recipe_capturer/data/recipe_repository.dart';
 import 'package:recipe_capturer/domain/recipe.dart';
 import 'package:recipe_capturer/ui/recipe_card.dart';
+import 'package:recipe_capturer/ui/strings_de.dart';
 
 class RecipeListPage extends StatefulWidget {
   const RecipeListPage({super.key, required this.title, required this.repo});
@@ -32,7 +33,7 @@ class _RecipeListPageState extends State<RecipeListPage> {
   @override
   Widget build(BuildContext context) {
     final Widget content = recipesSnapshot.isEmpty
-        ? Center(child: const Text('Keine Rezepte vorhanden'))
+        ? Center(child: const Text(StringsDe.noRecipes))
         : ListView.builder(
             padding: const EdgeInsets.symmetric(vertical: 8),
             itemCount: recipesSnapshot.length,
