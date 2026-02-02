@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:recipe_capturer/domain/recipe.dart';
 import 'package:recipe_capturer/ui/date_label_de.dart';
 import 'package:recipe_capturer/ui/strings_de.dart';
+import 'package:recipe_capturer/ui/tag_label_de.dart';
 
 class RecipeCard extends StatelessWidget {
   const RecipeCard({
@@ -23,14 +24,42 @@ class RecipeCard extends StatelessWidget {
     final meta =
         '${StringsDe.addedLabel}: $dateLabel   ${StringsDe.ingredientsLabel}: ${recipe.ingredients.length}';
 
+    const radius = 16.0;
+
+    Future<void> confirmDelete() async {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Rezept löschen?'),
+          content: const Text('Dieses Rezept wird dauerhaft gelöscht.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Abbrechen'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Löschen'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed == true) {
+        onDelete?.call();
+      }
+    }
+
     return Card(
       clipBehavior: Clip.antiAlias,
       elevation: 3,
       shadowColor: Colors.black26,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(radius),
+      ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(radius),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -42,7 +71,7 @@ class RecipeCard extends StatelessWidget {
                   Image.asset(
                     'assets/recipe_placeholder.jpg',
                     fit: BoxFit.cover,
-                    alignment: Alignment.topCenter,
+                    alignment: Alignment.center,
                   ),
 
                   const DecoratedBox(
@@ -67,34 +96,7 @@ class RecipeCard extends StatelessWidget {
                         color: Colors.black45,
                         shape: const CircleBorder(),
                         child: IconButton(
-                          onPressed: () async {
-                            final confirmed = await showDialog<bool>(
-                              context: context,
-                              builder: (context) => AlertDialog(
-                                title: const Text('Rezept löschen?'),
-                                content: const Text(
-                                  'Dieses Rezept wird dauerhaft gelöscht.',
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () =>
-                                        Navigator.of(context).pop(false),
-                                    child: const Text('Abbrechen'),
-                                  ),
-                                  TextButton(
-                                    onPressed: () =>
-                                        Navigator.of(context).pop(true),
-                                    child: const Text('Löschen'),
-                                  ),
-                                ],
-                              ),
-                            );
-
-                            if (confirmed == true) {
-                              onDelete?.call();
-                            }
-                          },
-
+                          onPressed: confirmDelete,
                           icon: const Icon(Icons.delete_outline),
                           color: Colors.white,
                           tooltip: 'Löschen',
@@ -118,7 +120,7 @@ class RecipeCard extends StatelessWidget {
                                 .map(
                                   (t) => Chip(
                                     label: Text(
-                                      t,
+                                      tagLabelDe(t),
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                     visualDensity: VisualDensity.compact,

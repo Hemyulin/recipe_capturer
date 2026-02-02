@@ -7,29 +7,33 @@ class Recipe {
 
   Recipe._(this.id, this.title, this.createdAt, this.ingredients, this.tags);
 
-  factory Recipe.create(String title) {
+  factory Recipe.create(
+    String title, {
+    List<String>? ingredients,
+    List<String>? tags,
+  }) {
     final t = title.trim();
     if (t.isEmpty) {
       throw ArgumentError('Titel kann nicht leer sein!');
     }
 
+    final cleanedIngredients = (ingredients ?? <String>[])
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+
+    final cleanedTags = (tags ?? <String>[])
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+
     return Recipe._(
       DateTime.now().microsecondsSinceEpoch.toString(),
       t,
       DateTime.now(),
-      <String>[],
-      <String>[],
+      cleanedIngredients,
+      cleanedTags,
     );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'title': title,
-      'createdAt': createdAt.toIso8601String(),
-      'ingredients': ingredients,
-      'tags': tags,
-    };
   }
 
   factory Recipe.fromJson(Map<String, dynamic> json) {
@@ -59,5 +63,15 @@ class Recipe {
         : <String>[];
 
     return Recipe._(id, title, createdAt, ingredients, tags);
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'createdAt': createdAt.toIso8601String(),
+      'ingredients': ingredients,
+      'tags': tags,
+    };
   }
 }
