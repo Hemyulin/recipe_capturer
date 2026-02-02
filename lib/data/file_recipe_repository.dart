@@ -42,7 +42,7 @@ class FileRecipeRepository implements RecipeRepository {
       items = [];
     }
 
-    items.add((recipe.toJson()));
+    items.add(recipe.toJson());
 
     final encoded = jsonEncode(items);
     await file.writeAsString(encoded);
