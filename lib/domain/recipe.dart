@@ -4,8 +4,16 @@ class Recipe {
   final DateTime createdAt;
   final List<String> ingredients;
   final List<String> tags;
+  final bool isFavorite;
 
-  Recipe._(this.id, this.title, this.createdAt, this.ingredients, this.tags);
+  Recipe._(
+    this.id,
+    this.title,
+    this.createdAt,
+    this.ingredients,
+    this.tags,
+    this.isFavorite,
+  );
 
   factory Recipe.create(
     String title, {
@@ -27,12 +35,15 @@ class Recipe {
         .where((e) => e.isNotEmpty)
         .toList();
 
+    final now = DateTime.now();
+
     return Recipe._(
-      DateTime.now().microsecondsSinceEpoch.toString(),
+      now.microsecondsSinceEpoch.toString(),
       t,
-      DateTime.now(),
+      now,
       cleanedIngredients,
       cleanedTags,
+      false, // isFavorite
     );
   }
 
@@ -62,7 +73,10 @@ class Recipe {
         ? tagsRaw.map((e) => e.toString()).toList()
         : <String>[];
 
-    return Recipe._(id, title, createdAt, ingredients, tags);
+    // Backward-compatible: older stored recipes don't have this field
+    final isFavorite = (json['isFavorite'] as bool?) ?? false;
+
+    return Recipe._(id, title, createdAt, ingredients, tags, isFavorite);
   }
 
   Map<String, dynamic> toJson() {
@@ -72,6 +86,11 @@ class Recipe {
       'createdAt': createdAt.toIso8601String(),
       'ingredients': ingredients,
       'tags': tags,
+      'isFavorite': isFavorite,
     };
+  }
+
+  Recipe withFavorite(bool value) {
+    return Recipe._(id, title, createdAt, ingredients, tags, value);
   }
 }
