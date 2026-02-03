@@ -88,6 +88,24 @@ class RecipeCard extends StatelessWidget {
                     ),
                   ),
 
+                  if (recipe.isFavorite)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Material(
+                        color: Colors.black38,
+                        shape: const CircleBorder(),
+                        child: const Padding(
+                          padding: EdgeInsets.all(6),
+                          child: Icon(
+                            Icons.favorite,
+                            color: Colors.redAccent,
+                            size: 18,
+                          ),
+                        ),
+                      ),
+                    ),
+
                   if (onDelete != null)
                     Positioned(
                       top: 8,

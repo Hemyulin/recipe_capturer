@@ -18,4 +18,10 @@ class InMemoryRecipeRepository implements RecipeRepository {
   Future<void> deleteById(String id) async {
     _recipe.removeWhere((r) => r.id == id);
   }
+
+  @override
+  Future<void> update(Recipe recipe) {
+    // TODO: implement update
+    throw UnimplementedError();
+  }
 }

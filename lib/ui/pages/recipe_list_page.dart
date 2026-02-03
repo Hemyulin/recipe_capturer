@@ -46,8 +46,8 @@ class _RecipeListPageState extends State<RecipeListPage> {
                 ),
                 child: RecipeCard(
                   recipe: recipe,
-                  onDelete: () async {
-                    await widget.repo.deleteById(recipe.id);
+                  onTap: () async {
+                    await context.push('/details', extra: recipe);
                     await _refresh();
                   },
                 ),

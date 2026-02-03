@@ -1,6 +1,8 @@
 import 'package:go_router/go_router.dart';
 import 'package:recipe_capturer/data/file_recipe_repository.dart';
+import 'package:recipe_capturer/domain/recipe.dart';
 import 'package:recipe_capturer/ui/new_recipe_page.dart';
+import 'package:recipe_capturer/ui/recipe_details_page.dart';
 import 'package:recipe_capturer/ui/recipe_list_page.dart';
 
 final repo = FileRecipeRepository();
@@ -15,6 +17,13 @@ final router = GoRouter(
       path: '/new',
       builder: (context, state) =>
           NewRecipePage(title: 'Neue Rezeptenseite', repo: repo),
+    ),
+    GoRoute(
+      path: '/details',
+      builder: (context, state) {
+        final recipe = state.extra as Recipe;
+        return RecipeDetailsPage(recipe: recipe, repo: repo);
+      },
     ),
   ],
 );

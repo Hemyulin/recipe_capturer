@@ -6,4 +6,6 @@ abstract interface class RecipeRepository {
   Future<void> add(Recipe recipe);
 
   Future<void> deleteById(String id);
+
+  Future<void> update(Recipe recipe);
 }
