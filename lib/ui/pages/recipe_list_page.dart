@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:recipe_capturer/data/recipe_repository.dart';
 import 'package:recipe_capturer/domain/recipe.dart';
-import 'package:recipe_capturer/ui/recipe_card.dart';
-import 'package:recipe_capturer/ui/strings_de.dart';
+import 'package:recipe_capturer/ui/widgets/recipe_card.dart';
+import 'package:recipe_capturer/ui/formatters/strings_de.dart';
 
 class RecipeListPage extends StatefulWidget {
   const RecipeListPage({super.key, required this.title, required this.repo});

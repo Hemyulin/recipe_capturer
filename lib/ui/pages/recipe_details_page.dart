@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:recipe_capturer/data/recipe_repository.dart';
 import 'package:recipe_capturer/domain/recipe.dart';
-import 'package:recipe_capturer/ui/date_label_de.dart';
-import 'package:recipe_capturer/ui/strings_de.dart';
-import 'package:recipe_capturer/ui/tag_label_de.dart';
+import 'package:recipe_capturer/ui/formatters/date_label_de.dart';
+import 'package:recipe_capturer/ui/formatters/strings_de.dart';
+import 'package:recipe_capturer/ui/formatters/tag_label_de.dart';
 
 class RecipeDetailsPage extends StatefulWidget {
   final Recipe recipe;
