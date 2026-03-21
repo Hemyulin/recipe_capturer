@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:recipe_capturer/data/recipe_repository.dart';
 import 'package:recipe_capturer/domain/recipe.dart';
-import 'package:recipe_capturer/ui/recipe_card.dart';
-import 'package:recipe_capturer/ui/strings_de.dart';
+import 'package:recipe_capturer/ui/widgets/recipe_card.dart';
+import 'package:recipe_capturer/ui/formatters/strings_de.dart';
 
 class RecipeListPage extends StatefulWidget {
   const RecipeListPage({super.key, required this.title, required this.repo});
@@ -56,7 +56,16 @@ class _RecipeListPageState extends State<RecipeListPage> {
           );
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: [
+          IconButton(
+            onPressed: () =>
+                context.push('/import', extra: ['mock1', 'mock2', 'mock3']),
+            icon: Icon(Icons.image),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
           final saved = await context.push<bool>('/new');
