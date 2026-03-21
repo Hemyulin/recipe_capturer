@@ -1,5 +1,7 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 
 class ImportRecipePage extends StatefulWidget {
@@ -15,35 +17,105 @@ class _ImportRecipePageState extends State<ImportRecipePage> {
   String _recognizedText = '';
   bool _isRecognizing = false;
 
-  void _createDraft() {
-    final lines = _recognizedText
+  @override
+  void initState() {
+    super.initState();
+    _recognizeText();
+  }
+
+  bool _isBlockedLine(String line) {
+    final lower = line.toLowerCase().trim();
+
+    const blockedFragments = [
+      'publicaciones',
+      'gefällt',
+      'ver traducción',
+      'folgen',
+      'follow',
+      'instagram',
+      'reels',
+      'comments',
+      'likes',
+      'antworten',
+      'antwort',
+      'audio original',
+    ];
+
+    return blockedFragments.any(lower.contains);
+  }
+
+  bool _looksLikeIngredientLine(String line) {
+    final lower = line.toLowerCase().trim();
+
+    if (lower.isEmpty) return false;
+    if (_isBlockedLine(lower)) return false;
+
+    final hasNumber = RegExp(r'\d').hasMatch(lower);
+    final hasUnit = RegExp(
+      r'\b(g|kg|mg|ml|l|tl|el|esslöffel|teelöffel|cup|cups)\b',
+      caseSensitive: false,
+    ).hasMatch(line);
+
+    final looksTooLong = line.length > 60;
+
+    return (hasNumber || hasUnit) && !looksTooLong;
+  }
+
+  List<String> _cleanLines(String recognizedText) {
+    return recognizedText
         .split('\n')
         .map((l) => l.trim())
         .where((l) => l.isNotEmpty)
+        .where((l) => !_isBlockedLine(l))
+        .toList();
+  }
+
+  String _extractIngredientsText(String recognizedText) {
+    final lines = _cleanLines(
+      recognizedText,
+    ).where(_looksLikeIngredientLine).toList();
+
+    return lines.join('\n');
+  }
+
+  String _extractInstructionsText(String recognizedText) {
+    final lines = _cleanLines(recognizedText)
+        .where((line) => !_looksLikeIngredientLine(line))
+        .where((line) => line.length > 20)
         .toList();
 
-    // --- TITLE ---
+    return lines.join('\n\n');
+  }
+
+  Future<void> _createDraft() async {
+    final lines = _cleanLines(_recognizedText);
+
     final title = lines.firstWhere(
-      (l) =>
-          l.length > 5 &&
-          !l.toLowerCase().contains('publicaciones') &&
-          !l.toLowerCase().contains('gefällt'),
+      (l) => l.length > 5 && l.length < 50,
       orElse: () => 'Neues Rezept',
     );
 
-    // --- INGREDIENTS ---
-    final ingredients = lines.where((l) => RegExp(r'\d').hasMatch(l)).toList();
+    final ingredientsText = _extractIngredientsText(_recognizedText);
+    final instructionsText = _extractInstructionsText(_recognizedText);
 
-    // Debug so you SEE what happens
-    debugPrint('TITLE: $title');
-    debugPrint('INGREDIENTS: $ingredients');
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Titel: $title (${ingredients.length} Zutaten)')),
+    final saved = await context.push<bool>(
+      '/new',
+      extra: {
+        'title': title,
+        'ingredientsText': ingredientsText,
+        'instructions': instructionsText,
+      },
     );
+
+    if (!context.mounted) return;
+    if (saved == true) {
+      context.pop(true);
+    }
   }
 
   Future<void> _recognizeText() async {
+    if (_isRecognizing) return;
+
     setState(() => _isRecognizing = true);
 
     final recognizer = TextRecognizer();
@@ -64,7 +136,7 @@ class _ImportRecipePageState extends State<ImportRecipePage> {
         _recognizedText = buffer.toString().trim();
       });
     } finally {
-      recognizer.close();
+      await recognizer.close();
       if (mounted) {
         setState(() => _isRecognizing = false);
       }
@@ -82,14 +154,11 @@ class _ImportRecipePageState extends State<ImportRecipePage> {
             onPressed: _isRecognizing ? null : _recognizeText,
             child: Text(_isRecognizing ? 'Erkenne Text...' : 'Text erkennen'),
           ),
-
           ElevatedButton(
             onPressed: _recognizedText.isEmpty ? null : _createDraft,
             child: const Text('Als Rezept übernehmen'),
           ),
-
           const SizedBox(height: 16),
-
           ...widget.imagePaths.map(
             (path) => Padding(
               padding: const EdgeInsets.only(bottom: 12),
@@ -99,7 +168,6 @@ class _ImportRecipePageState extends State<ImportRecipePage> {
               ),
             ),
           ),
-
           if (_recognizedText.isNotEmpty) ...[
             const SizedBox(height: 24),
             const Text(

@@ -27,6 +27,7 @@ class _RecipeListPageState extends State<RecipeListPage> {
 
   Future<void> _refresh() async {
     final snapshot = await widget.repo.getAll();
+    snapshot.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     if (!mounted) return;
     setState(() => recipesSnapshot = snapshot);
   }
@@ -68,9 +69,17 @@ class _RecipeListPageState extends State<RecipeListPage> {
               if (images.isEmpty) return;
 
               final paths = images.map((e) => e.path).toList();
-              if (!mounted) return;
-              final router = GoRouter.of(context);
-              router.push('/import', extra: paths);
+
+              if (!context.mounted) return;
+              final imported = await context.push<bool>(
+                '/import',
+                extra: paths,
+              );
+
+              if (!context.mounted) return;
+              if (imported == true) {
+                await _refresh();
+              }
             },
             icon: const Icon(Icons.image),
           ),

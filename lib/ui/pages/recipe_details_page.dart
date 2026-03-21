@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:recipe_capturer/data/recipe_repository.dart';
 import 'package:recipe_capturer/domain/recipe.dart';
 import 'package:recipe_capturer/ui/formatters/date_label_de.dart';
@@ -30,12 +31,25 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
 
   Future<void> _toggleFavorite() async {
     final next = recipe.withFavorite(!recipe.isFavorite);
-
-    // optimistic UI
     setState(() => recipe = next);
-
-    // persist
     await widget.repo.update(next);
+  }
+
+  Future<void> _editRecipe() async {
+    final saved = await context.push<bool>('/edit', extra: recipe);
+
+    if (!context.mounted) return;
+
+    if (saved == true) {
+      final refreshed = await widget.repo.getAll();
+      final updated = refreshed.where((r) => r.id == recipe.id).firstOrNull;
+
+      if (!context.mounted) return;
+
+      if (updated != null) {
+        setState(() => recipe = updated);
+      }
+    }
   }
 
   Future<void> _confirmAndDelete() async {
@@ -79,9 +93,14 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
         actions: [
           PopupMenuButton<String>(
             onSelected: (value) {
-              if (value == 'delete') _confirmAndDelete();
+              if (value == 'edit') {
+                _editRecipe();
+              } else if (value == 'delete') {
+                _confirmAndDelete();
+              }
             },
             itemBuilder: (context) => const [
+              PopupMenuItem(value: 'edit', child: Text('Bearbeiten')),
               PopupMenuItem(value: 'delete', child: Text('Löschen')),
             ],
           ),
@@ -104,8 +123,6 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
                     fit: BoxFit.cover,
                   ),
                 ),
-
-                // Heart on image
                 Positioned(
                   top: 12,
                   right: 12,
@@ -129,18 +146,14 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
               ],
             ),
           ),
-
           const SizedBox(height: 16),
-
           Text(
             meta,
             style: textTheme.bodySmall?.copyWith(
               color: colorScheme.onSurfaceVariant,
             ),
           ),
-
           const SizedBox(height: 16),
-
           if (recipe.tags.isNotEmpty)
             Wrap(
               spacing: 8,
@@ -157,12 +170,9 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
                   )
                   .toList(),
             ),
-
           if (recipe.tags.isNotEmpty) const SizedBox(height: 24),
-
           Text('Zutaten', style: textTheme.titleMedium),
           const SizedBox(height: 12),
-
           if (recipe.ingredients.isEmpty)
             Text(
               StringsDe.noIngredients,
@@ -173,16 +183,27 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
           else
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: 8,
               children: recipe.ingredients
                   .map(
-                    (ingredient) => Text(
-                      '• $ingredient',
-                      style: textTheme.bodyMedium?.copyWith(height: 1.35),
+                    (ingredient) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        '• $ingredient',
+                        style: textTheme.bodyMedium?.copyWith(height: 1.35),
+                      ),
                     ),
                   )
                   .toList(),
             ),
+          if (recipe.instructions.trim().isNotEmpty) ...[
+            const SizedBox(height: 24),
+            Text('Zubereitung', style: textTheme.titleMedium),
+            const SizedBox(height: 12),
+            Text(
+              recipe.instructions,
+              style: textTheme.bodyMedium?.copyWith(height: 1.45),
+            ),
+          ],
         ],
       ),
     );
