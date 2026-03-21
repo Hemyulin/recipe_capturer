@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:recipe_capturer/data/recipe_repository.dart';
 import 'package:recipe_capturer/domain/recipe.dart';
 import 'package:recipe_capturer/ui/widgets/recipe_card.dart';
@@ -60,9 +61,18 @@ class _RecipeListPageState extends State<RecipeListPage> {
         title: Text(widget.title),
         actions: [
           IconButton(
-            onPressed: () =>
-                context.push('/import', extra: ['mock1', 'mock2', 'mock3']),
-            icon: Icon(Icons.image),
+            onPressed: () async {
+              final picker = ImagePicker();
+              final images = await picker.pickMultiImage();
+
+              if (images.isEmpty) return;
+
+              final paths = images.map((e) => e.path).toList();
+              if (!mounted) return;
+              final router = GoRouter.of(context);
+              router.push('/import', extra: paths);
+            },
+            icon: const Icon(Icons.image),
           ),
         ],
       ),

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 class ImportRecipePage extends StatelessWidget {
@@ -11,9 +13,18 @@ class ImportRecipePage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Rezept importieren')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Text('$count Screenshots ausgewählt'),
+      body: ListView.separated(
+        padding: const EdgeInsets.all(12),
+        itemCount: imagePaths.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          final path = imagePaths[index];
+
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.file(File(path), fit: BoxFit.cover),
+          );
+        },
       ),
     );
   }
