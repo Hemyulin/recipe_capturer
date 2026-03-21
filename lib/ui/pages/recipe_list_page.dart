@@ -56,7 +56,16 @@ class _RecipeListPageState extends State<RecipeListPage> {
           );
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: [
+          IconButton(
+            onPressed: () =>
+                context.push('/import', extra: ['mock1', 'mock2', 'mock3']),
+            icon: Icon(Icons.image),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
           final saved = await context.push<bool>('/new');
