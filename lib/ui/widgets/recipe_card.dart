@@ -26,7 +26,8 @@ class RecipeCard extends StatelessWidget {
     final meta =
         '${StringsDe.addedLabel}: $dateLabel   ${StringsDe.ingredientsLabel}: ${recipe.ingredients.length}';
 
-    const radius = 16.0;
+    const radius = 22.0;
+    final colorScheme = Theme.of(context).colorScheme;
 
     Future<void> confirmDelete() async {
       final confirmed = await showDialog<bool>(
@@ -71,10 +72,12 @@ class RecipeCard extends StatelessWidget {
 
     return Card(
       clipBehavior: Clip.antiAlias,
-      elevation: 3,
-      shadowColor: Colors.black26,
+      margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(radius),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.45),
+        ),
       ),
       child: InkWell(
         onTap: onTap,
@@ -88,15 +91,15 @@ class RecipeCard extends StatelessWidget {
                 fit: StackFit.expand,
                 children: [
                   imageWidget,
-                  const DecoratedBox(
+                  DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
                           Colors.transparent,
-                          Colors.black54,
-                          Colors.black87,
+                          Colors.black.withValues(alpha: 0.48),
+                          Colors.black.withValues(alpha: 0.84),
                         ],
                       ),
                     ),
@@ -152,6 +155,9 @@ class RecipeCard extends StatelessWidget {
                                       tagLabelDe(t),
                                       overflow: TextOverflow.ellipsis,
                                     ),
+                                    backgroundColor: Colors.white.withValues(
+                                      alpha: 0.88,
+                                    ),
                                     visualDensity: VisualDensity.compact,
                                     materialTapTargetSize:
                                         MaterialTapTargetSize.shrinkWrap,
@@ -176,7 +182,24 @@ class RecipeCard extends StatelessWidget {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-              child: Text(meta, style: Theme.of(context).textTheme.bodySmall),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.schedule_outlined,
+                    size: 14,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      meta,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
