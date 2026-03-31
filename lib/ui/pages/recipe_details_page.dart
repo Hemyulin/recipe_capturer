@@ -1,12 +1,15 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:recipe_capturer/data/recipe_repository.dart';
 import 'package:recipe_capturer/domain/recipe.dart';
 import 'package:recipe_capturer/ui/formatters/date_label_de.dart';
 import 'package:recipe_capturer/ui/formatters/strings_de.dart';
 import 'package:recipe_capturer/ui/formatters/tag_label_de.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class RecipeDetailsPage extends StatefulWidget {
   final Recipe recipe;
@@ -24,6 +27,37 @@ class RecipeDetailsPage extends StatefulWidget {
 
 class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
   late Recipe recipe;
+
+  Future<void> _refreshRecipe() async {
+    final refreshed = await widget.repo.getAll();
+    final updated = refreshed.where((r) => r.id == recipe.id).firstOrNull;
+    if (!mounted) return;
+    if (updated != null) {
+      setState(() => recipe = updated);
+    }
+  }
+
+  Future<void> _openSourceUrl() async {
+    final raw = recipe.sourceUrl.trim();
+    if (raw.isEmpty) return;
+
+    final uri = Uri.tryParse(raw);
+    if (uri == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Ungültiger Link')));
+      return;
+    }
+
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Link konnte nicht geöffnet werden')),
+      );
+    }
+  }
 
   @override
   void initState() {
@@ -43,14 +77,39 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
     if (!context.mounted) return;
 
     if (saved == true) {
-      final refreshed = await widget.repo.getAll();
-      final updated = refreshed.where((r) => r.id == recipe.id).firstOrNull;
+      await _refreshRecipe();
+    }
+  }
 
-      if (!context.mounted) return;
+  Future<void> _addImages() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickMultiImage();
+    if (picked.isEmpty) return;
 
-      if (updated != null) {
-        setState(() => recipe = updated);
-      }
+    final updatedRecipe = recipe.copyWith(
+      imagePaths: [...recipe.imagePaths, ...picked.map((e) => e.path)],
+    );
+
+    await widget.repo.update(updatedRecipe);
+    await _refreshRecipe();
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${picked.length} Bild(er) hinzugefügt')),
+    );
+  }
+
+  Future<void> _handleMenuAction(String value) async {
+    if (value == 'edit') {
+      await _editRecipe();
+      return;
+    }
+    if (value == 'add_images') {
+      await _addImages();
+      return;
+    }
+    if (value == 'delete') {
+      await _confirmAndDelete();
     }
   }
 
@@ -79,6 +138,18 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
     }
   }
 
+  void _openImageViewer(int initialIndex) {
+    if (recipe.imagePaths.isEmpty) return;
+
+    showDialog<void>(
+      context: context,
+      builder: (_) => _RecipeImageViewerDialog(
+        imagePaths: recipe.imagePaths,
+        initialIndex: initialIndex,
+      ),
+    );
+  }
+
   Widget _buildMainImage() {
     final hasImages = recipe.imagePaths.isNotEmpty;
 
@@ -92,12 +163,15 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
             borderRadius: BorderRadius.circular(16),
             clipBehavior: Clip.antiAlias,
             child: hasImages
-                ? Image.file(
-                    File(recipe.imagePaths.first),
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => Image.asset(
-                      'assets/recipe_placeholder.jpg',
+                ? InkWell(
+                    onTap: () => _openImageViewer(0),
+                    child: Image.file(
+                      File(recipe.imagePaths.first),
                       fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => Image.asset(
+                        'assets/recipe_placeholder.jpg',
+                        fit: BoxFit.cover,
+                      ),
                     ),
                   )
                 : Image.asset(
@@ -151,16 +225,19 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
             itemBuilder: (context, index) {
               final path = recipe.imagePaths[index];
 
-              return ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: AspectRatio(
-                  aspectRatio: 1,
-                  child: Image.file(
-                    File(path),
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => const ColoredBox(
-                      color: Colors.black12,
-                      child: Center(child: Icon(Icons.broken_image_outlined)),
+              return GestureDetector(
+                onTap: () => _openImageViewer(index),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: AspectRatio(
+                    aspectRatio: 1,
+                    child: Image.file(
+                      File(path),
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => const ColoredBox(
+                        color: Colors.black12,
+                        child: Center(child: Icon(Icons.broken_image_outlined)),
+                      ),
                     ),
                   ),
                 ),
@@ -169,6 +246,25 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSectionCard({required String title, required Widget child}) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 10),
+            child,
+          ],
+        ),
+      ),
     );
   }
 
@@ -187,15 +283,13 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
         title: Text(recipe.title),
         actions: [
           PopupMenuButton<String>(
-            onSelected: (value) {
-              if (value == 'edit') {
-                _editRecipe();
-              } else if (value == 'delete') {
-                _confirmAndDelete();
-              }
-            },
+            onSelected: _handleMenuAction,
             itemBuilder: (context) => const [
               PopupMenuItem(value: 'edit', child: Text('Bearbeiten')),
+              PopupMenuItem(
+                value: 'add_images',
+                child: Text('Bilder hinzufügen'),
+              ),
               PopupMenuItem(value: 'delete', child: Text('Löschen')),
             ],
           ),
@@ -206,65 +300,197 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
         children: [
           _buildMainImage(),
           _buildImageGallery(),
-          const SizedBox(height: 16),
-          Text(
-            meta,
-            style: textTheme.bodySmall?.copyWith(
-              color: colorScheme.onSurfaceVariant,
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.schedule_outlined,
+                  size: 16,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    meta,
+                    style: textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 16),
           if (recipe.tags.isNotEmpty)
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: recipe.tags
-                  .map(
-                    (t) => Chip(
-                      label: Text(tagLabelDe(t)),
-                      backgroundColor: colorScheme.surfaceContainerHighest,
-                      side: BorderSide.none,
-                      visualDensity: VisualDensity.compact,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                  )
-                  .toList(),
-            ),
-          if (recipe.tags.isNotEmpty) const SizedBox(height: 24),
-          Text('Zutaten', style: textTheme.titleMedium),
-          const SizedBox(height: 12),
-          if (recipe.ingredients.isEmpty)
-            Text(
-              StringsDe.noIngredients,
-              style: textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            )
-          else
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: recipe.ingredients
-                  .map(
-                    (ingredient) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text(
-                        '• $ingredient',
-                        style: textTheme.bodyMedium?.copyWith(height: 1.35),
+            _buildSectionCard(
+              title: 'Tags',
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: recipe.tags
+                    .map(
+                      (t) => Chip(
+                        label: Text(tagLabelDe(t)),
+                        backgroundColor: colorScheme.surfaceContainerHighest,
+                        side: BorderSide.none,
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
+                    )
+                    .toList(),
+              ),
+            ),
+          if (recipe.tags.isNotEmpty) const SizedBox(height: 16),
+          if (recipe.sourceUrl.trim().isNotEmpty) ...[
+            _buildSectionCard(
+              title: 'Quelle',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SelectableText(recipe.sourceUrl.trim()),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: _openSourceUrl,
+                        icon: const Icon(Icons.open_in_new),
+                        label: const Text('Link öffnen'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          await Clipboard.setData(
+                            ClipboardData(text: recipe.sourceUrl.trim()),
+                          );
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Link kopiert')),
+                          );
+                        },
+                        icon: const Icon(Icons.copy),
+                        label: const Text('Link kopieren'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+          _buildSectionCard(
+            title: 'Zutaten',
+            child: recipe.ingredients.isEmpty
+                ? Text(
+                    StringsDe.noIngredients,
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
                     ),
                   )
-                  .toList(),
-            ),
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: recipe.ingredients
+                        .map(
+                          (ingredient) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Text(
+                              '• $ingredient',
+                              style: textTheme.bodyMedium?.copyWith(
+                                height: 1.35,
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+          ),
           if (recipe.instructions.trim().isNotEmpty) ...[
-            const SizedBox(height: 24),
-            Text('Zubereitung', style: textTheme.titleMedium),
-            const SizedBox(height: 12),
-            Text(
-              recipe.instructions,
-              style: textTheme.bodyMedium?.copyWith(height: 1.45),
+            const SizedBox(height: 16),
+            _buildSectionCard(
+              title: 'Zubereitung',
+              child: Text(
+                recipe.instructions,
+                style: textTheme.bodyMedium?.copyWith(height: 1.45),
+              ),
             ),
           ],
+          const SizedBox(height: 20),
         ],
+      ),
+    );
+  }
+}
+
+class _RecipeImageViewerDialog extends StatefulWidget {
+  const _RecipeImageViewerDialog({
+    required this.imagePaths,
+    required this.initialIndex,
+  });
+
+  final List<String> imagePaths;
+  final int initialIndex;
+
+  @override
+  State<_RecipeImageViewerDialog> createState() =>
+      _RecipeImageViewerDialogState();
+}
+
+class _RecipeImageViewerDialogState extends State<_RecipeImageViewerDialog> {
+  late final PageController _pageController;
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog.fullscreen(
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+          title: Text('${_currentIndex + 1}/${widget.imagePaths.length}'),
+        ),
+        body: PageView.builder(
+          controller: _pageController,
+          itemCount: widget.imagePaths.length,
+          onPageChanged: (index) => setState(() => _currentIndex = index),
+          itemBuilder: (context, index) {
+            final path = widget.imagePaths[index];
+            return InteractiveViewer(
+              minScale: 1,
+              maxScale: 4,
+              child: Center(
+                child: Image.file(
+                  File(path),
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) => const Icon(
+                    Icons.broken_image_outlined,
+                    size: 44,
+                    color: Colors.white70,
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
