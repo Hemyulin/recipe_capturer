@@ -104,6 +104,7 @@ class _ImportRecipePageState extends State<ImportRecipePage> {
         'title': title,
         'ingredientsText': ingredientsText,
         'instructions': instructionsText,
+        'imagePaths': widget.imagePaths,
       },
     );
 

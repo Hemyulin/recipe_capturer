@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:recipe_capturer/data/recipe_repository.dart';
@@ -77,6 +79,99 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
     }
   }
 
+  Widget _buildMainImage() {
+    final hasImages = recipe.imagePaths.isNotEmpty;
+
+    return AspectRatio(
+      aspectRatio: 4 / 3,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Material(
+            elevation: 2,
+            borderRadius: BorderRadius.circular(16),
+            clipBehavior: Clip.antiAlias,
+            child: hasImages
+                ? Image.file(
+                    File(recipe.imagePaths.first),
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => Image.asset(
+                      'assets/recipe_placeholder.jpg',
+                      fit: BoxFit.cover,
+                    ),
+                  )
+                : Image.asset(
+                    'assets/recipe_placeholder.jpg',
+                    fit: BoxFit.cover,
+                  ),
+          ),
+          Positioned(
+            top: 12,
+            right: 12,
+            child: Material(
+              color: Colors.black38,
+              shape: const CircleBorder(),
+              child: IconButton(
+                onPressed: _toggleFavorite,
+                icon: Icon(
+                  recipe.isFavorite ? Icons.favorite : Icons.favorite_border,
+                ),
+                color: Colors.redAccent,
+                tooltip: recipe.isFavorite
+                    ? 'Favorit entfernen'
+                    : 'Als Favorit markieren',
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImageGallery() {
+    if (recipe.imagePaths.length <= 1) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16),
+        const Text(
+          'Originalbilder',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 104,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: recipe.imagePaths.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final path = recipe.imagePaths[index];
+
+              return ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: Image.file(
+                    File(path),
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => const ColoredBox(
+                      color: Colors.black12,
+                      child: Center(child: Icon(Icons.broken_image_outlined)),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -109,43 +204,8 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         children: [
-          AspectRatio(
-            aspectRatio: 4 / 3,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Material(
-                  elevation: 2,
-                  borderRadius: BorderRadius.circular(16),
-                  clipBehavior: Clip.antiAlias,
-                  child: Image.asset(
-                    'assets/recipe_placeholder.jpg',
-                    fit: BoxFit.cover,
-                  ),
-                ),
-                Positioned(
-                  top: 12,
-                  right: 12,
-                  child: Material(
-                    color: Colors.black38,
-                    shape: const CircleBorder(),
-                    child: IconButton(
-                      onPressed: _toggleFavorite,
-                      icon: Icon(
-                        recipe.isFavorite
-                            ? Icons.favorite
-                            : Icons.favorite_border,
-                      ),
-                      color: Colors.redAccent,
-                      tooltip: recipe.isFavorite
-                          ? 'Favorit entfernen'
-                          : 'Als Favorit markieren',
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          _buildMainImage(),
+          _buildImageGallery(),
           const SizedBox(height: 16),
           Text(
             meta,

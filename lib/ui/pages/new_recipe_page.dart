@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:recipe_capturer/data/recipe_repository.dart';
@@ -12,6 +14,7 @@ class NewRecipePage extends StatefulWidget {
     this.initialIngredients,
     this.initialInstructions,
     this.initialRecipe,
+    this.initialImagePaths,
   });
 
   final String title;
@@ -20,6 +23,7 @@ class NewRecipePage extends StatefulWidget {
   final String? initialIngredients;
   final String? initialInstructions;
   final Recipe? initialRecipe;
+  final List<String>? initialImagePaths;
 
   @override
   State<NewRecipePage> createState() => _NewRecipePageState();
@@ -32,6 +36,8 @@ class _NewRecipePageState extends State<NewRecipePage> {
 
   final List<TextEditingController> _ingredientControllers = [];
   final List<FocusNode> _ingredientFocusNodes = [];
+
+  List<String> _imagePaths = [];
 
   static const Map<String, String> _tagLabelsDe = {
     'quick': 'Schnell',
@@ -54,6 +60,7 @@ class _NewRecipePageState extends State<NewRecipePage> {
       _titleController.text = initialRecipe.title;
       _instructionsController.text = initialRecipe.instructions;
       _selectedTags.addAll(initialRecipe.tags);
+      _imagePaths = [...initialRecipe.imagePaths];
 
       if (initialRecipe.ingredients.isEmpty) {
         _addIngredientRow();
@@ -74,6 +81,8 @@ class _NewRecipePageState extends State<NewRecipePage> {
     if (widget.initialInstructions != null) {
       _instructionsController.text = widget.initialInstructions!;
     }
+
+    _imagePaths = [...?widget.initialImagePaths];
 
     final initialLines = (widget.initialIngredients ?? '')
         .split('\n')
@@ -167,6 +176,7 @@ class _NewRecipePageState extends State<NewRecipePage> {
           ingredients: _collectIngredients(),
           tags: _selectedTags.toList(),
           instructions: _instructionsController.text,
+          imagePaths: _imagePaths,
         );
 
         await widget.repo.add(recipe);
@@ -176,6 +186,7 @@ class _NewRecipePageState extends State<NewRecipePage> {
           ingredients: _collectIngredients(),
           tags: _selectedTags.toList(),
           instructions: _instructionsController.text.trim(),
+          imagePaths: _imagePaths,
         );
 
         await widget.repo.update(updatedRecipe);
@@ -189,6 +200,48 @@ class _NewRecipePageState extends State<NewRecipePage> {
         const SnackBar(content: Text('Rezepttitel kann nicht leer sein!')),
       );
     }
+  }
+
+  Widget _buildImagePreviewSection() {
+    if (_imagePaths.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Bilder',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 120,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: _imagePaths.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final path = _imagePaths[index];
+
+              return ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: Image.file(
+                    File(path),
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => const ColoredBox(
+                      color: Colors.black12,
+                      child: Center(child: Icon(Icons.broken_image_outlined)),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 20),
+      ],
+    );
   }
 
   @override
@@ -240,6 +293,7 @@ class _NewRecipePageState extends State<NewRecipePage> {
             textInputAction: TextInputAction.next,
           ),
           const SizedBox(height: 16),
+          _buildImagePreviewSection(),
           const Text('Tags'),
           const SizedBox(height: 8),
           tagChips,

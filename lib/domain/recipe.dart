@@ -8,6 +8,7 @@ class Recipe {
   final List<String> tags;
   final bool isFavorite;
   final String instructions;
+  final List<String> imagePaths;
 
   const Recipe({
     required this.id,
@@ -17,6 +18,7 @@ class Recipe {
     required this.tags,
     required this.isFavorite,
     required this.instructions,
+    this.imagePaths = const [],
   });
 
   factory Recipe.create(
@@ -25,6 +27,7 @@ class Recipe {
     List<String> tags = const [],
     bool isFavorite = false,
     String instructions = '',
+    List<String> imagePaths = const [],
   }) {
     final trimmedTitle = title.trim();
 
@@ -43,6 +46,7 @@ class Recipe {
       tags: tags,
       isFavorite: isFavorite,
       instructions: instructions.trim(),
+      imagePaths: imagePaths,
     );
   }
 
@@ -54,6 +58,7 @@ class Recipe {
     List<String>? tags,
     bool? isFavorite,
     String? instructions,
+    List<String>? imagePaths,
   }) {
     return Recipe(
       id: id ?? this.id,
@@ -63,6 +68,7 @@ class Recipe {
       tags: tags ?? this.tags,
       isFavorite: isFavorite ?? this.isFavorite,
       instructions: instructions ?? this.instructions,
+      imagePaths: imagePaths ?? this.imagePaths,
     );
   }
 
@@ -79,6 +85,7 @@ class Recipe {
       'tags': tags,
       'isFavorite': isFavorite,
       'instructions': instructions,
+      'imagePaths': imagePaths,
     };
   }
 
@@ -95,6 +102,9 @@ class Recipe {
           .toList(),
       isFavorite: json['isFavorite'] as bool? ?? false,
       instructions: json['instructions'] as String? ?? '',
+      imagePaths: (json['imagePaths'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toList(),
     );
   }
 }

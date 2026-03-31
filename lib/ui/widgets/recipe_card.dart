@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:recipe_capturer/domain/recipe.dart';
 import 'package:recipe_capturer/ui/formatters/date_label_de.dart';
@@ -50,6 +52,23 @@ class RecipeCard extends StatelessWidget {
       }
     }
 
+    final imageWidget = recipe.imagePaths.isNotEmpty
+        ? Image.file(
+            File(recipe.imagePaths.first),
+            fit: BoxFit.cover,
+            alignment: Alignment.center,
+            errorBuilder: (_, _, _) => Image.asset(
+              'assets/recipe_placeholder.jpg',
+              fit: BoxFit.cover,
+              alignment: Alignment.center,
+            ),
+          )
+        : Image.asset(
+            'assets/recipe_placeholder.jpg',
+            fit: BoxFit.cover,
+            alignment: Alignment.center,
+          );
+
     return Card(
       clipBehavior: Clip.antiAlias,
       elevation: 3,
@@ -68,12 +87,7 @@ class RecipeCard extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  Image.asset(
-                    'assets/recipe_placeholder.jpg',
-                    fit: BoxFit.cover,
-                    alignment: Alignment.center,
-                  ),
-
+                  imageWidget,
                   const DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
@@ -87,7 +101,6 @@ class RecipeCard extends StatelessWidget {
                       ),
                     ),
                   ),
-
                   if (recipe.isFavorite)
                     Positioned(
                       top: 8,
@@ -105,7 +118,6 @@ class RecipeCard extends StatelessWidget {
                         ),
                       ),
                     ),
-
                   if (onDelete != null)
                     Positioned(
                       top: 8,
@@ -121,7 +133,6 @@ class RecipeCard extends StatelessWidget {
                         ),
                       ),
                     ),
-
                   Positioned(
                     left: 12,
                     right: 12,
@@ -163,7 +174,6 @@ class RecipeCard extends StatelessWidget {
                 ],
               ),
             ),
-
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
               child: Text(meta, style: Theme.of(context).textTheme.bodySmall),

@@ -32,13 +32,16 @@ final router = GoRouter(
     GoRoute(
       path: '/new',
       builder: (context, state) {
-        final extra = state.extra as Map<String, String?>?;
+        final extra = state.extra as Map<String, dynamic>?;
+
         return NewRecipePage(
-          title: 'Neue Rezeptenseite',
+          title: 'Neues Rezept',
           repo: repo,
-          initialTitle: extra?['title'],
-          initialIngredients: extra?['ingredientsText'],
-          initialInstructions: extra?['instructions'],
+          initialTitle: extra?['title'] as String?,
+          initialIngredients: extra?['ingredientsText'] as String?,
+          initialInstructions: extra?['instructions'] as String?,
+          initialImagePaths: (extra?['imagePaths'] as List<dynamic>?)
+              ?.cast<String>(),
         );
       },
     ),
