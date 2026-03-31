@@ -14,11 +14,7 @@ final router = GoRouter(
       path: '/',
       builder: (context, state) => RecipeListPage(title: 'Rezepte', repo: repo),
     ),
-    GoRoute(
-      path: '/new',
-      builder: (context, state) =>
-          NewRecipePage(title: 'Neue Rezeptenseite', repo: repo),
-    ),
+
     GoRoute(
       path: '/details',
       builder: (context, state) {
@@ -33,12 +29,32 @@ final router = GoRouter(
         return ImportRecipePage(imagePaths: imagePaths);
       },
     ),
-    // GoRoute(
-    //   path: '/edit',
-    //   builder: (context, state) {
-    //     final recipe = state.extra as Recipe;
-    //     return EditRecipePage(recipe: recipe, repo: repo);
-    //   },
-    // ),
+    GoRoute(
+      path: '/new',
+      builder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>?;
+
+        return NewRecipePage(
+          title: 'Neues Rezept',
+          repo: repo,
+          initialTitle: extra?['title'] as String?,
+          initialIngredients: extra?['ingredientsText'] as String?,
+          initialInstructions: extra?['instructions'] as String?,
+          initialImagePaths: (extra?['imagePaths'] as List<dynamic>?)
+              ?.cast<String>(),
+        );
+      },
+    ),
+    GoRoute(
+      path: '/edit',
+      builder: (context, state) {
+        final recipe = state.extra as Recipe;
+        return NewRecipePage(
+          title: 'Rezept bearbeiten',
+          repo: repo,
+          initialRecipe: recipe,
+        );
+      },
+    ),
   ],
 );

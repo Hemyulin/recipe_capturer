@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:recipe_capturer/data/recipe_repository.dart';
 import 'package:recipe_capturer/domain/recipe.dart';
 import 'package:recipe_capturer/ui/formatters/date_label_de.dart';
@@ -30,12 +33,25 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
 
   Future<void> _toggleFavorite() async {
     final next = recipe.withFavorite(!recipe.isFavorite);
-
-    // optimistic UI
     setState(() => recipe = next);
-
-    // persist
     await widget.repo.update(next);
+  }
+
+  Future<void> _editRecipe() async {
+    final saved = await context.push<bool>('/edit', extra: recipe);
+
+    if (!context.mounted) return;
+
+    if (saved == true) {
+      final refreshed = await widget.repo.getAll();
+      final updated = refreshed.where((r) => r.id == recipe.id).firstOrNull;
+
+      if (!context.mounted) return;
+
+      if (updated != null) {
+        setState(() => recipe = updated);
+      }
+    }
   }
 
   Future<void> _confirmAndDelete() async {
@@ -63,6 +79,99 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
     }
   }
 
+  Widget _buildMainImage() {
+    final hasImages = recipe.imagePaths.isNotEmpty;
+
+    return AspectRatio(
+      aspectRatio: 4 / 3,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Material(
+            elevation: 2,
+            borderRadius: BorderRadius.circular(16),
+            clipBehavior: Clip.antiAlias,
+            child: hasImages
+                ? Image.file(
+                    File(recipe.imagePaths.first),
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => Image.asset(
+                      'assets/recipe_placeholder.jpg',
+                      fit: BoxFit.cover,
+                    ),
+                  )
+                : Image.asset(
+                    'assets/recipe_placeholder.jpg',
+                    fit: BoxFit.cover,
+                  ),
+          ),
+          Positioned(
+            top: 12,
+            right: 12,
+            child: Material(
+              color: Colors.black38,
+              shape: const CircleBorder(),
+              child: IconButton(
+                onPressed: _toggleFavorite,
+                icon: Icon(
+                  recipe.isFavorite ? Icons.favorite : Icons.favorite_border,
+                ),
+                color: Colors.redAccent,
+                tooltip: recipe.isFavorite
+                    ? 'Favorit entfernen'
+                    : 'Als Favorit markieren',
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImageGallery() {
+    if (recipe.imagePaths.length <= 1) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16),
+        const Text(
+          'Originalbilder',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 104,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: recipe.imagePaths.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final path = recipe.imagePaths[index];
+
+              return ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: Image.file(
+                    File(path),
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => const ColoredBox(
+                      color: Colors.black12,
+                      child: Center(child: Icon(Icons.broken_image_outlined)),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -79,9 +188,14 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
         actions: [
           PopupMenuButton<String>(
             onSelected: (value) {
-              if (value == 'delete') _confirmAndDelete();
+              if (value == 'edit') {
+                _editRecipe();
+              } else if (value == 'delete') {
+                _confirmAndDelete();
+              }
             },
             itemBuilder: (context) => const [
+              PopupMenuItem(value: 'edit', child: Text('Bearbeiten')),
               PopupMenuItem(value: 'delete', child: Text('Löschen')),
             ],
           ),
@@ -90,57 +204,16 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         children: [
-          AspectRatio(
-            aspectRatio: 4 / 3,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Material(
-                  elevation: 2,
-                  borderRadius: BorderRadius.circular(16),
-                  clipBehavior: Clip.antiAlias,
-                  child: Image.asset(
-                    'assets/recipe_placeholder.jpg',
-                    fit: BoxFit.cover,
-                  ),
-                ),
-
-                // Heart on image
-                Positioned(
-                  top: 12,
-                  right: 12,
-                  child: Material(
-                    color: Colors.black38,
-                    shape: const CircleBorder(),
-                    child: IconButton(
-                      onPressed: _toggleFavorite,
-                      icon: Icon(
-                        recipe.isFavorite
-                            ? Icons.favorite
-                            : Icons.favorite_border,
-                      ),
-                      color: Colors.redAccent,
-                      tooltip: recipe.isFavorite
-                          ? 'Favorit entfernen'
-                          : 'Als Favorit markieren',
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
+          _buildMainImage(),
+          _buildImageGallery(),
           const SizedBox(height: 16),
-
           Text(
             meta,
             style: textTheme.bodySmall?.copyWith(
               color: colorScheme.onSurfaceVariant,
             ),
           ),
-
           const SizedBox(height: 16),
-
           if (recipe.tags.isNotEmpty)
             Wrap(
               spacing: 8,
@@ -157,12 +230,9 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
                   )
                   .toList(),
             ),
-
           if (recipe.tags.isNotEmpty) const SizedBox(height: 24),
-
           Text('Zutaten', style: textTheme.titleMedium),
           const SizedBox(height: 12),
-
           if (recipe.ingredients.isEmpty)
             Text(
               StringsDe.noIngredients,
@@ -173,16 +243,27 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
           else
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: 8,
               children: recipe.ingredients
                   .map(
-                    (ingredient) => Text(
-                      '• $ingredient',
-                      style: textTheme.bodyMedium?.copyWith(height: 1.35),
+                    (ingredient) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        '• $ingredient',
+                        style: textTheme.bodyMedium?.copyWith(height: 1.35),
+                      ),
                     ),
                   )
                   .toList(),
             ),
+          if (recipe.instructions.trim().isNotEmpty) ...[
+            const SizedBox(height: 24),
+            Text('Zubereitung', style: textTheme.titleMedium),
+            const SizedBox(height: 12),
+            Text(
+              recipe.instructions,
+              style: textTheme.bodyMedium?.copyWith(height: 1.45),
+            ),
+          ],
         ],
       ),
     );
