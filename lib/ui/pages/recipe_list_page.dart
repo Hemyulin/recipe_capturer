@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:recipe_capturer/data/recipe_repository.dart';
 import 'package:recipe_capturer/domain/recipe.dart';
 import 'package:recipe_capturer/ui/widgets/recipe_card.dart';
-import 'package:recipe_capturer/ui/formatters/strings_de.dart';
 
 class RecipeListPage extends StatefulWidget {
   const RecipeListPage({super.key, required this.title, required this.repo});
@@ -65,44 +63,21 @@ class _RecipeListPageState extends State<RecipeListPage> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
     final filteredRecipes = _filteredRecipes();
     final hasAnyRecipe = recipesSnapshot.isNotEmpty;
+    final needsReviewCount = recipesSnapshot.where(_needsReview).length;
 
     final Widget content = !hasAnyRecipe
-        ? Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.menu_book_outlined,
-                  size: 44,
-                  color: colorScheme.onSurfaceVariant,
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  StringsDe.noRecipes,
-                  style: textTheme.titleMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          )
+        ? _EmptyLibraryState(title: 'Noch keine Rezepte')
         : filteredRecipes.isEmpty
-        ? const Center(
-            child: Text('Keine Treffer. Suche oder Filter anpassen.'),
-          )
+        ? _EmptyLibraryState(title: 'Keine Treffer')
         : ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 120),
             itemCount: filteredRecipes.length,
             itemBuilder: (context, index) {
               final recipe = filteredRecipes[index];
               return Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
+                padding: const EdgeInsets.only(bottom: 14),
                 child: RecipeCard(
                   recipe: recipe,
                   onTap: () async {
@@ -130,109 +105,87 @@ class _RecipeListPageState extends State<RecipeListPage> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
-          final picker = ImagePicker();
-          final images = await picker.pickMultiImage();
-
-          if (images.isEmpty) return;
-
-          final paths = images.map((e) => e.path).toList();
-
-          if (!context.mounted) return;
-          final imported = await context.push<bool>('/import', extra: paths);
-
-          if (!context.mounted) return;
-          if (imported == true) {
-            await _refresh();
-          }
+          final saved = await context.push<bool>('/new');
+          if (saved == true) await _refresh();
         },
-        icon: const Icon(Icons.add_photo_alternate_outlined),
-        label: const Text('Aus Bildern importieren'),
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Rezept hinzufügen'),
       ),
       body: Column(
         children: [
-          Container(
-            width: double.infinity,
-            margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              gradient: LinearGradient(
-                colors: [
-                  colorScheme.primaryContainer,
-                  colorScheme.tertiaryContainer.withValues(alpha: 0.65),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: Row(
               children: [
-                CircleAvatar(
-                  backgroundColor: colorScheme.surface.withValues(alpha: 0.8),
-                  child: Icon(
-                    Icons.restaurant_menu,
-                    color: colorScheme.onSurface,
-                  ),
-                ),
-                const SizedBox(width: 12),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${filteredRecipes.length} Rezepte',
-                        style: textTheme.titleMedium,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerLowest.withValues(
+                        alpha: 0.94,
                       ),
-                      Text(
-                        'Screenshot -> OCR -> Prüfen -> Speichern',
-                        style: textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: colorScheme.outlineVariant.withValues(
+                          alpha: 0.6,
                         ),
                       ),
-                    ],
+                    ),
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        hintText: 'Titel, Zutat oder Tag',
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        suffixIcon: _searchController.text.isEmpty
+                            ? null
+                            : IconButton(
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() {});
+                                },
+                                icon: const Icon(Icons.close_rounded),
+                                tooltip: 'Suche löschen',
+                              ),
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        filled: false,
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
                   ),
                 ),
               ],
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(8),
-                child: TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Suchen (Titel, Zutat, Tag)',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _searchController.text.isEmpty
-                        ? null
-                        : IconButton(
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() {});
-                            },
-                            icon: const Icon(Icons.clear),
-                            tooltip: 'Suche löschen',
-                          ),
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    filled: false,
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
             child: Align(
               alignment: Alignment.centerLeft,
               child: Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
+                  if (needsReviewCount > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colorScheme.secondaryContainer.withValues(
+                          alpha: 0.96,
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Text(
+                        '$needsReviewCount offen',
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(
+                              color: colorScheme.onSecondaryContainer,
+                              fontWeight: FontWeight.w700,
+                            ),
+                      ),
+                    ),
                   FilterChip(
                     label: const Text('Favoriten'),
                     selected: _favoritesOnly,
@@ -254,6 +207,56 @@ class _RecipeListPageState extends State<RecipeListPage> {
           Expanded(child: content),
         ],
       ),
+    );
+  }
+}
+
+bool _needsReview(Recipe recipe) {
+  final hasIngredients = recipe.ingredients.isNotEmpty;
+  final hasInstructions = recipe.instructions.trim().length >= 40;
+  return !hasIngredients || !hasInstructions;
+}
+
+class _EmptyLibraryState extends StatelessWidget {
+  const _EmptyLibraryState({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 18,
+                ),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.outlineVariant.withValues(alpha: 0.75),
+                  ),
+                ),
+                child: Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: textTheme.titleLarge,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

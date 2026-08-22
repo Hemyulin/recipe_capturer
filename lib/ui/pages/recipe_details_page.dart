@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:recipe_capturer/data/recipe_repository.dart';
@@ -9,7 +8,6 @@ import 'package:recipe_capturer/domain/recipe.dart';
 import 'package:recipe_capturer/ui/formatters/date_label_de.dart';
 import 'package:recipe_capturer/ui/formatters/strings_de.dart';
 import 'package:recipe_capturer/ui/formatters/tag_label_de.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class RecipeDetailsPage extends StatefulWidget {
   final Recipe recipe;
@@ -27,6 +25,186 @@ class RecipeDetailsPage extends StatefulWidget {
 
 class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
   late Recipe recipe;
+  final Set<int> _checkedIngredients = <int>{};
+  final Set<int> _checkedSteps = <int>{};
+
+  bool get _hasMissingIngredients => recipe.ingredients.isEmpty;
+  bool get _hasMissingInstructions => recipe.instructions.trim().length < 40;
+
+  List<String> _reviewNotes() {
+    final notes = <String>[];
+
+    if (recipe.ingredients.isEmpty) {
+      notes.add('Es fehlen Zutaten.');
+    }
+    if (recipe.instructions.trim().isEmpty) {
+      notes.add('Es fehlt eine Zubereitung.');
+    } else if (recipe.instructions.trim().length < 40) {
+      notes.add('Die Zubereitung wirkt noch unvollständig.');
+    }
+    return notes.isEmpty
+        ? ['Bitte kurz prüfen, ob alles vollständig ist.']
+        : notes;
+  }
+
+  void _showReviewDetailsSheet() {
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
+    final notes = _reviewNotes();
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Noch prüfen', style: textTheme.titleLarge),
+              const SizedBox(height: 8),
+              Text(
+                'Dieses Rezept wirkt noch nicht ganz vollständig.',
+                style: textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 14),
+              ...notes.map(
+                (note) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '•',
+                        style: textTheme.bodyLarge?.copyWith(
+                          color: colorScheme.secondary,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(note, style: textTheme.bodyMedium)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _updateRecipe(Recipe updatedRecipe) async {
+    await widget.repo.update(updatedRecipe);
+    if (!mounted) return;
+    setState(() => recipe = updatedRecipe);
+  }
+
+  Future<void> _editIngredientsInline() async {
+    final controller = TextEditingController(
+      text: recipe.ingredients.join('\n'),
+    );
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            8,
+            20,
+            MediaQuery.viewInsetsOf(context).bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Zutaten', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                minLines: 6,
+                maxLines: 10,
+                decoration: const InputDecoration(
+                  hintText: 'Eine Zutat pro Zeile',
+                ),
+              ),
+              const SizedBox(height: 14),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Speichern'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (saved == true) {
+      final ingredients = controller.text
+          .split('\n')
+          .map((line) => line.trim())
+          .where((line) => line.isNotEmpty)
+          .toList();
+      await _updateRecipe(recipe.copyWith(ingredients: ingredients));
+    }
+    controller.dispose();
+  }
+
+  Future<void> _editInstructionsInline() async {
+    final controller = TextEditingController(text: recipe.instructions.trim());
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            8,
+            20,
+            MediaQuery.viewInsetsOf(context).bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Zubereitung',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                minLines: 7,
+                maxLines: 12,
+                decoration: const InputDecoration(
+                  hintText: 'Schritte oder Fließtext',
+                ),
+              ),
+              const SizedBox(height: 14),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Speichern'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (saved == true) {
+      await _updateRecipe(
+        recipe.copyWith(instructions: controller.text.trim()),
+      );
+    }
+    controller.dispose();
+  }
 
   Future<void> _refreshRecipe() async {
     final refreshed = await widget.repo.getAll();
@@ -34,28 +212,6 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
     if (!mounted) return;
     if (updated != null) {
       setState(() => recipe = updated);
-    }
-  }
-
-  Future<void> _openSourceUrl() async {
-    final raw = recipe.sourceUrl.trim();
-    if (raw.isEmpty) return;
-
-    final uri = Uri.tryParse(raw);
-    if (uri == null) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Ungültiger Link')));
-      return;
-    }
-
-    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!launched) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Link konnte nicht geöffnet werden')),
-      );
     }
   }
 
@@ -69,6 +225,22 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
     final next = recipe.withFavorite(!recipe.isFavorite);
     setState(() => recipe = next);
     await widget.repo.update(next);
+  }
+
+  void _toggleIngredient(int index) {
+    setState(() {
+      if (!_checkedIngredients.add(index)) {
+        _checkedIngredients.remove(index);
+      }
+    });
+  }
+
+  void _toggleStep(int index) {
+    setState(() {
+      if (!_checkedSteps.add(index)) {
+        _checkedSteps.remove(index);
+      }
+    });
   }
 
   Future<void> _editRecipe() async {
@@ -152,6 +324,7 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
 
   Widget _buildMainImage() {
     final hasImages = recipe.imagePaths.isNotEmpty;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return AspectRatio(
       aspectRatio: 4 / 3,
@@ -159,8 +332,7 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
         fit: StackFit.expand,
         children: [
           Material(
-            elevation: 2,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(28),
             clipBehavior: Clip.antiAlias,
             child: hasImages
                 ? InkWell(
@@ -179,18 +351,34 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
                     fit: BoxFit.cover,
                   ),
           ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(28),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withValues(alpha: 0.02),
+                  Colors.black.withValues(alpha: 0.08),
+                  Colors.black.withValues(alpha: 0.34),
+                ],
+              ),
+            ),
+          ),
           Positioned(
             top: 12,
             right: 12,
             child: Material(
-              color: Colors.black38,
-              shape: const CircleBorder(),
+              color: colorScheme.surface.withValues(alpha: 0.9),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: IconButton(
                 onPressed: _toggleFavorite,
                 icon: Icon(
                   recipe.isFavorite ? Icons.favorite : Icons.favorite_border,
                 ),
-                color: Colors.redAccent,
+                color: colorScheme.secondary,
                 tooltip: recipe.isFavorite
                     ? 'Favorit entfernen'
                     : 'Als Favorit markieren',
@@ -211,13 +399,10 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 16),
-        const Text(
-          'Originalbilder',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
+        Text('Originalbilder', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         SizedBox(
-          height: 104,
+          height: 112,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: recipe.imagePaths.length,
@@ -228,7 +413,7 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
               return GestureDetector(
                 onTap: () => _openImageViewer(index),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(18),
                   child: AspectRatio(
                     aspectRatio: 1,
                     child: Image.file(
@@ -252,14 +437,11 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
   Widget _buildSectionCard({required String title, required Widget child}) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              title,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-            ),
+            Text(title, style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 10),
             child,
           ],
@@ -268,15 +450,23 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
     );
   }
 
+  List<String> _instructionSteps() {
+    return recipe.instructions
+        .split(RegExp(r'\n{2,}|\n'))
+        .map((step) => step.trim())
+        .where((step) => step.isNotEmpty)
+        .toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final dateLabel = dateLabelDe(recipe.createdAt, now);
-    final meta =
-        '${StringsDe.addedLabel}: $dateLabel   ${StringsDe.ingredientsLabel}: ${recipe.ingredients.length}';
-
     final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
+    final steps = _instructionSteps();
+    final needsReview =
+        recipe.ingredients.isEmpty || recipe.instructions.trim().length < 40;
 
     return Scaffold(
       appBar: AppBar(
@@ -301,89 +491,74 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
           _buildMainImage(),
           _buildImageGallery(),
           const SizedBox(height: 14),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.schedule_outlined,
-                  size: 16,
-                  color: colorScheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    meta,
-                    style: textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          if (recipe.tags.isNotEmpty)
+          if (needsReview) ...[
             _buildSectionCard(
-              title: 'Tags',
+              title: 'Fehlende Angaben',
               child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: recipe.tags
-                    .map(
-                      (t) => Chip(
-                        label: Text(tagLabelDe(t)),
-                        backgroundColor: colorScheme.surfaceContainerHighest,
-                        side: BorderSide.none,
-                        visualDensity: VisualDensity.compact,
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                    )
-                    .toList(),
-              ),
-            ),
-          if (recipe.tags.isNotEmpty) const SizedBox(height: 16),
-          if (recipe.sourceUrl.trim().isNotEmpty) ...[
-            _buildSectionCard(
-              title: 'Quelle',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: 10,
+                runSpacing: 10,
                 children: [
-                  SelectableText(recipe.sourceUrl.trim()),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      FilledButton.icon(
-                        onPressed: _openSourceUrl,
-                        icon: const Icon(Icons.open_in_new),
-                        label: const Text('Link öffnen'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: () async {
-                          await Clipboard.setData(
-                            ClipboardData(text: recipe.sourceUrl.trim()),
-                          );
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Link kopiert')),
-                          );
-                        },
-                        icon: const Icon(Icons.copy),
-                        label: const Text('Link kopieren'),
-                      ),
-                    ],
-                  ),
+                  if (_hasMissingIngredients)
+                    OutlinedButton.icon(
+                      onPressed: _editIngredientsInline,
+                      icon: const Icon(Icons.format_list_bulleted_rounded),
+                      label: const Text('Zutaten ergänzen'),
+                    ),
+                  if (_hasMissingInstructions)
+                    OutlinedButton.icon(
+                      onPressed: _editInstructionsInline,
+                      icon: const Icon(Icons.notes_rounded),
+                      label: const Text('Zubereitung ergänzen'),
+                    ),
                 ],
               ),
             ),
             const SizedBox(height: 16),
           ],
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: colorScheme.outlineVariant.withValues(alpha: 0.75),
+              ),
+            ),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _InfoPill(label: '${recipe.ingredients.length} Zutaten'),
+                _InfoPill(label: '${StringsDe.addedLabel}: $dateLabel'),
+                if (needsReview)
+                  _InfoPill(
+                    label: 'Noch prüfen',
+                    tone: colorScheme.tertiaryContainer,
+                    textColor: colorScheme.onTertiaryContainer,
+                    onTap: _showReviewDetailsSheet,
+                  ),
+              ],
+            ),
+          ),
+          if (recipe.tags.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: recipe.tags
+                  .map(
+                    (t) => Chip(
+                      label: Text(tagLabelDe(t)),
+                      backgroundColor: colorScheme.surfaceContainerHighest,
+                      side: BorderSide.none,
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
+          const SizedBox(height: 16),
           _buildSectionCard(
             title: 'Zutaten',
             child: recipe.ingredients.isEmpty
@@ -395,33 +570,183 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
                   )
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: recipe.ingredients
-                        .map(
-                          (ingredient) => Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Text(
-                              '• $ingredient',
-                              style: textTheme.bodyMedium?.copyWith(
-                                height: 1.35,
+                    children: List.generate(recipe.ingredients.length, (index) {
+                      final ingredient = recipe.ingredients[index];
+                      final isChecked = _checkedIngredients.contains(index);
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: InkWell(
+                          onTap: () => _toggleIngredient(index),
+                          borderRadius: BorderRadius.circular(16),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isChecked
+                                  ? colorScheme.surfaceContainerHigh
+                                  : colorScheme.surfaceContainerLow,
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(
+                                color: colorScheme.outlineVariant.withValues(
+                                  alpha: 0.45,
+                                ),
                               ),
                             ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  isChecked
+                                      ? Icons.check_circle
+                                      : Icons.radio_button_unchecked,
+                                  size: 20,
+                                  color: isChecked
+                                      ? colorScheme.primary
+                                      : colorScheme.onSurfaceVariant,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    ingredient,
+                                    style: textTheme.bodyLarge?.copyWith(
+                                      height: 1.35,
+                                      decoration: isChecked
+                                          ? TextDecoration.lineThrough
+                                          : null,
+                                      color: isChecked
+                                          ? colorScheme.onSurfaceVariant
+                                          : colorScheme.onSurface,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        )
-                        .toList(),
+                        ),
+                      );
+                    }),
                   ),
           ),
-          if (recipe.instructions.trim().isNotEmpty) ...[
+          if (steps.isNotEmpty) ...[
             const SizedBox(height: 16),
             _buildSectionCard(
               title: 'Zubereitung',
-              child: Text(
-                recipe.instructions,
-                style: textTheme.bodyMedium?.copyWith(height: 1.45),
+              child: Column(
+                children: List.generate(steps.length, (index) {
+                  final isChecked = _checkedSteps.contains(index);
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      bottom: index == steps.length - 1 ? 0 : 14,
+                    ),
+                    child: InkWell(
+                      onTap: () => _toggleStep(index),
+                      borderRadius: BorderRadius.circular(18),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 30,
+                            height: 30,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: isChecked
+                                  ? colorScheme.primary
+                                  : colorScheme.surfaceContainerHigh,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              '${index + 1}',
+                              style: textTheme.labelMedium?.copyWith(
+                                color: isChecked
+                                    ? colorScheme.onPrimary
+                                    : colorScheme.onSurface,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 3),
+                              child: Text(
+                                steps[index],
+                                style: textTheme.bodyLarge?.copyWith(
+                                  height: 1.5,
+                                  decoration: isChecked
+                                      ? TextDecoration.lineThrough
+                                      : null,
+                                  color: isChecked
+                                      ? colorScheme.onSurfaceVariant
+                                      : colorScheme.onSurface,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
               ),
             ),
           ],
+          if (recipe.ingredients.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: FilledButton.icon(
+                onPressed: _editIngredientsInline,
+                icon: const Icon(Icons.format_list_bulleted_rounded),
+                label: const Text('Zutaten hinzufügen'),
+              ),
+            ),
+          if (recipe.instructions.trim().isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: FilledButton.icon(
+                onPressed: _editInstructionsInline,
+                icon: const Icon(Icons.notes_rounded),
+                label: const Text('Zubereitung hinzufügen'),
+              ),
+            ),
           const SizedBox(height: 20),
         ],
+      ),
+    );
+  }
+}
+
+class _InfoPill extends StatelessWidget {
+  const _InfoPill({required this.label, this.tone, this.textColor, this.onTap});
+
+  final String label;
+  final Color? tone;
+  final Color? textColor;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: tone ?? colorScheme.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: textColor ?? colorScheme.onSurface,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
       ),
     );
   }
