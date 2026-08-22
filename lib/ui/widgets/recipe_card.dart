@@ -1,10 +1,7 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:recipe_capturer/domain/recipe.dart';
-import 'package:recipe_capturer/ui/formatters/date_label_de.dart';
-import 'package:recipe_capturer/ui/formatters/strings_de.dart';
 import 'package:recipe_capturer/ui/formatters/tag_label_de.dart';
+import 'package:recipe_capturer/ui/widgets/recipe_image.dart';
 
 class RecipeCard extends StatelessWidget {
   const RecipeCard({
@@ -20,189 +17,118 @@ class RecipeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final dateLabel = dateLabelDe(recipe.createdAt, now);
-
-    final meta =
-        '${StringsDe.addedLabel}: $dateLabel   ${StringsDe.ingredientsLabel}: ${recipe.ingredients.length}';
-
-    const radius = 22.0;
     final colorScheme = Theme.of(context).colorScheme;
-
-    Future<void> confirmDelete() async {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Rezept löschen?'),
-          content: const Text('Dieses Rezept wird dauerhaft gelöscht.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Abbrechen'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Löschen'),
-            ),
-          ],
-        ),
-      );
-
-      if (confirmed == true) {
-        onDelete?.call();
-      }
-    }
-
-    final imageWidget = recipe.imagePaths.isNotEmpty
-        ? Image.file(
-            File(recipe.imagePaths.first),
-            fit: BoxFit.cover,
-            alignment: Alignment.center,
-            errorBuilder: (_, _, _) => Image.asset(
-              'assets/recipe_placeholder.jpg',
-              fit: BoxFit.cover,
-              alignment: Alignment.center,
-            ),
-          )
-        : Image.asset(
-            'assets/recipe_placeholder.jpg',
-            fit: BoxFit.cover,
-            alignment: Alignment.center,
-          );
+    final textTheme = Theme.of(context).textTheme;
+    final imagePath = recipe.mainImagePath;
+    final totalTime = recipe.totalTimeMinutes;
 
     return Card(
-      clipBehavior: Clip.antiAlias,
       margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(radius),
-        side: BorderSide(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.45),
-        ),
-      ),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(radius),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             AspectRatio(
-              aspectRatio: 4 / 3,
-              child: Stack(
-                fit: StackFit.expand,
+              aspectRatio: 16 / 10,
+              child: RecipeImage(path: imagePath),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  imageWidget,
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.transparent,
-                          Colors.black.withValues(alpha: 0.48),
-                          Colors.black.withValues(alpha: 0.84),
-                        ],
-                      ),
-                    ),
-                  ),
-                  if (recipe.isFavorite)
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: Material(
-                        color: Colors.black38,
-                        shape: const CircleBorder(),
-                        child: const Padding(
-                          padding: EdgeInsets.all(6),
-                          child: Icon(
-                            Icons.favorite,
-                            color: Colors.redAccent,
-                            size: 18,
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (onDelete != null)
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: Material(
-                        color: Colors.black45,
-                        shape: const CircleBorder(),
-                        child: IconButton(
-                          onPressed: confirmDelete,
-                          icon: const Icon(Icons.delete_outline),
-                          color: Colors.white,
-                          tooltip: 'Löschen',
-                        ),
-                      ),
-                    ),
-                  Positioned(
-                    left: 12,
-                    right: 12,
-                    bottom: 12,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (recipe.tags.isNotEmpty)
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: recipe.tags
-                                .take(4)
-                                .map(
-                                  (t) => Chip(
-                                    label: Text(
-                                      tagLabelDe(t),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    backgroundColor: Colors.white.withValues(
-                                      alpha: 0.88,
-                                    ),
-                                    visualDensity: VisualDensity.compact,
-                                    materialTapTargetSize:
-                                        MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                        if (recipe.tags.isNotEmpty) const SizedBox(height: 8),
-                        Text(
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
                           recipe.title,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(
-                            context,
-                          ).textTheme.titleLarge?.copyWith(color: Colors.white),
+                          style: textTheme.titleMedium,
                         ),
-                      ],
-                    ),
+                      ),
+                      if (recipe.isFavorite)
+                        Icon(
+                          Icons.favorite,
+                          size: 18,
+                          color: colorScheme.secondary,
+                        ),
+                      if (onDelete != null)
+                        IconButton(
+                          onPressed: onDelete,
+                          icon: const Icon(Icons.delete_outline),
+                          tooltip: 'Löschen',
+                          visualDensity: VisualDensity.compact,
+                        ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.schedule_outlined,
-                    size: 14,
-                    color: colorScheme.onSurfaceVariant,
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _InfoChip(
+                        icon: Icons.local_dining_outlined,
+                        label: '${recipe.ingredients.length} Zutaten',
+                      ),
+                      if (recipe.servings != null)
+                        _InfoChip(
+                          icon: Icons.people_alt_outlined,
+                          label: '${recipe.servings} Portionen',
+                        ),
+                      if (totalTime != null)
+                        _InfoChip(
+                          icon: Icons.schedule_outlined,
+                          label: '$totalTime min',
+                        ),
+                    ],
                   ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      meta,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  if (recipe.tags.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      recipe.tags.take(3).map(tagLabelDe).join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.bodySmall?.copyWith(
                         color: colorScheme.onSurfaceVariant,
                       ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _InfoChip extends StatelessWidget {
+  const _InfoChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: colorScheme.onSurfaceVariant),
+          const SizedBox(width: 5),
+          Text(label, style: Theme.of(context).textTheme.labelMedium),
+        ],
       ),
     );
   }

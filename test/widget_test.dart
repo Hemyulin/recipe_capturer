@@ -4,26 +4,23 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:recipe_capturer/main.dart';
 
 void main() {
-  testWidgets('Title is "Recipes"', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
+  testWidgets('shows Today as the home screen', (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
 
-    expect(find.text('Recipes'), findsOneWidget);
+    expect(find.text('Heute'), findsWidgets);
+    expect(find.text('Was essen wir heute?'), findsOneWidget);
+    expect(find.text('Frühstück'), findsOneWidget);
   });
 
-  testWidgets('navigates to /new page and expect title to be New Recipe Page', (
-    WidgetTester tester,
-  ) async {
-    // Build our app and trigger a frame.
+  testWidgets('navigates to manual recipe form', (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
+    await tester.tap(find.text('Rezepte'));
+    await tester.pumpAndSettle();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('Recipes'), findsOneWidget);
-
-    await tester.tap(find.byType(FloatingActionButton));
+    await tester.tap(find.byIcon(Icons.edit_note_outlined));
 
     await tester.pumpAndSettle();
 
-    expect(find.text('New Recipe Page'), findsOneWidget);
+    expect(find.text('Neues Rezept'), findsOneWidget);
   });
 }
