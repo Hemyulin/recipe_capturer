@@ -407,16 +407,16 @@ class _RevealableMealCardState extends State<_RevealableMealCard> {
             ],
           ),
         ),
-        GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: _isDeleteRevealed ? _close : null,
-          onHorizontalDragStart: _handleDragStart,
-          onHorizontalDragUpdate: _handleDragUpdate,
-          onHorizontalDragEnd: _handleDragEnd,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOutCubic,
-            transform: Matrix4.translationValues(_dragOffset, 0, 0),
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          transform: Matrix4.translationValues(_dragOffset, 0, 0),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _isDeleteRevealed ? _close : null,
+            onHorizontalDragStart: _handleDragStart,
+            onHorizontalDragUpdate: _handleDragUpdate,
+            onHorizontalDragEnd: _handleDragEnd,
             child: widget.child,
           ),
         ),
