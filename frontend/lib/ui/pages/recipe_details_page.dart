@@ -84,6 +84,22 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
     if (mounted) Navigator.of(context).pop(true);
   }
 
+  Future<void> _showStats() async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Statistiken'),
+        content: _RecipeStatsContent(recipe: recipe),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Schließen'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMainImage(ColorScheme colorScheme) {
     final imagePath = recipe.mainImagePath;
 
@@ -173,10 +189,12 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
           ),
           PopupMenuButton<String>(
             onSelected: (value) {
+              if (value == 'stats') _showStats();
               if (value == 'photo') _addMainImage();
               if (value == 'delete') _confirmAndDelete();
             },
             itemBuilder: (context) => const [
+              PopupMenuItem(value: 'stats', child: Text('Statistiken')),
               PopupMenuItem(value: 'photo', child: Text('Foto ändern')),
               PopupMenuItem(value: 'delete', child: Text('Löschen')),
             ],
@@ -306,6 +324,57 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
           ],
         ],
       ),
+    );
+  }
+}
+
+String _formatDate(DateTime value) {
+  final day = value.day.toString().padLeft(2, '0');
+  final month = value.month.toString().padLeft(2, '0');
+  return '$day.$month.${value.year}';
+}
+
+class _RecipeStatsContent extends StatelessWidget {
+  const _RecipeStatsContent({required this.recipe});
+
+  final Recipe recipe;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final lastCookedAt = recipe.lastCookedAt;
+    final mealCounts = <String, int>{};
+
+    for (final event in recipe.cookEvents) {
+      final mealType = event.mealType.isEmpty ? 'Unbekannt' : event.mealType;
+      mealCounts[mealType] = (mealCounts[mealType] ?? 0) + 1;
+    }
+
+    if (recipe.cookCount == 0) {
+      return Text(
+        'Noch keine Kochhistorie. Später zählen wir automatisch, wenn ein geplanter Tag abgeschlossen ist.',
+        style: textTheme.bodyMedium,
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Insgesamt: ${recipe.cookCount}x', style: textTheme.bodyLarge),
+        if (lastCookedAt != null) ...[
+          const SizedBox(height: 8),
+          Text('Zuletzt: ${_formatDate(lastCookedAt)}'),
+        ],
+        if (mealCounts.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Text('Nach Mahlzeit', style: textTheme.titleSmall),
+          const SizedBox(height: 6),
+          ...mealCounts.entries.map(
+            (entry) => Text('${entry.key}: ${entry.value}x'),
+          ),
+        ],
+      ],
     );
   }
 }

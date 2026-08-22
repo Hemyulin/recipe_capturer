@@ -26,6 +26,8 @@ CREATE TABLE recipes (
   source_url TEXT,
   image_url TEXT,
   is_favorite INTEGER NOT NULL DEFAULT 0,
+  cook_count INTEGER NOT NULL DEFAULT 0,
+  last_cooked_at TEXT,
   archived_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -59,6 +61,16 @@ CREATE TABLE meal_plan_slots (
   household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
   planned_for TEXT NOT NULL,
   meal TEXT NOT NULL,
+  slot_type TEXT NOT NULL DEFAULT 'recipe',
   recipe_id TEXT REFERENCES recipes(id) ON DELETE SET NULL,
   UNIQUE (household_id, planned_for, meal)
+);
+
+CREATE TABLE recipe_cook_events (
+  id TEXT PRIMARY KEY,
+  household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  recipe_id TEXT NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+  cooked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  meal TEXT,
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL
 );

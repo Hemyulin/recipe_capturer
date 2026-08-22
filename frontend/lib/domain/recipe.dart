@@ -46,6 +46,24 @@ class RecipeIngredient {
   }
 }
 
+class RecipeCookEvent {
+  const RecipeCookEvent({required this.cookedAt, required this.mealType});
+
+  final DateTime cookedAt;
+  final String mealType;
+
+  Map<String, dynamic> toJson() {
+    return {'cookedAt': cookedAt.toIso8601String(), 'mealType': mealType};
+  }
+
+  factory RecipeCookEvent.fromJson(Map<String, dynamic> json) {
+    return RecipeCookEvent(
+      cookedAt: DateTime.parse(json['cookedAt'] as String),
+      mealType: (json['mealType'] as String? ?? '').trim(),
+    );
+  }
+}
+
 class Recipe {
   final String id;
   final String title;
@@ -60,6 +78,7 @@ class Recipe {
   final int? prepTimeMinutes;
   final int? cookTimeMinutes;
   final String notes;
+  final List<RecipeCookEvent> cookEvents;
 
   const Recipe({
     required this.id,
@@ -75,9 +94,19 @@ class Recipe {
     this.prepTimeMinutes,
     this.cookTimeMinutes,
     this.notes = '',
+    this.cookEvents = const [],
   });
 
   String? get mainImagePath => imagePaths.isEmpty ? null : imagePaths.first;
+
+  int get cookCount => cookEvents.length;
+
+  DateTime? get lastCookedAt {
+    if (cookEvents.isEmpty) return null;
+    return cookEvents
+        .map((event) => event.cookedAt)
+        .reduce((a, b) => a.isAfter(b) ? a : b);
+  }
 
   int? get totalTimeMinutes {
     final prep = prepTimeMinutes ?? 0;
@@ -98,6 +127,7 @@ class Recipe {
     int? prepTimeMinutes,
     int? cookTimeMinutes,
     String notes = '',
+    List<RecipeCookEvent> cookEvents = const [],
   }) {
     final trimmedTitle = title.trim();
 
@@ -128,6 +158,7 @@ class Recipe {
       prepTimeMinutes: prepTimeMinutes,
       cookTimeMinutes: cookTimeMinutes,
       notes: notes.trim(),
+      cookEvents: cookEvents,
     );
   }
 
@@ -148,6 +179,7 @@ class Recipe {
     int? cookTimeMinutes,
     bool clearCookTime = false,
     String? notes,
+    List<RecipeCookEvent>? cookEvents,
   }) {
     return Recipe(
       id: id ?? this.id,
@@ -167,11 +199,21 @@ class Recipe {
           ? null
           : cookTimeMinutes ?? this.cookTimeMinutes,
       notes: notes ?? this.notes,
+      cookEvents: cookEvents ?? this.cookEvents,
     );
   }
 
   Recipe withFavorite(bool value) {
     return copyWith(isFavorite: value);
+  }
+
+  Recipe withCookEvent({required String mealType, DateTime? at}) {
+    return copyWith(
+      cookEvents: [
+        ...cookEvents,
+        RecipeCookEvent(cookedAt: at ?? DateTime.now(), mealType: mealType),
+      ],
+    );
   }
 
   Map<String, dynamic> toJson() {
@@ -191,6 +233,9 @@ class Recipe {
       'prepTimeMinutes': prepTimeMinutes,
       'cookTimeMinutes': cookTimeMinutes,
       'notes': notes,
+      'cookCount': cookCount,
+      'lastCookedAt': lastCookedAt?.toIso8601String(),
+      'cookEvents': cookEvents.map((event) => event.toJson()).toList(),
     };
   }
 
@@ -203,6 +248,14 @@ class Recipe {
               .map((step) => step.trim())
               .where((step) => step.isNotEmpty)
               .toList();
+
+    final rawCookEvents = json['cookEvents'];
+    final cookEvents = rawCookEvents is List
+        ? rawCookEvents
+              .whereType<Map<String, dynamic>>()
+              .map(RecipeCookEvent.fromJson)
+              .toList()
+        : _legacyCookEvents(json);
 
     return Recipe(
       id: json['id'] as String,
@@ -225,6 +278,21 @@ class Recipe {
       prepTimeMinutes: json['prepTimeMinutes'] as int?,
       cookTimeMinutes: json['cookTimeMinutes'] as int?,
       notes: json['notes'] as String? ?? '',
+      cookEvents: cookEvents,
+    );
+  }
+
+  static List<RecipeCookEvent> _legacyCookEvents(Map<String, dynamic> json) {
+    final count = json['cookCount'] as int? ?? 0;
+    final lastCookedAt = json['lastCookedAt'] == null
+        ? null
+        : DateTime.parse(json['lastCookedAt'] as String);
+
+    if (count <= 0 || lastCookedAt == null) return const [];
+
+    return List.generate(
+      count,
+      (_) => RecipeCookEvent(cookedAt: lastCookedAt, mealType: ''),
     );
   }
 }

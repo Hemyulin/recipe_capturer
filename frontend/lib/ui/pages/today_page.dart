@@ -14,6 +14,8 @@ class TodayPage extends StatefulWidget {
 }
 
 class _TodayPageState extends State<TodayPage> {
+  static const String _leftoversSlotValue = '__leftovers__';
+
   List<Recipe> _recipes = [];
   final Map<String, String?> _mealRecipeIds = {};
 
@@ -51,6 +53,10 @@ class _TodayPageState extends State<TodayPage> {
     return _recipeForTag(fallbackTag);
   }
 
+  bool _isLeftoversSlot(String slotId) {
+    return _mealRecipeIds[slotId] == _leftoversSlotValue;
+  }
+
   Future<void> _openRecipe(Recipe? recipe) async {
     if (recipe == null) return;
     await context.push('/details', extra: recipe);
@@ -58,16 +64,17 @@ class _TodayPageState extends State<TodayPage> {
   }
 
   Future<void> _chooseRecipe(String slotId) async {
-    if (_recipes.isEmpty) return;
-
-    final selected = await showModalBottomSheet<Recipe>(
+    final selected = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
-      builder: (context) => _RecipePickerSheet(recipes: _recipes),
+      builder: (context) => _MealChoiceSheet(
+        recipes: _recipes,
+        leftoversValue: _leftoversSlotValue,
+      ),
     );
     if (selected == null || !mounted) return;
 
-    setState(() => _mealRecipeIds[slotId] = selected.id);
+    setState(() => _mealRecipeIds[slotId] = selected);
   }
 
   void _clearRecipe(String slotId) {
@@ -79,23 +86,22 @@ class _TodayPageState extends State<TodayPage> {
     final breakfast = _recipeForSlot('breakfast', 'breakfast');
     final lunch = _recipeForSlot('lunch', 'lunch');
     final dinner = _recipeForSlot('dinner', 'dinner');
+    final breakfastIsLeftovers = _isLeftoversSlot('breakfast');
+    final lunchIsLeftovers = _isLeftoversSlot('lunch');
+    final dinnerIsLeftovers = _isLeftoversSlot('dinner');
 
     return Scaffold(
       appBar: AppBar(title: const Text('Heute')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
         children: [
-          Text(
-            'Was essen wir heute?',
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          const SizedBox(height: 14),
           _MealSlotCard(
             title: 'Frühstück',
             time: '07:30',
             recipe: breakfast,
-            isRecurring: breakfast != null,
-            onTap: breakfast == null
+            isLeftovers: breakfastIsLeftovers,
+            isRecurring: breakfast != null && !breakfastIsLeftovers,
+            onTap: breakfast == null || breakfastIsLeftovers
                 ? () => _chooseRecipe('breakfast')
                 : () => _openRecipe(breakfast),
             onChange: () => _chooseRecipe('breakfast'),
@@ -106,7 +112,8 @@ class _TodayPageState extends State<TodayPage> {
             title: 'Mittagessen',
             time: '12:30',
             recipe: lunch,
-            onTap: lunch == null
+            isLeftovers: lunchIsLeftovers,
+            onTap: lunch == null || lunchIsLeftovers
                 ? () => _chooseRecipe('lunch')
                 : () => _openRecipe(lunch),
             onChange: () => _chooseRecipe('lunch'),
@@ -117,7 +124,8 @@ class _TodayPageState extends State<TodayPage> {
             title: 'Abendessen',
             time: '18:30',
             recipe: dinner,
-            onTap: dinner == null
+            isLeftovers: dinnerIsLeftovers,
+            onTap: dinner == null || dinnerIsLeftovers
                 ? () => _chooseRecipe('dinner')
                 : () => _openRecipe(dinner),
             onChange: () => _chooseRecipe('dinner'),
@@ -152,10 +160,13 @@ class _TodayPageState extends State<TodayPage> {
 }
 
 class _MealSlotCard extends StatelessWidget {
+  static const String _leftoversImagePath = 'assets/demo_recipes/leftovers.png';
+
   const _MealSlotCard({
     required this.title,
     required this.time,
     this.recipe,
+    this.isLeftovers = false,
     this.isRecurring = false,
     this.onTap,
     this.onChange,
@@ -165,6 +176,7 @@ class _MealSlotCard extends StatelessWidget {
   final String title;
   final String time;
   final Recipe? recipe;
+  final bool isLeftovers;
   final bool isRecurring;
   final VoidCallback? onTap;
   final VoidCallback? onChange;
@@ -173,7 +185,8 @@ class _MealSlotCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final imagePath = recipe?.mainImagePath;
+    final imagePath = isLeftovers ? _leftoversImagePath : recipe?.mainImagePath;
+    final isPlanned = recipe != null || isLeftovers;
 
     final card = Card(
       clipBehavior: Clip.antiAlias,
@@ -192,7 +205,9 @@ class _MealSlotCard extends StatelessWidget {
                       ? ColoredBox(
                           color: colorScheme.surfaceContainerHigh,
                           child: Icon(
-                            Icons.restaurant_menu_outlined,
+                            isLeftovers
+                                ? Icons.rice_bowl_outlined
+                                : Icons.restaurant_menu_outlined,
                             color: colorScheme.primary,
                           ),
                         )
@@ -214,7 +229,7 @@ class _MealSlotCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      recipe?.title ?? 'Nichts geplant',
+                      isLeftovers ? 'Reste' : recipe?.title ?? 'Nichts geplant',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyLarge,
@@ -234,7 +249,7 @@ class _MealSlotCard extends StatelessWidget {
                             icon: Icons.schedule_outlined,
                             label: '${recipe!.totalTimeMinutes} min',
                           ),
-                        if (recipe == null)
+                        if (recipe == null && !isLeftovers)
                           const _MealBadge(
                             icon: Icons.add_rounded,
                             label: 'Planen',
@@ -250,7 +265,7 @@ class _MealSlotCard extends StatelessWidget {
       ),
     );
 
-    if (recipe == null) return card;
+    if (!isPlanned) return card;
 
     return _RevealableMealCard(
       onChange: onChange,
@@ -260,35 +275,114 @@ class _MealSlotCard extends StatelessWidget {
   }
 }
 
-class _RecipePickerSheet extends StatelessWidget {
-  const _RecipePickerSheet({required this.recipes});
+class _MealChoiceSheet extends StatefulWidget {
+  const _MealChoiceSheet({required this.recipes, required this.leftoversValue});
 
   final List<Recipe> recipes;
+  final String leftoversValue;
+
+  @override
+  State<_MealChoiceSheet> createState() => _MealChoiceSheetState();
+}
+
+class _MealChoiceSheetState extends State<_MealChoiceSheet> {
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<Recipe> _filteredRecipes() {
+    final query = _searchController.text.trim().toLowerCase();
+    final sortedRecipes = [...widget.recipes]
+      ..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+
+    if (query.isEmpty) return sortedRecipes;
+
+    return sortedRecipes.where((recipe) {
+      final inTitle = recipe.title.toLowerCase().contains(query);
+      final inIngredients = recipe.ingredients.any(
+        (ingredient) => ingredient.matches(query),
+      );
+      final inTags = recipe.tags.any(
+        (tag) => tag.toLowerCase().contains(query),
+      );
+      return inTitle || inIngredients || inTags;
+    }).toList();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final sortedRecipes = [...recipes]
-      ..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+    final filteredRecipes = _filteredRecipes();
 
     return SafeArea(
       child: ListView.separated(
         shrinkWrap: true,
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-        itemCount: sortedRecipes.length + 1,
+        itemCount: filteredRecipes.isEmpty ? 4 : filteredRecipes.length + 3,
         separatorBuilder: (_, index) =>
-            index == 0 ? const SizedBox(height: 8) : const Divider(height: 1),
+            index <= 1 ? const SizedBox(height: 8) : const Divider(height: 1),
         itemBuilder: (context, index) {
           if (index == 0) {
+            return Text(
+              'Rezept auswählen',
+              style: Theme.of(context).textTheme.titleLarge,
+            );
+          }
+
+          if (index == 1) {
+            return TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Suchen',
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: _searchController.text.isEmpty
+                    ? null
+                    : IconButton(
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() {});
+                        },
+                        icon: const Icon(Icons.close_rounded),
+                        tooltip: 'Suche löschen',
+                      ),
+              ),
+              onChanged: (_) => setState(() {}),
+            );
+          }
+
+          if (index == 2) {
+            return ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: const SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: RecipeImage(path: _MealSlotCard._leftoversImagePath),
+                ),
+              ),
+              title: const Text('Reste'),
+              subtitle: const Text('Keine Rezeptauswahl für diese Mahlzeit'),
+              onTap: () => Navigator.of(context).pop(widget.leftoversValue),
+            );
+          }
+
+          if (filteredRecipes.isEmpty) {
             return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(vertical: 18),
               child: Text(
-                'Rezept auswählen',
-                style: Theme.of(context).textTheme.titleLarge,
+                'Keine Treffer',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             );
           }
 
-          final recipe = sortedRecipes[index - 1];
+          final recipe = filteredRecipes[index - 3];
           return ListTile(
             contentPadding: EdgeInsets.zero,
             leading: ClipRRect(
@@ -307,7 +401,7 @@ class _RecipePickerSheet extends StatelessWidget {
                   '${recipe.totalTimeMinutes} min',
               ].join(' · '),
             ),
-            onTap: () => Navigator.of(context).pop(recipe),
+            onTap: () => Navigator.of(context).pop(recipe.id),
           );
         },
       ),
@@ -388,6 +482,7 @@ class _RevealableMealCardState extends State<_RevealableMealCard> {
       children: [
         Positioned.fill(
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _RevealAction(
                 icon: Icons.swap_horiz_rounded,

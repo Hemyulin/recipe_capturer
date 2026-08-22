@@ -20,8 +20,9 @@ class InMemoryRecipeRepository implements RecipeRepository {
   }
 
   @override
-  Future<void> update(Recipe recipe) {
-    // TODO: implement update
-    throw UnimplementedError();
+  Future<void> update(Recipe recipe) async {
+    final index = _recipe.indexWhere((r) => r.id == recipe.id);
+    if (index == -1) return;
+    _recipe[index] = recipe;
   }
 }

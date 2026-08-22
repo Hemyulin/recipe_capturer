@@ -17,8 +17,6 @@ class RecipeListPage extends StatefulWidget {
 class _RecipeListPageState extends State<RecipeListPage> {
   List<Recipe> recipesSnapshot = [];
   final TextEditingController _searchController = TextEditingController();
-  final TextEditingController _ingredientFilterController =
-      TextEditingController();
   bool _favoritesOnly = false;
   bool _withImagesOnly = false;
 
@@ -31,7 +29,6 @@ class _RecipeListPageState extends State<RecipeListPage> {
   @override
   void dispose() {
     _searchController.dispose();
-    _ingredientFilterController.dispose();
     super.dispose();
   }
 
@@ -44,19 +41,10 @@ class _RecipeListPageState extends State<RecipeListPage> {
 
   List<Recipe> _filteredRecipes() {
     final query = _searchController.text.trim().toLowerCase();
-    final ingredientQuery = _ingredientFilterController.text
-        .trim()
-        .toLowerCase();
 
     return recipesSnapshot.where((recipe) {
       if (_favoritesOnly && !recipe.isFavorite) return false;
       if (_withImagesOnly && recipe.imagePaths.isEmpty) return false;
-      if (ingredientQuery.isNotEmpty &&
-          !recipe.ingredients.any(
-            (ingredient) => ingredient.matches(ingredientQuery),
-          )) {
-        return false;
-      }
 
       if (query.isEmpty) return true;
 
@@ -144,50 +132,23 @@ class _RecipeListPageState extends State<RecipeListPage> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: Column(
-              children: [
-                TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Titel, Zutat oder Tag',
-                    prefixIcon: const Icon(Icons.search_rounded),
-                    suffixIcon: _searchController.text.isEmpty
-                        ? null
-                        : IconButton(
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() {});
-                            },
-                            icon: const Icon(Icons.close_rounded),
-                            tooltip: 'Suche löschen',
-                          ),
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _ingredientFilterController,
-                  decoration: InputDecoration(
-                    hintText: 'Nach vorhandener Zutat filtern',
-                    prefixIcon: const Icon(Icons.kitchen_outlined),
-                    suffixIcon: _ingredientFilterController.text.isEmpty
-                        ? null
-                        : IconButton(
-                            onPressed: () {
-                              _ingredientFilterController.clear();
-                              setState(() {});
-                            },
-                            icon: const Icon(Icons.close_rounded),
-                            tooltip: 'Zutatenfilter löschen',
-                          ),
-                    filled: true,
-                    fillColor: colorScheme.surfaceContainerLowest.withValues(
-                      alpha: 0.94,
-                    ),
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-              ],
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Titel, Zutat oder Tag',
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: _searchController.text.isEmpty
+                    ? null
+                    : IconButton(
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() {});
+                        },
+                        icon: const Icon(Icons.close_rounded),
+                        tooltip: 'Suche löschen',
+                      ),
+              ),
+              onChanged: (_) => setState(() {}),
             ),
           ),
           Padding(

@@ -7,6 +7,7 @@ the same recipes instead of keeping everything local on one device.
 
 - Recipes: list, read, create, update, archive.
 - Meal plan: assign or clear recipes for breakfast, lunch, and dinner.
+- Cooking history: record completed meal plan slots with date and meal type.
 - Shopping list: generate from planned meals, then check items off together.
 - Household access: two user accounts with shared household data.
 

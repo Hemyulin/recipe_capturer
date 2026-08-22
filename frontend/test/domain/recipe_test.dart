@@ -23,6 +23,30 @@ void main() {
     expect(recipe.ingredients.single.label, '400 g Tomaten');
   });
 
+  test('Recipe tracks cooked count and last cooked date', () {
+    final cookedAt = DateTime(2026, 8, 22, 18, 30);
+    final recipe = Recipe.create(
+      'Pasta',
+    ).withCookEvent(mealType: 'Dinner', at: cookedAt);
+
+    expect(recipe.cookCount, 1);
+    expect(recipe.lastCookedAt, cookedAt);
+    expect(recipe.cookEvents.single.mealType, 'Dinner');
+  });
+
+  test('Recipe JSON keeps cooking stats', () {
+    final cookedAt = DateTime(2026, 8, 22, 18, 30);
+    final recipe = Recipe.create(
+      'Pasta',
+    ).withCookEvent(mealType: 'Lunch', at: cookedAt);
+
+    final decoded = Recipe.fromJson(recipe.toJson());
+
+    expect(decoded.cookCount, 1);
+    expect(decoded.lastCookedAt, cookedAt);
+    expect(decoded.cookEvents.single.mealType, 'Lunch');
+  });
+
   //   test('Recipe.create contains creation timestamp', () {
   //     DateTime fixed = DateTime(2026, 1, 1);
 
