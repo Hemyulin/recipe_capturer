@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:recipe_capturer/data/demo_recipes.dart';
 import 'package:recipe_capturer/data/recipe_repository.dart';
 import 'package:recipe_capturer/domain/recipe.dart';
 
@@ -32,18 +33,46 @@ class FileRecipeRepository implements RecipeRepository {
 
   Future<List<dynamic>> _readItems() async {
     final file = await _recipesFile();
-    if (!(await file.exists())) return [];
+    if (!(await file.exists())) {
+      return _seedDemoItems();
+    }
 
     final fileAsString = await file.readAsString();
-    if (fileAsString.trim().isEmpty) return [];
+    if (fileAsString.trim().isEmpty) return _seedDemoItems();
 
     final decoded = jsonDecode(fileAsString);
-    return decoded is List ? decoded : <dynamic>[];
+    if (decoded is! List) return _seedDemoItems();
+
+    return _withMissingDemoItems(decoded);
   }
 
   Future<void> _writeItems(List<dynamic> items) async {
     final file = await _recipesFile();
     await file.writeAsString(jsonEncode(items));
+  }
+
+  Future<List<dynamic>> _seedDemoItems() async {
+    final items = demoRecipes.map((recipe) => recipe.toJson()).toList();
+    await _writeItems(items);
+    return items;
+  }
+
+  Future<List<dynamic>> _withMissingDemoItems(List<dynamic> items) async {
+    final existingIds = items
+        .whereType<Map<String, dynamic>>()
+        .map((item) => item['id'])
+        .whereType<String>()
+        .toSet();
+    final missingDemoItems = demoRecipes
+        .where((recipe) => !existingIds.contains(recipe.id))
+        .map((recipe) => recipe.toJson())
+        .toList();
+
+    if (missingDemoItems.isEmpty) return items;
+
+    final updatedItems = [...items, ...missingDemoItems];
+    await _writeItems(updatedItems);
+    return updatedItems;
   }
 
   Future<void> _writeAll(List<Recipe> recipes) async {
@@ -125,7 +154,7 @@ class FileRecipeRepository implements RecipeRepository {
     if (recipeToDelete != null) {
       for (final imagePath in recipeToDelete.imagePaths) {
         final file = File(imagePath);
-        if (await file.exists()) {
+        if (await _isManagedImagePath(imagePath) && await file.exists()) {
           try {
             await file.delete();
           } catch (_) {

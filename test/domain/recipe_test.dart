@@ -11,6 +11,18 @@ void main() {
     expect(() => Recipe.create('     '), throwsArgumentError);
   });
 
+  test('Recipe stores structured ingredients', () {
+    final recipe = Recipe.create(
+      'Pasta',
+      ingredients: const [
+        RecipeIngredient(name: 'Tomaten', quantity: '400', unit: 'g'),
+      ],
+    );
+
+    expect(recipe.ingredients.single.name, 'Tomaten');
+    expect(recipe.ingredients.single.label, '400 g Tomaten');
+  });
+
   //   test('Recipe.create contains creation timestamp', () {
   //     DateTime fixed = DateTime(2026, 1, 1);
 

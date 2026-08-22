@@ -17,6 +17,8 @@ class RecipeListPage extends StatefulWidget {
 class _RecipeListPageState extends State<RecipeListPage> {
   List<Recipe> recipesSnapshot = [];
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _ingredientFilterController =
+      TextEditingController();
   bool _favoritesOnly = false;
   bool _withImagesOnly = false;
 
@@ -29,6 +31,7 @@ class _RecipeListPageState extends State<RecipeListPage> {
   @override
   void dispose() {
     _searchController.dispose();
+    _ingredientFilterController.dispose();
     super.dispose();
   }
 
@@ -41,16 +44,25 @@ class _RecipeListPageState extends State<RecipeListPage> {
 
   List<Recipe> _filteredRecipes() {
     final query = _searchController.text.trim().toLowerCase();
+    final ingredientQuery = _ingredientFilterController.text
+        .trim()
+        .toLowerCase();
 
     return recipesSnapshot.where((recipe) {
       if (_favoritesOnly && !recipe.isFavorite) return false;
       if (_withImagesOnly && recipe.imagePaths.isEmpty) return false;
+      if (ingredientQuery.isNotEmpty &&
+          !recipe.ingredients.any(
+            (ingredient) => ingredient.matches(ingredientQuery),
+          )) {
+        return false;
+      }
 
       if (query.isEmpty) return true;
 
       final inTitle = recipe.title.toLowerCase().contains(query);
       final inIngredients = recipe.ingredients.any(
-        (ingredient) => ingredient.toLowerCase().contains(query),
+        (ingredient) => ingredient.matches(query),
       );
       final inTags = recipe.tags.any(
         (tag) => tag.toLowerCase().contains(query),
@@ -71,20 +83,37 @@ class _RecipeListPageState extends State<RecipeListPage> {
         ? _EmptyLibraryState(title: 'Noch keine Rezepte')
         : filteredRecipes.isEmpty
         ? _EmptyLibraryState(title: 'Keine Treffer')
-        : ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 120),
-            itemCount: filteredRecipes.length,
-            itemBuilder: (context, index) {
-              final recipe = filteredRecipes[index];
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 14),
-                child: RecipeCard(
-                  recipe: recipe,
-                  onTap: () async {
-                    await context.push('/details', extra: recipe);
-                    await _refresh();
-                  },
+        : LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 900
+                  ? 3
+                  : constraints.maxWidth >= 620
+                  ? 2
+                  : 1;
+
+              return GridView.builder(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 120),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: columns,
+                  crossAxisSpacing: 14,
+                  mainAxisSpacing: 14,
+                  childAspectRatio: columns == 1
+                      ? 1
+                      : columns == 2
+                      ? 1.02
+                      : 0.82,
                 ),
+                itemCount: filteredRecipes.length,
+                itemBuilder: (context, index) {
+                  final recipe = filteredRecipes[index];
+                  return RecipeCard(
+                    recipe: recipe,
+                    onTap: () async {
+                      await context.push('/details', extra: recipe);
+                      await _refresh();
+                    },
+                  );
+                },
               );
             },
           );
@@ -115,44 +144,48 @@ class _RecipeListPageState extends State<RecipeListPage> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: Row(
+            child: Column(
               children: [
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: colorScheme.surfaceContainerLowest.withValues(
-                        alpha: 0.94,
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: colorScheme.outlineVariant.withValues(
-                          alpha: 0.6,
-                        ),
-                      ),
-                    ),
-                    child: TextField(
-                      controller: _searchController,
-                      decoration: InputDecoration(
-                        hintText: 'Titel, Zutat oder Tag',
-                        prefixIcon: const Icon(Icons.search_rounded),
-                        suffixIcon: _searchController.text.isEmpty
-                            ? null
-                            : IconButton(
-                                onPressed: () {
-                                  _searchController.clear();
-                                  setState(() {});
-                                },
-                                icon: const Icon(Icons.close_rounded),
-                                tooltip: 'Suche löschen',
-                              ),
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        filled: false,
-                      ),
-                      onChanged: (_) => setState(() {}),
+                TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Titel, Zutat oder Tag',
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    suffixIcon: _searchController.text.isEmpty
+                        ? null
+                        : IconButton(
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {});
+                            },
+                            icon: const Icon(Icons.close_rounded),
+                            tooltip: 'Suche löschen',
+                          ),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _ingredientFilterController,
+                  decoration: InputDecoration(
+                    hintText: 'Nach vorhandener Zutat filtern',
+                    prefixIcon: const Icon(Icons.kitchen_outlined),
+                    suffixIcon: _ingredientFilterController.text.isEmpty
+                        ? null
+                        : IconButton(
+                            onPressed: () {
+                              _ingredientFilterController.clear();
+                              setState(() {});
+                            },
+                            icon: const Icon(Icons.close_rounded),
+                            tooltip: 'Zutatenfilter löschen',
+                          ),
+                    filled: true,
+                    fillColor: colorScheme.surfaceContainerLowest.withValues(
+                      alpha: 0.94,
                     ),
                   ),
+                  onChanged: (_) => setState(() {}),
                 ),
               ],
             ),
@@ -213,7 +246,7 @@ class _RecipeListPageState extends State<RecipeListPage> {
 
 bool _needsReview(Recipe recipe) {
   final hasIngredients = recipe.ingredients.isNotEmpty;
-  final hasInstructions = recipe.instructions.trim().length >= 40;
+  final hasInstructions = recipe.instructions.isNotEmpty;
   return !hasIngredients || !hasInstructions;
 }
 

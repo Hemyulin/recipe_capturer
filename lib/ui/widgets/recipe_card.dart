@@ -1,8 +1,7 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:recipe_capturer/domain/recipe.dart';
-import 'package:recipe_capturer/ui/formatters/date_label_de.dart';
+import 'package:recipe_capturer/ui/formatters/tag_label_de.dart';
+import 'package:recipe_capturer/ui/widgets/recipe_image.dart';
 
 class RecipeCard extends StatelessWidget {
   const RecipeCard({
@@ -20,277 +19,117 @@ class RecipeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
-    final dateLabel = dateLabelDe(recipe.createdAt, DateTime.now());
-    final hasImage = recipe.imagePaths.isNotEmpty;
-    final needsReview = _needsReview(recipe);
-    final reviewNotes = _reviewNotes(recipe);
-
-    Future<void> confirmDelete() async {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Rezept löschen?'),
-          content: const Text('Dieses Rezept wird dauerhaft gelöscht.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Abbrechen'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Löschen'),
-            ),
-          ],
-        ),
-      );
-
-      if (confirmed == true) {
-        onDelete?.call();
-      }
-    }
+    final imagePath = recipe.mainImagePath;
+    final totalTime = recipe.totalTimeMinutes;
 
     return Card(
       margin: EdgeInsets.zero,
-      color: colorScheme.surfaceContainerLowest.withValues(alpha: 0.96),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(24),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: SizedBox(
-                  width: 96,
-                  height: 104,
-                  child: hasImage
-                      ? Image.file(
-                          File(recipe.imagePaths.first),
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => Image.asset(
-                            'assets/recipe_placeholder.jpg',
-                            fit: BoxFit.cover,
-                          ),
-                        )
-                      : Image.asset(
-                          'assets/recipe_placeholder.jpg',
-                          fit: BoxFit.cover,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AspectRatio(
+              aspectRatio: 16 / 10,
+              child: RecipeImage(path: imagePath),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          recipe.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: textTheme.titleMedium,
                         ),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            recipe.title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: textTheme.titleMedium?.copyWith(
-                              height: 1.1,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
+                      ),
+                      if (recipe.isFavorite)
+                        Icon(
+                          Icons.favorite,
+                          size: 18,
+                          color: colorScheme.secondary,
                         ),
-                        if (recipe.isFavorite)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 8, top: 1),
-                            child: Icon(
-                              Icons.favorite,
-                              size: 18,
-                              color: colorScheme.secondary,
-                            ),
-                          ),
-                        if (onDelete != null)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 4),
-                            child: IconButton(
-                              onPressed: confirmDelete,
-                              icon: const Icon(Icons.delete_outline),
-                              tooltip: 'Löschen',
-                              visualDensity: VisualDensity.compact,
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _StatusPill(
-                          label: needsReview ? 'Prüfen' : 'Bereit',
-                          backgroundColor: needsReview
-                              ? colorScheme.tertiaryContainer
-                              : colorScheme.primaryContainer,
-                          foregroundColor: needsReview
-                              ? colorScheme.onTertiaryContainer
-                              : colorScheme.onPrimaryContainer,
-                          onTap: needsReview
-                              ? () => _showReviewDetailsSheet(
-                                  context,
-                                  reviewNotes,
-                                )
-                              : null,
+                      if (onDelete != null)
+                        IconButton(
+                          onPressed: onDelete,
+                          icon: const Icon(Icons.delete_outline),
+                          tooltip: 'Löschen',
+                          visualDensity: VisualDensity.compact,
                         ),
-                      ],
-                    ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _InfoChip(
+                        icon: Icons.local_dining_outlined,
+                        label: '${recipe.ingredients.length} Zutaten',
+                      ),
+                      if (recipe.servings != null)
+                        _InfoChip(
+                          icon: Icons.people_alt_outlined,
+                          label: '${recipe.servings} Portionen',
+                        ),
+                      if (totalTime != null)
+                        _InfoChip(
+                          icon: Icons.schedule_outlined,
+                          label: '$totalTime min',
+                        ),
+                    ],
+                  ),
+                  if (recipe.tags.isNotEmpty) ...[
                     const SizedBox(height: 10),
                     Text(
-                      '${recipe.ingredients.length} Zutaten',
-                      style: textTheme.bodyMedium?.copyWith(
+                      recipe.tags.take(3).map(tagLabelDe).join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.bodySmall?.copyWith(
                         color: colorScheme.onSurfaceVariant,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Text(
-                          dateLabel,
-                          style: textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                        if (hasImage) ...[
-                          Text(
-                            '  •  ',
-                            style: textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                          Text(
-                            '${recipe.imagePaths.length} Bild${recipe.imagePaths.length == 1 ? '' : 'er'}',
-                            style: textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
                   ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _StatusPill extends StatelessWidget {
-  const _StatusPill({
-    required this.label,
-    required this.backgroundColor,
-    required this.foregroundColor,
-    this.onTap,
-  });
-
-  final String label;
-  final Color backgroundColor;
-  final Color foregroundColor;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-          decoration: BoxDecoration(
-            color: backgroundColor.withValues(alpha: 0.95),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            label,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: foregroundColor,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.2,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-void _showReviewDetailsSheet(BuildContext context, List<String> notes) {
-  final textTheme = Theme.of(context).textTheme;
-  final colorScheme = Theme.of(context).colorScheme;
-
-  showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    builder: (context) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Noch prüfen', style: textTheme.titleLarge),
-            const SizedBox(height: 8),
-            Text(
-              'Dieses Rezept wirkt noch nicht ganz vollständig.',
-              style: textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 14),
-            ...notes.map(
-              (note) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '•',
-                      style: textTheme.bodyLarge?.copyWith(
-                        color: colorScheme.secondary,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(note, style: textTheme.bodyMedium)),
-                  ],
-                ),
+                ],
               ),
             ),
           ],
         ),
-      );
-    },
-  );
+      ),
+    );
+  }
 }
 
-List<String> _reviewNotes(Recipe recipe) {
-  final notes = <String>[];
+class _InfoChip extends StatelessWidget {
+  const _InfoChip({required this.icon, required this.label});
 
-  if (recipe.ingredients.isEmpty) {
-    notes.add('Es fehlen Zutaten.');
-  }
-  if (recipe.instructions.trim().isEmpty) {
-    notes.add('Es fehlt eine Zubereitung.');
-  } else if (recipe.instructions.trim().length < 40) {
-    notes.add('Die Zubereitung wirkt noch unvollständig.');
-  }
-  return notes.isEmpty
-      ? ['Bitte kurz prüfen, ob alles vollständig ist.']
-      : notes;
-}
+  final IconData icon;
+  final String label;
 
-bool _needsReview(Recipe recipe) {
-  final hasIngredients = recipe.ingredients.isNotEmpty;
-  final hasInstructions = recipe.instructions.trim().length >= 40;
-  return !hasIngredients || !hasInstructions;
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: colorScheme.onSurfaceVariant),
+          const SizedBox(width: 5),
+          Text(label, style: Theme.of(context).textTheme.labelMedium),
+        ],
+      ),
+    );
+  }
 }
