@@ -1,16 +1,25 @@
-# recipe_capturer
+# CookBuk
 
-A new Flutter project.
+CookBuk is a private household recipe and meal planning app. The Flutter app lives in
+`frontend/`; the future Pi-hosted API and deployment notes live beside it.
 
-## Getting Started
+## Layout
 
-This project is a starting point for a Flutter application.
+- `frontend/` - Flutter app for recipes, today's meals, weekly planning, and shopping.
+- `backend/` - planned API service for shared household recipe data.
+- `infra/pi/` - Raspberry Pi deployment notes and configuration.
 
-A few resources to get you started if this is your first Flutter project:
+## Frontend
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+```sh
+cd frontend
+flutter pub get
+flutter run
+flutter test
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Backend Direction
+
+The backend should become the shared source of truth for the household: recipes,
+meal plans, and shopping state. A small REST API backed by SQLite is enough for the
+first Pi version, with simple household auth and regular database backups.
