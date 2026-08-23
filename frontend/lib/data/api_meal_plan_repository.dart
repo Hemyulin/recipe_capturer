@@ -6,13 +6,17 @@ import 'package:cookbuk/domain/meal_plan_slot.dart';
 import 'package:http/http.dart' as http;
 
 class ApiMealPlanRepository implements MealPlanRepository {
-  ApiMealPlanRepository({required String baseUrl, String sharedToken = ''})
-    : _baseUri = Uri.parse(baseUrl.replaceFirst(RegExp(r'/$'), '')),
-      _sharedToken = sharedToken.trim();
+  ApiMealPlanRepository({
+    String? baseUrl,
+    List<String>? baseUrls,
+    String sharedToken = '',
+  }) : _baseUris = _parseBaseUris(baseUrls ?? [baseUrl ?? '']),
+       _sharedToken = sharedToken.trim();
 
-  final Uri _baseUri;
+  final List<Uri> _baseUris;
   final String _sharedToken;
   final Map<String, MealPlanSlot> _offlineSlots = {};
+  late Uri _activeBaseUri = _baseUris.first;
 
   @override
   Future<List<MealPlanSlot>> getRange({
@@ -157,9 +161,9 @@ class ApiMealPlanRepository implements MealPlanRepository {
     await _send('PUT', '/meal-plan/${_dateKey(date)}/$meal', body: body);
   }
 
-  Uri _uri(String path, {Map<String, String>? queryParameters}) {
-    return _baseUri.replace(
-      path: '${_baseUri.path}$path',
+  Uri _uri(Uri baseUri, String path, {Map<String, String>? queryParameters}) {
+    return baseUri.replace(
+      path: '${baseUri.path}$path',
       queryParameters: queryParameters,
     );
   }
@@ -170,12 +174,45 @@ class ApiMealPlanRepository implements MealPlanRepository {
     Map<String, String>? queryParameters,
     Map<String, dynamic>? body,
   }) async {
+    Object? lastOfflineError;
+    final orderedBaseUris = [
+      _activeBaseUri,
+      ..._baseUris.where((uri) => uri != _activeBaseUri),
+    ];
+
+    for (final baseUri in orderedBaseUris) {
+      try {
+        final response = await _sendToBaseUri(
+          method,
+          baseUri,
+          path,
+          queryParameters: queryParameters,
+          body: body,
+        );
+        _activeBaseUri = baseUri;
+        return response;
+      } on Object catch (error) {
+        if (!_isOfflineError(error)) rethrow;
+        lastOfflineError = error;
+      }
+    }
+
+    throw lastOfflineError ?? TimeoutException('Backend unavailable');
+  }
+
+  Future<String> _sendToBaseUri(
+    String method,
+    Uri baseUri,
+    String path, {
+    Map<String, String>? queryParameters,
+    Map<String, dynamic>? body,
+  }) async {
     final headers = {
       ..._authHeaders(),
       if (body != null) 'Content-Type': 'application/json',
     };
     final encodedBody = body == null ? null : jsonEncode(body);
-    final uri = _uri(path, queryParameters: queryParameters);
+    final uri = _uri(baseUri, path, queryParameters: queryParameters);
     final response = await switch (method) {
       'GET' => http.get(uri, headers: headers).timeout(_requestTimeout),
       'POST' =>
@@ -307,6 +344,16 @@ class ApiMealPlanRepository implements MealPlanRepository {
 
   bool _isOfflineError(Object error) {
     return error is TimeoutException || error is http.ClientException;
+  }
+
+  static List<Uri> _parseBaseUris(List<String> values) {
+    final uris = values
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .map((value) => Uri.parse(value.replaceFirst(RegExp(r'/$'), '')))
+        .toList();
+    if (uris.isNotEmpty) return uris;
+    return [Uri.parse('http://127.0.0.1:3000')];
   }
 
   static const _requestTimeout = Duration(seconds: 2);

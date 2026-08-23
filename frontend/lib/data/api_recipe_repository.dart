@@ -7,13 +7,17 @@ import 'package:cookbuk/domain/recipe.dart';
 import 'package:http/http.dart' as http;
 
 class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
-  ApiRecipeRepository({required String baseUrl, String sharedToken = ''})
-    : _baseUri = Uri.parse(baseUrl.replaceFirst(RegExp(r'/$'), '')),
-      _sharedToken = sharedToken.trim();
+  ApiRecipeRepository({
+    String? baseUrl,
+    List<String>? baseUrls,
+    String sharedToken = '',
+  }) : _baseUris = _parseBaseUris(baseUrls ?? [baseUrl ?? '']),
+       _sharedToken = sharedToken.trim();
 
-  final Uri _baseUri;
+  final List<Uri> _baseUris;
   final String _sharedToken;
   List<Recipe>? _offlineRecipes;
+  late Uri _activeBaseUri = _baseUris.first;
 
   @override
   Future<List<Recipe>> getAll() async {
@@ -85,22 +89,11 @@ class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
     required String imagePath,
   }) async {
     try {
-      final request = http.MultipartRequest(
+      final response = await _sendMultipart(
         'POST',
-        _uri('/recipes/$recipeId/image'),
+        '/recipes/$recipeId/image',
+        imagePath,
       );
-      request.headers.addAll(_authHeaders());
-      request.files.add(await http.MultipartFile.fromPath('image', imagePath));
-
-      final streamedResponse = await request.send().timeout(_requestTimeout);
-      final response = await http.Response.fromStream(streamedResponse);
-
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw ApiRecipeRepositoryException(
-          'Backend request failed: POST /recipes/$recipeId/image ${response.statusCode} ${response.body}',
-        );
-      }
-
       return _recipeFromJson(jsonDecode(response.body) as Map<String, dynamic>);
     } on Object catch (error) {
       if (!_isOfflineError(error)) rethrow;
@@ -120,8 +113,8 @@ class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
     }
   }
 
-  Uri _uri(String path) {
-    return _baseUri.replace(path: '${_baseUri.path}$path');
+  Uri _uri(Uri baseUri, String path) {
+    return baseUri.replace(path: '${baseUri.path}$path');
   }
 
   Map<String, dynamic> _recipePayload(Recipe recipe) {
@@ -159,10 +152,10 @@ class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
 
     if (value.startsWith('/')) {
       return Uri(
-        scheme: _baseUri.scheme,
-        userInfo: _baseUri.userInfo,
-        host: _baseUri.host,
-        port: _baseUri.hasPort ? _baseUri.port : null,
+        scheme: _activeBaseUri.scheme,
+        userInfo: _activeBaseUri.userInfo,
+        host: _activeBaseUri.host,
+        port: _activeBaseUri.hasPort ? _activeBaseUri.port : null,
         path: value,
       ).toString();
     }
@@ -175,23 +168,93 @@ class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
     String path, {
     Map<String, dynamic>? body,
   }) async {
+    Object? lastOfflineError;
+    final orderedBaseUris = [
+      _activeBaseUri,
+      ..._baseUris.where((uri) => uri != _activeBaseUri),
+    ];
+
+    for (final baseUri in orderedBaseUris) {
+      try {
+        final response = await _sendToBaseUri(method, baseUri, path, body);
+        _activeBaseUri = baseUri;
+        return response;
+      } on Object catch (error) {
+        if (!_isOfflineError(error)) rethrow;
+        lastOfflineError = error;
+      }
+    }
+
+    throw lastOfflineError ?? TimeoutException('Backend unavailable');
+  }
+
+  Future<http.Response> _sendMultipart(
+    String method,
+    String path,
+    String imagePath,
+  ) async {
+    Object? lastOfflineError;
+    final orderedBaseUris = [
+      _activeBaseUri,
+      ..._baseUris.where((uri) => uri != _activeBaseUri),
+    ];
+
+    for (final baseUri in orderedBaseUris) {
+      try {
+        final request = http.MultipartRequest(method, _uri(baseUri, path));
+        request.headers.addAll(_authHeaders());
+        request.files.add(
+          await http.MultipartFile.fromPath('image', imagePath),
+        );
+
+        final streamedResponse = await request.send().timeout(_requestTimeout);
+        final response = await http.Response.fromStream(streamedResponse);
+
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          throw ApiRecipeRepositoryException(
+            'Backend request failed: $method $path ${response.statusCode} ${response.body}',
+          );
+        }
+
+        _activeBaseUri = baseUri;
+        return response;
+      } on Object catch (error) {
+        if (!_isOfflineError(error)) rethrow;
+        lastOfflineError = error;
+      }
+    }
+
+    throw lastOfflineError ?? TimeoutException('Backend unavailable');
+  }
+
+  Future<String> _sendToBaseUri(
+    String method,
+    Uri baseUri,
+    String path,
+    Map<String, dynamic>? body,
+  ) async {
     final headers = {
       ..._authHeaders(),
       if (body != null) 'Content-Type': 'application/json',
     };
     final encodedBody = body == null ? null : jsonEncode(body);
     final response = await switch (method) {
-      'GET' => http.get(_uri(path), headers: headers).timeout(_requestTimeout),
+      'GET' =>
+        http
+            .get(_uri(baseUri, path), headers: headers)
+            .timeout(_requestTimeout),
       'POST' =>
         http
-            .post(_uri(path), headers: headers, body: encodedBody)
+            .post(_uri(baseUri, path), headers: headers, body: encodedBody)
             .timeout(_requestTimeout),
       'PATCH' =>
         http
-            .patch(_uri(path), headers: headers, body: encodedBody)
+            .patch(_uri(baseUri, path), headers: headers, body: encodedBody)
             .timeout(_requestTimeout),
       'DELETE' =>
-        http.delete(_uri(path), headers: headers).timeout(_requestTimeout),
+        http
+            .delete(_uri(baseUri, path), headers: headers)
+            .timeout(_requestTimeout),
       _ => throw ApiRecipeRepositoryException('Unsupported method: $method'),
     };
 
@@ -215,6 +278,16 @@ class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
 
   bool _isOfflineError(Object error) {
     return error is TimeoutException || error is http.ClientException;
+  }
+
+  static List<Uri> _parseBaseUris(List<String> values) {
+    final uris = values
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .map((value) => Uri.parse(value.replaceFirst(RegExp(r'/$'), '')))
+        .toList();
+    if (uris.isNotEmpty) return uris;
+    return [Uri.parse('http://127.0.0.1:3000')];
   }
 
   static const _requestTimeout = Duration(seconds: 2);

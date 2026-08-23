@@ -78,6 +78,30 @@ void main() {
     expect(requests.single.token, 'secret');
   });
 
+  test('tries the next backend URL when the first is unavailable', () async {
+    final unavailableServer = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      0,
+    );
+    final unavailablePort = unavailableServer.port;
+    await unavailableServer.close(force: true);
+    repository = ApiRecipeRepository(
+      baseUrls: [
+        'http://127.0.0.1:$unavailablePort',
+        'http://${server.address.host}:${server.port}',
+      ],
+    );
+
+    final recipes = await repository.getAll();
+
+    expect(recipes, hasLength(1));
+    expect(
+      recipes.single.mainImagePath,
+      'http://${server.address.host}:${server.port}/images/oatmeal-buns.jpg',
+    );
+    expect(requests.single.path, '/recipes');
+  });
+
   test('writes backend-safe recipe payloads', () async {
     final recipe = Recipe.create(
       'Oatmeal Buns',
