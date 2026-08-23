@@ -23,7 +23,8 @@ URL at build/run time:
 
 ```sh
 flutter run \
-  --dart-define=COOKBUK_API_BASE_URL=http://cookbuk-pi:3000
+  --dart-define=COOKBUK_API_BASE_URL=http://cookbuk-pi:3000 \
+  --dart-define=COOKBUK_SHARED_TOKEN=<same-token-as-backend>
 ```
 
 Use the Pi's Tailscale hostname or `100.x.y.z` address. The default is
@@ -38,7 +39,8 @@ flutter test
 flutter build web
 ```
 
-## Backend Direction
+## Backend
 
 The backend is the shared source of truth for recipes and meal plans. See
-`backend/README.md` for local setup, seed data, and API details.
+`backend/README.md` for local setup, seed data, and API details. See
+`infra/pi/README.md` for Raspberry Pi deployment.
