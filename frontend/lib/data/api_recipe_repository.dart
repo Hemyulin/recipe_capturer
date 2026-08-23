@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:cookbuk/data/demo_recipe_data.dart';
 import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
 import 'package:http/http.dart' as http;
@@ -11,39 +13,70 @@ class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
 
   final Uri _baseUri;
   final String _sharedToken;
+  List<Recipe>? _offlineRecipes;
 
   @override
   Future<List<Recipe>> getAll() async {
-    final response = await _send('GET', '/recipes');
-    final decoded = jsonDecode(response);
-    return (decoded as List<dynamic>)
-        .map((item) => _recipeFromJson(item as Map<String, dynamic>))
-        .toList();
+    try {
+      final response = await _send('GET', '/recipes');
+      final decoded = jsonDecode(response);
+      final recipes = (decoded as List<dynamic>)
+          .map((item) => _recipeFromJson(item as Map<String, dynamic>))
+          .toList();
+      _offlineRecipes = recipes;
+      return recipes;
+    } on Object catch (error) {
+      if (!_isOfflineError(error)) rethrow;
+      return _offlineRecipeList();
+    }
   }
 
   @override
   Future<Recipe> add(Recipe recipe) async {
-    final response = await _send(
-      'POST',
-      '/recipes',
-      body: _recipePayload(recipe),
-    );
-    return _recipeFromJson(jsonDecode(response) as Map<String, dynamic>);
+    try {
+      final response = await _send(
+        'POST',
+        '/recipes',
+        body: _recipePayload(recipe),
+      );
+      return _recipeFromJson(jsonDecode(response) as Map<String, dynamic>);
+    } on Object catch (error) {
+      if (!_isOfflineError(error)) rethrow;
+      _offlineRecipeList().insert(0, recipe);
+      return recipe;
+    }
   }
 
   @override
   Future<void> deleteById(String id) async {
-    await _send('DELETE', '/recipes/$id');
+    try {
+      await _send('DELETE', '/recipes/$id');
+    } on Object catch (error) {
+      if (!_isOfflineError(error)) rethrow;
+      _offlineRecipeList().removeWhere((recipe) => recipe.id == id);
+    }
   }
 
   @override
   Future<Recipe> update(Recipe recipe) async {
-    final response = await _send(
-      'PATCH',
-      '/recipes/${recipe.id}',
-      body: _recipePayload(recipe),
-    );
-    return _recipeFromJson(jsonDecode(response) as Map<String, dynamic>);
+    try {
+      final response = await _send(
+        'PATCH',
+        '/recipes/${recipe.id}',
+        body: _recipePayload(recipe),
+      );
+      return _recipeFromJson(jsonDecode(response) as Map<String, dynamic>);
+    } on Object catch (error) {
+      if (!_isOfflineError(error)) rethrow;
+      final recipes = _offlineRecipeList();
+      final index = recipes.indexWhere((item) => item.id == recipe.id);
+      if (index == -1) {
+        recipes.insert(0, recipe);
+      } else {
+        recipes[index] = recipe;
+      }
+      return recipe;
+    }
   }
 
   @override
@@ -51,23 +84,40 @@ class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
     required String recipeId,
     required String imagePath,
   }) async {
-    final request = http.MultipartRequest(
-      'POST',
-      _uri('/recipes/$recipeId/image'),
-    );
-    request.headers.addAll(_authHeaders());
-    request.files.add(await http.MultipartFile.fromPath('image', imagePath));
-
-    final streamedResponse = await request.send();
-    final response = await http.Response.fromStream(streamedResponse);
-
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ApiRecipeRepositoryException(
-        'Backend request failed: POST /recipes/$recipeId/image ${response.statusCode} ${response.body}',
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        _uri('/recipes/$recipeId/image'),
       );
-    }
+      request.headers.addAll(_authHeaders());
+      request.files.add(await http.MultipartFile.fromPath('image', imagePath));
 
-    return _recipeFromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      final streamedResponse = await request.send().timeout(_requestTimeout);
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw ApiRecipeRepositoryException(
+          'Backend request failed: POST /recipes/$recipeId/image ${response.statusCode} ${response.body}',
+        );
+      }
+
+      return _recipeFromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    } on Object catch (error) {
+      if (!_isOfflineError(error)) rethrow;
+      final recipes = _offlineRecipeList();
+      final index = recipes.indexWhere((recipe) => recipe.id == recipeId);
+      if (index == -1) {
+        throw ApiRecipeRepositoryException(
+          'Offline recipe not found: $recipeId',
+        );
+      }
+
+      final updatedRecipe = recipes[index].copyWith(
+        imagePaths: [imagePath, ...recipes[index].imagePaths.skip(1)],
+      );
+      recipes[index] = updatedRecipe;
+      return updatedRecipe;
+    }
   }
 
   Uri _uri(String path) {
@@ -131,10 +181,17 @@ class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
     };
     final encodedBody = body == null ? null : jsonEncode(body);
     final response = await switch (method) {
-      'GET' => http.get(_uri(path), headers: headers),
-      'POST' => http.post(_uri(path), headers: headers, body: encodedBody),
-      'PATCH' => http.patch(_uri(path), headers: headers, body: encodedBody),
-      'DELETE' => http.delete(_uri(path), headers: headers),
+      'GET' => http.get(_uri(path), headers: headers).timeout(_requestTimeout),
+      'POST' =>
+        http
+            .post(_uri(path), headers: headers, body: encodedBody)
+            .timeout(_requestTimeout),
+      'PATCH' =>
+        http
+            .patch(_uri(path), headers: headers, body: encodedBody)
+            .timeout(_requestTimeout),
+      'DELETE' =>
+        http.delete(_uri(path), headers: headers).timeout(_requestTimeout),
       _ => throw ApiRecipeRepositoryException('Unsupported method: $method'),
     };
 
@@ -151,6 +208,16 @@ class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
     if (_sharedToken.isEmpty) return const {};
     return {'x-cookbuk-token': _sharedToken};
   }
+
+  List<Recipe> _offlineRecipeList() {
+    return _offlineRecipes ??= DemoRecipeData.recipes();
+  }
+
+  bool _isOfflineError(Object error) {
+    return error is TimeoutException || error is http.ClientException;
+  }
+
+  static const _requestTimeout = Duration(seconds: 2);
 }
 
 class ApiRecipeRepositoryException implements Exception {

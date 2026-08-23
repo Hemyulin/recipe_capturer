@@ -148,6 +148,25 @@ void main() {
 
     await file.delete();
   });
+
+  test('falls back to demo recipes when backend is unavailable', () async {
+    final unavailableServer = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      0,
+    );
+    final port = unavailableServer.port;
+    await unavailableServer.close(force: true);
+    repository = ApiRecipeRepository(baseUrl: 'http://127.0.0.1:$port');
+
+    final recipes = await repository.getAll();
+
+    expect(recipes.length, greaterThanOrEqualTo(5));
+    expect(
+      recipes.map((recipe) => recipe.title),
+      contains('Oatmeal Buns ohne Mehl'),
+    );
+    expect(recipes.first.mainImagePath, startsWith('assets/demo_recipes/'));
+  });
 }
 
 Map<String, dynamic> _recipeJson({List<String>? imagePaths}) {

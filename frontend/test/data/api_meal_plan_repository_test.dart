@@ -122,6 +122,23 @@ void main() {
     expect(requests.single.method, 'POST');
     expect(requests.single.path, '/meal-plan/close-day/2026-08-23');
   });
+
+  test('falls back to demo meal plan when backend is unavailable', () async {
+    final unavailableServer = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      0,
+    );
+    final port = unavailableServer.port;
+    await unavailableServer.close(force: true);
+    repository = ApiMealPlanRepository(baseUrl: 'http://127.0.0.1:$port');
+
+    final today = DateTime.now();
+    final slots = await repository.getRange(from: today, to: today);
+
+    expect(slots, hasLength(3));
+    expect(slots.where((slot) => slot.isRecipe), hasLength(3));
+    expect(slots.map((slot) => slot.recipeId), contains('demo-oatmeal'));
+  });
 }
 
 class _RequestLog {
