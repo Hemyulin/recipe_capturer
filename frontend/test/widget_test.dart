@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:cookbuk/data/demo_recipes.dart';
 import 'package:cookbuk/data/in_memory_recipe_repository.dart';
+import 'package:cookbuk/domain/recipe.dart';
 import 'package:cookbuk/ui/pages/new_recipe_page.dart';
 import 'package:cookbuk/ui/pages/today_page.dart';
 
@@ -36,7 +36,7 @@ void main() {
     WidgetTester tester,
   ) async {
     final repo = InMemoryRecipeRepository();
-    for (final recipe in demoRecipes) {
+    for (final recipe in testRecipes) {
       await repo.add(recipe);
     }
 
@@ -70,7 +70,7 @@ void main() {
     WidgetTester tester,
   ) async {
     final repo = InMemoryRecipeRepository();
-    for (final recipe in demoRecipes) {
+    for (final recipe in testRecipes) {
       await repo.add(recipe);
     }
 
@@ -83,8 +83,66 @@ void main() {
     await tester.enterText(find.byType(TextField), 'oatmeal');
     await tester.pumpAndSettle();
 
-    expect(find.text('Reste'), findsOneWidget);
-    expect(find.text('Oatmeal mit Banane und Blaubeeren'), findsOneWidget);
-    expect(find.text('Schnelles Chicken Curry'), findsNothing);
+    final picker = find.byType(BottomSheet);
+    expect(
+      find.descendant(of: picker, matching: find.text('Reste')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: picker,
+        matching: find.text('Oatmeal mit Banane und Blaubeeren'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: picker,
+        matching: find.text('Schnelles Chicken Curry'),
+      ),
+      findsNothing,
+    );
   });
 }
+
+final testRecipes = [
+  Recipe.create(
+    'Oatmeal mit Banane und Blaubeeren',
+    ingredients: const [
+      RecipeIngredient(name: 'Haferflocken', quantity: '120', unit: 'g'),
+      RecipeIngredient(name: 'Banane', quantity: '1'),
+    ],
+    instructions: const ['Kochen und servieren.'],
+    tags: const ['breakfast', 'quick'],
+    imagePaths: const ['assets/demo_recipes/oatmeal.png'],
+    servings: 2,
+    prepTimeMinutes: 5,
+    cookTimeMinutes: 8,
+  ),
+  Recipe.create(
+    'Kichererbsen-Couscous-Bowl',
+    ingredients: const [
+      RecipeIngredient(name: 'Kichererbsen', quantity: '1', unit: 'Dose'),
+      RecipeIngredient(name: 'Couscous', quantity: '180', unit: 'g'),
+    ],
+    instructions: const ['Alles in Schalen anrichten.'],
+    tags: const ['lunch', 'quick'],
+    imagePaths: const ['assets/demo_recipes/chickpea_bowl.png'],
+    servings: 3,
+    prepTimeMinutes: 15,
+    cookTimeMinutes: 20,
+  ),
+  Recipe.create(
+    'Schnelles Chicken Curry',
+    ingredients: const [
+      RecipeIngredient(name: 'Hähnchenbrust', quantity: '600', unit: 'g'),
+      RecipeIngredient(name: 'Kokosmilch', quantity: '400', unit: 'ml'),
+    ],
+    instructions: const ['Anbraten und köcheln lassen.'],
+    tags: const ['dinner', 'one_pot'],
+    imagePaths: const ['assets/demo_recipes/chicken_curry.png'],
+    servings: 4,
+    prepTimeMinutes: 15,
+    cookTimeMinutes: 30,
+  ),
+];
