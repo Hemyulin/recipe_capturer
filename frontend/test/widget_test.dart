@@ -188,12 +188,11 @@ void main() {
     await tester.pumpAndSettle();
 
     final today = DateTime.now();
-    final weekStart = DateTime(
-      today.year,
-      today.month,
-      today.day,
-    ).subtract(Duration(days: today.weekday - 1));
-    final slots = await mealPlanRepo.getRange(from: weekStart, to: weekStart);
+    final selectedDate = DateTime(today.year, today.month, today.day);
+    final slots = await mealPlanRepo.getRange(
+      from: selectedDate,
+      to: selectedDate,
+    );
     final breakfast = slots.singleWhere((slot) => slot.meal == 'breakfast');
     expect(breakfast.isRecipe, true);
     expect(breakfast.recipeId, testRecipes.first.id);

@@ -38,6 +38,7 @@ class _WeekPageState extends State<WeekPage> {
   List<Recipe> _recipes = [];
   Map<String, String?> _slotValues = {};
   late DateTime _weekStart = _startOfWeek(DateTime.now());
+  late DateTime _selectedDate = _dateOnly(DateTime.now());
   bool _isLoading = true;
 
   DateTime get _weekEnd => _weekStart.add(const Duration(days: 6));
@@ -72,12 +73,16 @@ class _WeekPageState extends State<WeekPage> {
   Future<void> _moveWeek(int delta) async {
     setState(() {
       _weekStart = _weekStart.add(Duration(days: 7 * delta));
+      _selectedDate = _weekStart;
     });
     await _loadWeek();
   }
 
   Future<void> _showCurrentWeek() async {
-    setState(() => _weekStart = _startOfWeek(DateTime.now()));
+    setState(() {
+      _weekStart = _startOfWeek(DateTime.now());
+      _selectedDate = _dateOnly(DateTime.now());
+    });
     await _loadWeek();
   }
 
@@ -159,6 +164,8 @@ class _WeekPageState extends State<WeekPage> {
       7,
       (index) => _weekStart.add(Duration(days: index)),
     );
+    final selectedTitle =
+        '${_weekdayName(_selectedDate)}, ${_longDate(_selectedDate)}';
 
     return Scaffold(
       appBar: AppBar(
@@ -181,25 +188,38 @@ class _WeekPageState extends State<WeekPage> {
               onPrevious: () => _moveWeek(-1),
               onNext: () => _moveWeek(1),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             if (_isLoading)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 40),
                 child: Center(child: CircularProgressIndicator()),
               )
-            else
-              for (final day in days) ...[
-                _DayPlanCard(
-                  date: day,
-                  meals: _meals,
-                  recipeForMeal: (meal) => _recipeById(_slotValue(day, meal)),
-                  isLeftoversForMeal: (meal) =>
-                      _slotValue(day, meal) == MealChoiceSheet.leftoversValue,
-                  onChooseMeal: (meal) => _chooseSlot(day, meal),
-                  onClearMeal: (meal) => _clearSlot(day, meal),
-                ),
-                const SizedBox(height: 12),
-              ],
+            else ...[
+              _WeekDayStrip(
+                days: days,
+                selectedDate: _selectedDate,
+                meals: _meals,
+                slotValueFor: _slotValue,
+                onSelectDate: (date) => setState(() => _selectedDate = date),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                selectedTitle,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 10),
+              _SelectedDayPlan(
+                date: _selectedDate,
+                meals: _meals,
+                recipeForMeal: (meal) =>
+                    _recipeById(_slotValue(_selectedDate, meal)),
+                isLeftoversForMeal: (meal) =>
+                    _slotValue(_selectedDate, meal) ==
+                    MealChoiceSheet.leftoversValue,
+                onChooseMeal: (meal) => _chooseSlot(_selectedDate, meal),
+                onClearMeal: (meal) => _clearSlot(_selectedDate, meal),
+              ),
+            ],
           ],
         ),
       ),
@@ -207,8 +227,12 @@ class _WeekPageState extends State<WeekPage> {
   }
 
   static DateTime _startOfWeek(DateTime date) {
-    final dateOnly = DateTime(date.year, date.month, date.day);
+    final dateOnly = _dateOnly(date);
     return dateOnly.subtract(Duration(days: dateOnly.weekday - 1));
+  }
+
+  static DateTime _dateOnly(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
   }
 
   static String _slotKey(DateTime date, String meal) {
@@ -229,6 +253,23 @@ class _WeekPageState extends State<WeekPage> {
 
   static String _shortDate(DateTime date) {
     return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.';
+  }
+
+  static String _longDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
+  }
+
+  static String _weekdayName(DateTime date) {
+    const labels = [
+      'Montag',
+      'Dienstag',
+      'Mittwoch',
+      'Donnerstag',
+      'Freitag',
+      'Samstag',
+      'Sonntag',
+    ];
+    return labels[date.weekday - 1];
   }
 }
 
@@ -267,8 +308,187 @@ class _WeekHeader extends StatelessWidget {
   }
 }
 
-class _DayPlanCard extends StatelessWidget {
-  const _DayPlanCard({
+class _WeekDayStrip extends StatelessWidget {
+  const _WeekDayStrip({
+    required this.days,
+    required this.selectedDate,
+    required this.meals,
+    required this.slotValueFor,
+    required this.onSelectDate,
+  });
+
+  final List<DateTime> days;
+  final DateTime selectedDate;
+  final List<_MealInfo> meals;
+  final String? Function(DateTime date, String meal) slotValueFor;
+  final void Function(DateTime date) onSelectDate;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 84,
+      child: Row(
+        children: [
+          for (final day in days) ...[
+            Expanded(
+              child: _WeekDayChip(
+                date: day,
+                isSelected: _isSameDate(day, selectedDate),
+                meals: meals,
+                slotValueFor: (meal) => slotValueFor(day, meal),
+                onTap: () => onSelectDate(day),
+              ),
+            ),
+            if (day != days.last) const SizedBox(width: 4),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static bool _isSameDate(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+}
+
+class _WeekDayChip extends StatelessWidget {
+  const _WeekDayChip({
+    required this.date,
+    required this.isSelected,
+    required this.meals,
+    required this.slotValueFor,
+    required this.onTap,
+  });
+
+  final DateTime date;
+  final bool isSelected;
+  final List<_MealInfo> meals;
+  final String? Function(String meal) slotValueFor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
+    final isToday = _isSameDate(date, DateTime.now());
+
+    return Material(
+      color: isSelected
+          ? colorScheme.primaryContainer
+          : colorScheme.surfaceContainerHigh,
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                _weekdayLabel(date),
+                style: textTheme.labelMedium?.copyWith(
+                  color: isSelected
+                      ? colorScheme.onPrimaryContainer
+                      : colorScheme.onSurface,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                _dateLabel(date),
+                style: textTheme.bodySmall?.copyWith(
+                  color: isSelected
+                      ? colorScheme.onPrimaryContainer
+                      : colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const Spacer(),
+              if (isToday)
+                SizedBox(
+                  height: 6,
+                  width: 6,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? colorScheme.onPrimaryContainer
+                          : colorScheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                )
+              else
+                const SizedBox(height: 6),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  for (final meal in meals) ...[
+                    _MealStatusDot(
+                      value: slotValueFor(meal.id),
+                      isSelectedDay: isSelected,
+                    ),
+                    if (meal != meals.last) const SizedBox(width: 3),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static bool _isSameDate(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  static String _weekdayLabel(DateTime date) {
+    const labels = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+    return labels[date.weekday - 1];
+  }
+
+  static String _dateLabel(DateTime date) {
+    return date.day.toString().padLeft(2, '0');
+  }
+}
+
+class _MealStatusDot extends StatelessWidget {
+  const _MealStatusDot({required this.value, required this.isSelectedDay});
+
+  final String? value;
+  final bool isSelectedDay;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isPlanned = value != null;
+    final isLeftovers = value == MealChoiceSheet.leftoversValue;
+
+    return SizedBox(
+      width: 7,
+      height: 7,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isPlanned
+              ? isLeftovers
+                    ? colorScheme.tertiary
+                    : colorScheme.primary
+              : Colors.transparent,
+          border: Border.all(
+            color: isSelectedDay
+                ? colorScheme.onPrimaryContainer.withValues(alpha: 0.7)
+                : colorScheme.outlineVariant,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SelectedDayPlan extends StatelessWidget {
+  const _SelectedDayPlan({
     required this.date,
     required this.meals,
     required this.recipeForMeal,
@@ -286,74 +506,25 @@ class _DayPlanCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
-    final isToday = _isSameDate(date, DateTime.now());
-
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${_weekdayLabel(date)} ${_dateLabel(date)}',
-                    style: textTheme.titleMedium,
-                  ),
-                ),
-                if (isToday)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      'Heute',
-                      style: textTheme.labelMedium?.copyWith(
-                        color: colorScheme.onPrimaryContainer,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+    return Column(
+      children: [
+        for (final meal in meals) ...[
+          _WeekMealCard(
+            meal: meal,
+            recipe: recipeForMeal(meal.id),
+            isLeftovers: isLeftoversForMeal(meal.id),
+            onTap: () => onChooseMeal(meal.id),
+            onClear: () => onClearMeal(meal.id),
           ),
-          for (final meal in meals)
-            _WeekMealRow(
-              meal: meal,
-              recipe: recipeForMeal(meal.id),
-              isLeftovers: isLeftoversForMeal(meal.id),
-              onTap: () => onChooseMeal(meal.id),
-              onClear: () => onClearMeal(meal.id),
-            ),
+          if (meal != meals.last) const SizedBox(height: 12),
         ],
-      ),
+      ],
     );
-  }
-
-  static bool _isSameDate(DateTime a, DateTime b) {
-    return a.year == b.year && a.month == b.month && a.day == b.day;
-  }
-
-  static String _weekdayLabel(DateTime date) {
-    const labels = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-    return labels[date.weekday - 1];
-  }
-
-  static String _dateLabel(DateTime date) {
-    return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.';
   }
 }
 
-class _WeekMealRow extends StatelessWidget {
-  const _WeekMealRow({
+class _WeekMealCard extends StatelessWidget {
+  const _WeekMealCard({
     required this.meal,
     this.recipe,
     required this.isLeftovers,
@@ -375,61 +546,74 @@ class _WeekMealRow extends StatelessWidget {
         : recipe?.mainImagePath;
     final isPlanned = recipe != null || isLeftovers;
 
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 8, 8, 10),
-        child: Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: SizedBox(
-                width: 46,
-                height: 46,
-                child: isPlanned
-                    ? RecipeImage(
-                        path: imagePath,
-                        placeholderSeed: recipe?.id ?? meal.id,
-                      )
-                    : UnplannedMealImage(title: meal.label),
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: SizedBox(
+                  width: 74,
+                  height: 74,
+                  child: isPlanned
+                      ? RecipeImage(
+                          path: imagePath,
+                          placeholderSeed: recipe?.id ?? meal.id,
+                        )
+                      : UnplannedMealImage(title: meal.label),
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(meal.icon, size: 15, color: colorScheme.primary),
-                      const SizedBox(width: 5),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(meal.icon, size: 17, color: colorScheme.primary),
+                        const SizedBox(width: 6),
+                        Text(
+                          meal.label,
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      isLeftovers ? 'Reste' : recipe?.title ?? 'Nichts geplant',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                    if (recipe?.totalTimeMinutes != null) ...[
+                      const SizedBox(height: 8),
                       Text(
-                        meal.label,
-                        style: Theme.of(context).textTheme.labelLarge,
+                        '${recipe!.totalTimeMinutes} min',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    isLeftovers ? 'Reste' : recipe?.title ?? 'Nichts geplant',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            if (isPlanned)
-              IconButton(
-                onPressed: onClear,
-                icon: const Icon(Icons.close_rounded),
-                tooltip: 'Mahlzeit leeren',
-              )
-            else
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12),
-                child: Icon(Icons.add_rounded),
-              ),
-          ],
+              if (isPlanned)
+                IconButton(
+                  onPressed: onClear,
+                  icon: const Icon(Icons.close_rounded),
+                  tooltip: 'Mahlzeit leeren',
+                )
+              else
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8),
+                  child: Icon(Icons.add_rounded),
+                ),
+            ],
+          ),
         ),
       ),
     );
