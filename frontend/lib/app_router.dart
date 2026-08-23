@@ -14,11 +14,11 @@ import 'package:cookbuk/ui/pages/today_page.dart';
 import 'package:cookbuk/ui/pages/week_page.dart';
 
 final repo = ApiRecipeRepository(
-  baseUrl: AppConfig.apiBaseUrl,
+  baseUrls: AppConfig.apiBaseUrls,
   sharedToken: AppConfig.sharedToken,
 );
 final mealPlanRepo = ApiMealPlanRepository(
-  baseUrl: AppConfig.apiBaseUrl,
+  baseUrls: AppConfig.apiBaseUrls,
   sharedToken: AppConfig.sharedToken,
 );
 

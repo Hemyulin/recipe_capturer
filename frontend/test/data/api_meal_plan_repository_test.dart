@@ -92,6 +92,29 @@ void main() {
     expect(requests.single.token, 'secret');
   });
 
+  test('tries the next backend URL when the first is unavailable', () async {
+    final unavailableServer = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      0,
+    );
+    final unavailablePort = unavailableServer.port;
+    await unavailableServer.close(force: true);
+    repository = ApiMealPlanRepository(
+      baseUrls: [
+        'http://127.0.0.1:$unavailablePort',
+        'http://${server.address.host}:${server.port}',
+      ],
+    );
+
+    final slots = await repository.getRange(
+      from: DateTime(2026, 8, 23),
+      to: DateTime(2026, 8, 24),
+    );
+
+    expect(slots, hasLength(1));
+    expect(requests.single.path, '/meal-plan');
+  });
+
   test('writes meal plan slot payloads', () async {
     final date = DateTime(2026, 8, 23);
 

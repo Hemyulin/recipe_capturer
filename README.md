@@ -31,6 +31,15 @@ Use the Pi's Tailscale hostname or `100.x.y.z` address. The default is
 `http://127.0.0.1:3000`, which is only right when the app and backend run on the
 same machine.
 
+To prefer your home Wi-Fi/LAN address and fall back to Tailscale when away, pass
+multiple comma-separated URLs:
+
+```sh
+flutter run \
+  --dart-define=COOKBUK_API_BASE_URLS=http://pi-server.local:3000,http://pi-server:3000 \
+  --dart-define=COOKBUK_SHARED_TOKEN=<same-token-as-backend>
+```
+
 Useful local checks:
 
 ```sh
