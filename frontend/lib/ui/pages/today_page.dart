@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cookbuk/data/meal_plan_repository.dart';
 import 'package:cookbuk/data/recipe_repository.dart';
+import 'package:cookbuk/domain/meal_plan_slot.dart';
 import 'package:cookbuk/domain/recipe.dart';
 import 'package:cookbuk/ui/widgets/recipe_image.dart';
 
 class TodayPage extends StatefulWidget {
-  const TodayPage({super.key, required this.repo});
+  const TodayPage({super.key, required this.repo, required this.mealPlanRepo});
 
   final RecipeRepository repo;
+  final MealPlanRepository mealPlanRepo;
 
   @override
   State<TodayPage> createState() => _TodayPageState();
@@ -18,6 +21,7 @@ class _TodayPageState extends State<TodayPage> {
 
   List<Recipe> _recipes = [];
   final Map<String, String?> _mealRecipeIds = {};
+  late final DateTime _today = _dateOnly(DateTime.now());
 
   @override
   void initState() {
@@ -27,8 +31,17 @@ class _TodayPageState extends State<TodayPage> {
 
   Future<void> _loadRecipes() async {
     final recipes = await widget.repo.getAll();
+    final mealSlots = await widget.mealPlanRepo.getRange(
+      from: _today,
+      to: _today,
+    );
     if (!mounted) return;
-    setState(() => _recipes = recipes);
+    setState(() {
+      _recipes = recipes;
+      _mealRecipeIds
+        ..clear()
+        ..addAll(_slotValues(mealSlots));
+    });
   }
 
   Recipe? _recipeById(String? id) {
@@ -75,10 +88,53 @@ class _TodayPageState extends State<TodayPage> {
     if (selected == null || !mounted) return;
 
     setState(() => _mealRecipeIds[slotId] = selected);
+    try {
+      if (selected == _leftoversSlotValue) {
+        await widget.mealPlanRepo.setLeftovers(date: _today, meal: slotId);
+      } else {
+        await widget.mealPlanRepo.setRecipe(
+          date: _today,
+          meal: slotId,
+          recipeId: selected,
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      await _loadRecipes();
+      _showPlanError();
+    }
   }
 
-  void _clearRecipe(String slotId) {
+  Future<void> _clearRecipe(String slotId) async {
     setState(() => _mealRecipeIds[slotId] = null);
+    try {
+      await widget.mealPlanRepo.setEmpty(date: _today, meal: slotId);
+    } catch (_) {
+      if (!mounted) return;
+      await _loadRecipes();
+      _showPlanError();
+    }
+  }
+
+  Map<String, String?> _slotValues(List<MealPlanSlot> slots) {
+    return {
+      for (final slot in slots)
+        slot.meal: slot.isLeftovers
+            ? _leftoversSlotValue
+            : slot.isRecipe
+            ? slot.recipeId
+            : null,
+    };
+  }
+
+  void _showPlanError() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Plan konnte nicht gespeichert werden.')),
+    );
+  }
+
+  static DateTime _dateOnly(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
   }
 
   @override

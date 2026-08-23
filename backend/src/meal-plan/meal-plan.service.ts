@@ -48,13 +48,7 @@ export class MealPlanService {
     const normalizedMeal = this.normalizeMeal(meal);
 
     if (input.slotType === "empty") {
-      this.clear(plannedFor, normalizedMeal);
-      return {
-        plannedFor,
-        meal: normalizedMeal,
-        slotType: "empty",
-        recipeId: null,
-      };
+      return this.writeSlot(plannedFor, normalizedMeal, "empty", null);
     }
 
     if (input.slotType === "recipe") {
@@ -66,30 +60,7 @@ export class MealPlanService {
 
     const recipeId = input.slotType === "recipe" ? input.recipeId! : null;
 
-    this.database.db
-      .prepare(
-        `
-        INSERT INTO meal_plan_slots (id, household_id, planned_for, meal, slot_type, recipe_id)
-        VALUES (?, ?, ?, ?, ?, ?)
-        ON CONFLICT(household_id, planned_for, meal)
-        DO UPDATE SET slot_type = excluded.slot_type, recipe_id = excluded.recipe_id
-        `,
-      )
-      .run(
-        randomUUID(),
-        this.householdId(),
-        plannedFor,
-        normalizedMeal,
-        input.slotType,
-        recipeId,
-      );
-
-    return {
-      plannedFor,
-      meal: normalizedMeal,
-      slotType: input.slotType,
-      recipeId,
-    };
+    return this.writeSlot(plannedFor, normalizedMeal, input.slotType, recipeId);
   }
 
   clear(date: string, meal: string) {
@@ -105,6 +76,38 @@ export class MealPlanService {
         this.normalizeDate(date),
         this.normalizeMeal(meal),
       );
+  }
+
+  private writeSlot(
+    plannedFor: string,
+    meal: string,
+    slotType: "recipe" | "leftovers" | "empty",
+    recipeId: string | null,
+  ) {
+    this.database.db
+      .prepare(
+        `
+        INSERT INTO meal_plan_slots (id, household_id, planned_for, meal, slot_type, recipe_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(household_id, planned_for, meal)
+        DO UPDATE SET slot_type = excluded.slot_type, recipe_id = excluded.recipe_id
+        `,
+      )
+      .run(
+        randomUUID(),
+        this.householdId(),
+        plannedFor,
+        meal,
+        slotType,
+        recipeId,
+      );
+
+    return {
+      plannedFor,
+      meal,
+      slotType,
+      recipeId,
+    };
   }
 
   private ensureRecipeExists(recipeId: string) {

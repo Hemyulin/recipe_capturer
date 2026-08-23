@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cookbuk/data/api_meal_plan_repository.dart';
 import 'package:cookbuk/data/api_recipe_repository.dart';
+import 'package:cookbuk/data/meal_plan_repository.dart';
 import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
 import 'package:cookbuk/ui/pages/main_shell_page.dart';
@@ -16,6 +18,7 @@ const apiBaseUrl = String.fromEnvironment(
 );
 
 final repo = ApiRecipeRepository(baseUrl: apiBaseUrl);
+final mealPlanRepo = ApiMealPlanRepository(baseUrl: apiBaseUrl);
 
 final router = GoRouter(
   initialLocation: '/today',
@@ -27,7 +30,8 @@ final router = GoRouter(
         GoRoute(path: '/', redirect: (_, _) => '/today'),
         GoRoute(
           path: '/today',
-          builder: (context, state) => TodayPage(repo: repo),
+          builder: (context, state) =>
+              TodayPage(repo: repo, mealPlanRepo: mealPlanRepo),
         ),
         GoRoute(
           path: '/week',
@@ -81,3 +85,4 @@ final router = GoRouter(
 );
 
 RecipeRepository get recipeRepository => repo;
+MealPlanRepository get mealPlanRepository => mealPlanRepo;

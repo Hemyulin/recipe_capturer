@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:cookbuk/data/in_memory_meal_plan_repository.dart';
 import 'package:cookbuk/data/in_memory_recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
 import 'package:cookbuk/ui/pages/new_recipe_page.dart';
@@ -9,7 +10,12 @@ import 'package:cookbuk/ui/pages/today_page.dart';
 void main() {
   testWidgets('shows Today as the home screen', (WidgetTester tester) async {
     await tester.pumpWidget(
-      MaterialApp(home: TodayPage(repo: InMemoryRecipeRepository())),
+      MaterialApp(
+        home: TodayPage(
+          repo: InMemoryRecipeRepository(),
+          mealPlanRepo: InMemoryMealPlanRepository(),
+        ),
+      ),
     );
 
     expect(find.text('Heute'), findsWidgets);
@@ -40,7 +46,13 @@ void main() {
       await repo.add(recipe);
     }
 
-    await tester.pumpWidget(MaterialApp(home: TodayPage(repo: repo)));
+    final mealPlanRepo = InMemoryMealPlanRepository();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TodayPage(repo: repo, mealPlanRepo: mealPlanRepo),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.drag(find.text('Frühstück'), const Offset(-180, 0));
@@ -49,12 +61,22 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Nichts geplant'), findsOneWidget);
+    final slots = await mealPlanRepo.getRange(
+      from: DateTime.now(),
+      to: DateTime.now(),
+    );
+    expect(slots.singleWhere((slot) => slot.meal == 'breakfast').isEmpty, true);
   });
 
   testWidgets('sets leftovers for a Today meal', (WidgetTester tester) async {
     final repo = InMemoryRecipeRepository();
+    final mealPlanRepo = InMemoryMealPlanRepository();
 
-    await tester.pumpWidget(MaterialApp(home: TodayPage(repo: repo)));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TodayPage(repo: repo, mealPlanRepo: mealPlanRepo),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Nichts geplant').first);
@@ -64,6 +86,42 @@ void main() {
 
     expect(find.text('Reste'), findsOneWidget);
     expect(find.text('Keine Rezeptauswahl für diese Mahlzeit'), findsNothing);
+    final slots = await mealPlanRepo.getRange(
+      from: DateTime.now(),
+      to: DateTime.now(),
+    );
+    expect(
+      slots.singleWhere((slot) => slot.meal == 'breakfast').isLeftovers,
+      true,
+    );
+  });
+
+  testWidgets('sets a recipe for a Today meal', (WidgetTester tester) async {
+    final repo = InMemoryRecipeRepository();
+    final mealPlanRepo = InMemoryMealPlanRepository();
+    for (final recipe in testRecipes) {
+      await repo.add(recipe);
+    }
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TodayPage(repo: repo, mealPlanRepo: mealPlanRepo),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.text('Mittagessen'), const Offset(180, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Oatmeal mit Banane und Blaubeeren').last);
+    await tester.pumpAndSettle();
+
+    final slots = await mealPlanRepo.getRange(
+      from: DateTime.now(),
+      to: DateTime.now(),
+    );
+    final lunch = slots.singleWhere((slot) => slot.meal == 'lunch');
+    expect(lunch.isRecipe, true);
+    expect(lunch.recipeId, testRecipes.first.id);
   });
 
   testWidgets('filters recipes in the Today meal picker', (
@@ -74,7 +132,11 @@ void main() {
       await repo.add(recipe);
     }
 
-    await tester.pumpWidget(MaterialApp(home: TodayPage(repo: repo)));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TodayPage(repo: repo, mealPlanRepo: InMemoryMealPlanRepository()),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.drag(find.text('Mittagessen'), const Offset(180, 0));
