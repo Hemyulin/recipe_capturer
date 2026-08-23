@@ -177,6 +177,16 @@ function ensureColumns() {
     'slot_type',
     "TEXT NOT NULL DEFAULT 'recipe'",
   );
+  ensureColumn(
+    'meal_plan_slots',
+    'extras_json',
+    "TEXT NOT NULL DEFAULT '[]'",
+  );
+  ensureColumn(
+    'meal_plan_slots',
+    'recipe_extra_ids_json',
+    "TEXT NOT NULL DEFAULT '[]'",
+  );
 }
 
 function ensureColumn(table, column, definition) {
