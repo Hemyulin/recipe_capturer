@@ -201,7 +201,10 @@ class _MealSlotCard extends StatelessWidget {
                 child: SizedBox(
                   width: 86,
                   height: 86,
-                  child: RecipeImage(path: imagePath),
+                  child: RecipeImage(
+                    path: imagePath,
+                    placeholderSeed: recipe?.id ?? title,
+                  ),
                 ),
               ),
               const SizedBox(width: 14),
@@ -380,7 +383,10 @@ class _MealChoiceSheetState extends State<_MealChoiceSheet> {
               child: SizedBox(
                 width: 56,
                 height: 56,
-                child: RecipeImage(path: recipe.mainImagePath),
+                child: RecipeImage(
+                  path: recipe.mainImagePath,
+                  placeholderSeed: recipe.id,
+                ),
               ),
             ),
             title: Text(recipe.title),

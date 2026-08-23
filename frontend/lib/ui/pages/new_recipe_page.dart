@@ -303,7 +303,10 @@ class _NewRecipePageState extends State<NewRecipePage> {
               : Stack(
                   fit: StackFit.expand,
                   children: [
-                    RecipeImage(path: imagePath),
+                    RecipeImage(
+                      path: imagePath,
+                      placeholderSeed: widget.initialRecipe?.id,
+                    ),
                     Positioned(
                       right: 12,
                       bottom: 12,

@@ -112,7 +112,7 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
             color: colorScheme.surfaceContainerHigh,
             borderRadius: BorderRadius.circular(24),
             clipBehavior: Clip.antiAlias,
-            child: RecipeImage(path: imagePath),
+            child: RecipeImage(path: imagePath, placeholderSeed: recipe.id),
           ),
           if (imagePath == null)
             Positioned.fill(
