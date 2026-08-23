@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS recipes (
   title TEXT NOT NULL,
   description TEXT,
   servings INTEGER NOT NULL DEFAULT 2,
+  season TEXT,
   prep_minutes INTEGER,
   cook_minutes INTEGER,
   source_url TEXT,
@@ -63,6 +64,8 @@ CREATE TABLE IF NOT EXISTS meal_plan_slots (
   meal TEXT NOT NULL,
   slot_type TEXT NOT NULL DEFAULT 'recipe',
   recipe_id TEXT REFERENCES recipes(id) ON DELETE SET NULL,
+  extras_json TEXT NOT NULL DEFAULT '[]',
+  recipe_extra_ids_json TEXT NOT NULL DEFAULT '[]',
   UNIQUE (household_id, planned_for, meal)
 );
 
@@ -74,3 +77,6 @@ CREATE TABLE IF NOT EXISTS recipe_cook_events (
   meal TEXT,
   user_id TEXT REFERENCES users(id) ON DELETE SET NULL
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_recipe_cook_events_unique_planned_meal
+ON recipe_cook_events (household_id, recipe_id, cooked_at, meal);

@@ -33,6 +33,7 @@ migrate_working_dir/
 .pnpm-store/
 **/build/
 **/coverage/
+infra/pi/.env
 
 # Symbolication related
 app.*.symbols

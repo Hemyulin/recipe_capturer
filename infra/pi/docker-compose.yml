@@ -1,0 +1,12 @@
+services:
+  cookbuk-backend:
+    build:
+      context: ../../backend
+    container_name: cookbuk-backend
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    volumes:
+      - /srv/cookbuk/data:/app/data

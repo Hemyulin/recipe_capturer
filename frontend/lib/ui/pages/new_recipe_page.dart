@@ -186,6 +186,17 @@ class _NewRecipePageState extends State<NewRecipePage> {
     });
   }
 
+  bool _isLocalUploadCandidate(String? path) {
+    if (path == null || path.isEmpty) return false;
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return false;
+    }
+    if (path.startsWith('assets/') || path.startsWith('/images/')) {
+      return false;
+    }
+    return true;
+  }
+
   List<RecipeIngredient> _collectIngredients() {
     return _ingredients
         .map(
@@ -227,6 +238,15 @@ class _NewRecipePageState extends State<NewRecipePage> {
       final servings = _parsePositiveInt(_servingsController);
       final prepTime = _parsePositiveInt(_prepTimeController);
       final cookTime = _parsePositiveInt(_cookTimeController);
+      final imageRepository = widget.repo is RecipeImageRepository
+          ? widget.repo as RecipeImageRepository
+          : null;
+      final selectedMainImage = _imagePaths.isEmpty ? null : _imagePaths.first;
+      final shouldUploadImage =
+          imageRepository != null && _isLocalUploadCandidate(selectedMainImage);
+      final recipeImagePaths = shouldUploadImage
+          ? initialRecipe?.imagePaths ?? const <String>[]
+          : _imagePaths;
 
       if (initialRecipe == null) {
         final recipe = Recipe.create(
@@ -234,7 +254,7 @@ class _NewRecipePageState extends State<NewRecipePage> {
           ingredients: _collectIngredients(),
           instructions: _collectSteps(),
           tags: _selectedTags.toList(),
-          imagePaths: _imagePaths,
+          imagePaths: recipeImagePaths,
           servings: servings,
           season: _seasonController.text,
           prepTimeMinutes: prepTime,
@@ -242,14 +262,20 @@ class _NewRecipePageState extends State<NewRecipePage> {
           notes: _notesController.text,
         );
 
-        await widget.repo.add(recipe);
+        final savedRecipe = await widget.repo.add(recipe);
+        if (shouldUploadImage && selectedMainImage != null) {
+          await imageRepository.uploadImage(
+            recipeId: savedRecipe.id,
+            imagePath: selectedMainImage,
+          );
+        }
       } else {
         final updatedRecipe = initialRecipe.copyWith(
           title: _titleController.text.trim(),
           ingredients: _collectIngredients(),
           instructions: _collectSteps(),
           tags: _selectedTags.toList(),
-          imagePaths: _imagePaths,
+          imagePaths: recipeImagePaths,
           servings: servings,
           clearServings: servings == null,
           season: _seasonController.text.trim(),
@@ -260,7 +286,13 @@ class _NewRecipePageState extends State<NewRecipePage> {
           notes: _notesController.text.trim(),
         );
 
-        await widget.repo.update(updatedRecipe);
+        final savedRecipe = await widget.repo.update(updatedRecipe);
+        if (shouldUploadImage && selectedMainImage != null) {
+          await imageRepository.uploadImage(
+            recipeId: savedRecipe.id,
+            imagePath: selectedMainImage,
+          );
+        }
       }
 
       if (!mounted) return;
@@ -303,7 +335,10 @@ class _NewRecipePageState extends State<NewRecipePage> {
               : Stack(
                   fit: StackFit.expand,
                   children: [
-                    RecipeImage(path: imagePath),
+                    RecipeImage(
+                      path: imagePath,
+                      placeholderSeed: widget.initialRecipe?.id,
+                    ),
                     Positioned(
                       right: 12,
                       bottom: 12,

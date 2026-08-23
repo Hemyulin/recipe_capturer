@@ -1,0 +1,834 @@
+[
+  {
+    "id": "demo-oatmeal",
+    "title": "Oatmeal mit Banane und Blaubeeren",
+    "createdAt": "2026-01-08T07:30:00.000",
+    "ingredients": [
+      {
+        "name": "Haferflocken",
+        "quantity": "120",
+        "unit": "g"
+      },
+      {
+        "name": "Milch oder Pflanzendrink",
+        "quantity": "400",
+        "unit": "ml"
+      },
+      {
+        "name": "Banane",
+        "quantity": "1",
+        "unit": ""
+      },
+      {
+        "name": "Blaubeeren",
+        "quantity": "100",
+        "unit": "g"
+      },
+      {
+        "name": "Mandeln",
+        "quantity": "2",
+        "unit": "EL"
+      },
+      {
+        "name": "Honig",
+        "quantity": "1",
+        "unit": "EL"
+      }
+    ],
+    "instructions": [
+      "Haferflocken mit Milch in einem kleinen Topf aufkochen.",
+      "Bei niedriger Hitze cremig rühren, bis die gewünschte Konsistenz erreicht ist.",
+      "Mit Banane, Blaubeeren, Mandeln und Honig servieren."
+    ],
+    "tags": [
+      "breakfast",
+      "quick",
+      "vegetarian"
+    ],
+    "isFavorite": true,
+    "imagePaths": [
+      "assets/demo_recipes/oatmeal.png"
+    ],
+    "servings": 2,
+    "season": "Ganzjährig",
+    "prepTimeMinutes": 5,
+    "cookTimeMinutes": 8,
+    "notes": "Als wiederkehrendes Frühstück gedacht. Funktioniert auch mit Apfel und Zimt.",
+    "cookCount": 0,
+    "lastCookedAt": null,
+    "cookEvents": []
+  },
+  {
+    "id": "demo-chickpea-bowl",
+    "title": "Kichererbsen-Couscous-Bowl",
+    "createdAt": "2026-01-09T12:30:00.000",
+    "ingredients": [
+      {
+        "name": "Kichererbsen",
+        "quantity": "1",
+        "unit": "Dose"
+      },
+      {
+        "name": "Couscous",
+        "quantity": "180",
+        "unit": "g"
+      },
+      {
+        "name": "Zucchini",
+        "quantity": "1",
+        "unit": ""
+      },
+      {
+        "name": "Paprika",
+        "quantity": "2",
+        "unit": ""
+      },
+      {
+        "name": "Gurke",
+        "quantity": "1/2",
+        "unit": ""
+      },
+      {
+        "name": "Tahini",
+        "quantity": "3",
+        "unit": "EL"
+      },
+      {
+        "name": "Zitrone",
+        "quantity": "1",
+        "unit": ""
+      }
+    ],
+    "instructions": [
+      "Couscous mit heißer Brühe quellen lassen.",
+      "Kichererbsen, Zucchini und Paprika würzen und im Ofen rösten.",
+      "Tahini mit Zitronensaft und Wasser glatt rühren.",
+      "Alles mit Gurke, Kräutern und Sauce in Schalen anrichten."
+    ],
+    "tags": [
+      "lunch",
+      "vegetarian",
+      "quick"
+    ],
+    "isFavorite": false,
+    "imagePaths": [
+      "assets/demo_recipes/chickpea_bowl.png"
+    ],
+    "servings": 3,
+    "season": "Sommer",
+    "prepTimeMinutes": 15,
+    "cookTimeMinutes": 20,
+    "notes": "Gut zum Vorbereiten. Sauce separat aufbewahren, wenn Reste geplant sind.",
+    "cookCount": 0,
+    "lastCookedAt": null,
+    "cookEvents": []
+  },
+  {
+    "id": "demo-chicken-curry",
+    "title": "Schnelles Chicken Curry",
+    "createdAt": "2026-01-10T18:30:00.000",
+    "ingredients": [
+      {
+        "name": "Hähnchenbrust",
+        "quantity": "600",
+        "unit": "g"
+      },
+      {
+        "name": "Zwiebel",
+        "quantity": "1",
+        "unit": ""
+      },
+      {
+        "name": "Knoblauchzehen",
+        "quantity": "2",
+        "unit": ""
+      },
+      {
+        "name": "Currypaste",
+        "quantity": "2",
+        "unit": "EL"
+      },
+      {
+        "name": "Kokosmilch",
+        "quantity": "400",
+        "unit": "ml"
+      },
+      {
+        "name": "Basmatireis",
+        "quantity": "250",
+        "unit": "g"
+      },
+      {
+        "name": "Limette",
+        "quantity": "1",
+        "unit": ""
+      }
+    ],
+    "instructions": [
+      "Reis nach Packungsangabe kochen.",
+      "Hähnchen würfeln und in Öl kräftig anbraten.",
+      "Zwiebel, Knoblauch und Currypaste kurz mitrösten.",
+      "Kokosmilch angießen und alles köcheln lassen, bis das Hähnchen gar ist.",
+      "Mit Limette, Salz und frischen Kräutern abschmecken."
+    ],
+    "tags": [
+      "dinner",
+      "savory",
+      "one_pot"
+    ],
+    "isFavorite": true,
+    "imagePaths": [
+      "assets/demo_recipes/chicken_curry.png"
+    ],
+    "servings": 4,
+    "season": "Ganzjährig",
+    "prepTimeMinutes": 15,
+    "cookTimeMinutes": 30,
+    "notes": "Für Kinder etwas Currypaste zurückhalten und am Tisch nachwürzen.",
+    "cookCount": 0,
+    "lastCookedAt": null,
+    "cookEvents": []
+  },
+  {
+    "id": "demo-tomato-lentil-soup",
+    "title": "Tomaten-Linsen-Suppe",
+    "createdAt": "2026-01-11T19:00:00.000",
+    "ingredients": [
+      {
+        "name": "Rote Linsen",
+        "quantity": "200",
+        "unit": "g"
+      },
+      {
+        "name": "Passierte Tomaten",
+        "quantity": "700",
+        "unit": "ml"
+      },
+      {
+        "name": "Gemüsebrühe",
+        "quantity": "500",
+        "unit": "ml"
+      },
+      {
+        "name": "Karotte",
+        "quantity": "1",
+        "unit": ""
+      },
+      {
+        "name": "Zwiebel",
+        "quantity": "1",
+        "unit": ""
+      },
+      {
+        "name": "Joghurt",
+        "quantity": "4",
+        "unit": "EL"
+      },
+      {
+        "name": "Brot",
+        "quantity": "1",
+        "unit": "Laib"
+      }
+    ],
+    "instructions": [
+      "Zwiebel und Karotte würfeln und in Olivenöl anschwitzen.",
+      "Linsen, Tomaten und Brühe zugeben.",
+      "Etwa 20 Minuten köcheln lassen, bis die Linsen weich sind.",
+      "Teilweise pürieren und mit Salz, Pfeffer und Joghurt servieren."
+    ],
+    "tags": [
+      "dinner",
+      "vegetarian",
+      "savory",
+      "one_pot"
+    ],
+    "isFavorite": false,
+    "imagePaths": [
+      "assets/demo_recipes/tomato_lentil_soup.png"
+    ],
+    "servings": 4,
+    "season": "Herbst",
+    "prepTimeMinutes": 10,
+    "cookTimeMinutes": 25,
+    "notes": "Lässt sich gut einfrieren und ist praktisch für volle Wochen.",
+    "cookCount": 0,
+    "lastCookedAt": null,
+    "cookEvents": []
+  },
+  {
+    "id": "demo-oatmeal-buns",
+    "title": "Haferflocken-Quark-Brötchen",
+    "createdAt": "2026-01-12T08:00:00.000",
+    "ingredients": [
+      {
+        "name": "Haferflocken",
+        "quantity": "250",
+        "unit": "g"
+      },
+      {
+        "name": "Magerquark",
+        "quantity": "250",
+        "unit": "g"
+      },
+      {
+        "name": "Ei",
+        "quantity": "1",
+        "unit": ""
+      }
+    ],
+    "instructions": [
+      "Backofen auf 180 Grad Ober-/Unterhitze vorheizen.",
+      "Haferflocken, Magerquark und Ei zu einem klebrigen Teig verrühren.",
+      "Mit feuchten Händen sechs kleine Brötchen formen.",
+      "Auf ein Backblech setzen und etwa 22 Minuten goldbraun backen."
+    ],
+    "tags": [
+      "breakfast",
+      "vegetarian",
+      "quick"
+    ],
+    "isFavorite": true,
+    "imagePaths": [
+      "assets/demo_recipes/oatmeal_buns.png"
+    ],
+    "servings": 6,
+    "season": "Ganzjährig",
+    "prepTimeMinutes": 8,
+    "cookTimeMinutes": 22,
+    "notes": "Ohne Mehl. Wer mag, streut vor dem Backen ein paar Haferflocken obenauf.",
+    "cookCount": 0,
+    "lastCookedAt": null,
+    "cookEvents": []
+  },
+  {
+    "id": "demo-shakshuka",
+    "title": "Shakshuka aus der Pfanne",
+    "createdAt": "2026-01-13T10:00:00.000",
+    "ingredients": [
+      {
+        "name": "Eier",
+        "quantity": "4",
+        "unit": ""
+      },
+      {
+        "name": "Passierte Tomaten",
+        "quantity": "500",
+        "unit": "ml"
+      },
+      {
+        "name": "Paprika",
+        "quantity": "2",
+        "unit": ""
+      },
+      {
+        "name": "Zwiebel",
+        "quantity": "1",
+        "unit": ""
+      },
+      {
+        "name": "Knoblauchzehe",
+        "quantity": "1",
+        "unit": ""
+      },
+      {
+        "name": "Feta",
+        "quantity": "80",
+        "unit": "g"
+      }
+    ],
+    "instructions": [
+      "Zwiebel, Knoblauch und Paprika würfeln und in einer Pfanne anbraten.",
+      "Tomaten zugeben und mit Salz, Pfeffer und Paprika würzen.",
+      "Mulden in die Sauce drücken und Eier hineinschlagen.",
+      "Zugedeckt garen, bis die Eier gesetzt sind, dann mit Feta servieren."
+    ],
+    "tags": [
+      "breakfast",
+      "lunch",
+      "vegetarian",
+      "one_pot"
+    ],
+    "isFavorite": false,
+    "imagePaths": [
+      "assets/demo_recipes/shakshuka.png"
+    ],
+    "servings": 3,
+    "season": "Ganzjährig",
+    "prepTimeMinutes": 10,
+    "cookTimeMinutes": 18,
+    "notes": "Gut für Brunch oder ein schnelles warmes Mittagessen.",
+    "cookCount": 0,
+    "lastCookedAt": null,
+    "cookEvents": []
+  },
+  {
+    "id": "demo-lemon-salmon-tray-bake",
+    "title": "Lachs vom Blech mit Zitrone",
+    "createdAt": "2026-01-14T18:00:00.000",
+    "ingredients": [
+      {
+        "name": "Lachsfilets",
+        "quantity": "4",
+        "unit": ""
+      },
+      {
+        "name": "Kartoffeln",
+        "quantity": "700",
+        "unit": "g"
+      },
+      {
+        "name": "Grüne Bohnen",
+        "quantity": "300",
+        "unit": "g"
+      },
+      {
+        "name": "Cherrytomaten",
+        "quantity": "250",
+        "unit": "g"
+      },
+      {
+        "name": "Zitrone",
+        "quantity": "1",
+        "unit": ""
+      },
+      {
+        "name": "Dill",
+        "quantity": "1",
+        "unit": "Bund"
+      }
+    ],
+    "instructions": [
+      "Kartoffeln halbieren, würzen und 15 Minuten auf dem Blech vorgaren.",
+      "Bohnen, Tomaten und Lachs zugeben.",
+      "Mit Zitronenscheiben, Öl, Salz und Pfeffer belegen.",
+      "Weitere 20 bis 25 Minuten backen und mit Dill servieren."
+    ],
+    "tags": [
+      "dinner",
+      "savory"
+    ],
+    "isFavorite": false,
+    "imagePaths": [
+      "assets/demo_recipes/lemon_salmon_tray_bake.png"
+    ],
+    "servings": 4,
+    "season": "Frühling",
+    "prepTimeMinutes": 12,
+    "cookTimeMinutes": 25,
+    "notes": "Sehr wenig Abwasch und gut für Gäste unter der Woche.",
+    "cookCount": 0,
+    "lastCookedAt": null,
+    "cookEvents": []
+  },
+  {
+    "id": "demo-pesto-pasta-peas",
+    "title": "Pesto-Pasta mit Erbsen",
+    "createdAt": "2026-01-15T12:00:00.000",
+    "ingredients": [
+      {
+        "name": "Pasta",
+        "quantity": "400",
+        "unit": "g"
+      },
+      {
+        "name": "Erbsen",
+        "quantity": "250",
+        "unit": "g"
+      },
+      {
+        "name": "Basilikumpesto",
+        "quantity": "4",
+        "unit": "EL"
+      },
+      {
+        "name": "Parmesan",
+        "quantity": "60",
+        "unit": "g"
+      },
+      {
+        "name": "Pinienkerne",
+        "quantity": "2",
+        "unit": "EL"
+      }
+    ],
+    "instructions": [
+      "Pasta in Salzwasser kochen und Erbsen in den letzten Minuten mitgaren.",
+      "Etwas Pastawasser auffangen.",
+      "Pasta mit Pesto, Parmesan und Pastawasser cremig rühren.",
+      "Mit Pinienkernen und extra Parmesan servieren."
+    ],
+    "tags": [
+      "lunch",
+      "dinner",
+      "quick",
+      "vegetarian"
+    ],
+    "isFavorite": true,
+    "imagePaths": [
+      "assets/demo_recipes/pesto_pasta_peas.png"
+    ],
+    "servings": 4,
+    "season": "Sommer",
+    "prepTimeMinutes": 5,
+    "cookTimeMinutes": 12,
+    "notes": "Ein gutes Joker-Rezept, wenn fast nichts geplant ist.",
+    "cookCount": 0,
+    "lastCookedAt": null,
+    "cookEvents": []
+  },
+  {
+    "id": "demo-vegetable-lasagna",
+    "title": "Gemüse-Lasagne",
+    "createdAt": "2026-01-16T18:00:00.000",
+    "ingredients": [
+      {
+        "name": "Lasagneplatten",
+        "quantity": "12",
+        "unit": ""
+      },
+      {
+        "name": "Zucchini",
+        "quantity": "2",
+        "unit": ""
+      },
+      {
+        "name": "Spinat",
+        "quantity": "250",
+        "unit": "g"
+      },
+      {
+        "name": "Ricotta",
+        "quantity": "250",
+        "unit": "g"
+      },
+      {
+        "name": "Tomatensauce",
+        "quantity": "700",
+        "unit": "ml"
+      },
+      {
+        "name": "Mozzarella",
+        "quantity": "200",
+        "unit": "g"
+      }
+    ],
+    "instructions": [
+      "Gemüse kurz anbraten und mit Salz und Pfeffer würzen.",
+      "Tomatensauce, Lasagneplatten, Gemüse und Ricotta schichten.",
+      "Mit Mozzarella abschließen.",
+      "Bei 190 Grad etwa 40 Minuten backen."
+    ],
+    "tags": [
+      "dinner",
+      "vegetarian",
+      "savory"
+    ],
+    "isFavorite": false,
+    "imagePaths": [
+      "assets/demo_recipes/vegetable_lasagna.png"
+    ],
+    "servings": 6,
+    "season": "Ganzjährig",
+    "prepTimeMinutes": 25,
+    "cookTimeMinutes": 40,
+    "notes": "Reste schmecken am nächsten Tag fast noch besser.",
+    "cookCount": 0,
+    "lastCookedAt": null,
+    "cookEvents": []
+  },
+  {
+    "id": "demo-banana-oat-pancakes",
+    "title": "Bananen-Hafer-Pancakes",
+    "createdAt": "2026-01-17T09:00:00.000",
+    "ingredients": [
+      {
+        "name": "Banane",
+        "quantity": "1",
+        "unit": ""
+      },
+      {
+        "name": "Haferflocken",
+        "quantity": "90",
+        "unit": "g"
+      },
+      {
+        "name": "Eier",
+        "quantity": "2",
+        "unit": ""
+      },
+      {
+        "name": "Joghurt",
+        "quantity": "3",
+        "unit": "EL"
+      },
+      {
+        "name": "Beeren",
+        "quantity": "100",
+        "unit": "g"
+      }
+    ],
+    "instructions": [
+      "Banane zerdrücken und mit Eiern und Haferflocken verrühren.",
+      "Kurz quellen lassen.",
+      "Kleine Pancakes in einer beschichteten Pfanne ausbacken.",
+      "Mit Joghurt und Beeren servieren."
+    ],
+    "tags": [
+      "breakfast",
+      "sweet",
+      "vegetarian"
+    ],
+    "isFavorite": false,
+    "imagePaths": [
+      "assets/demo_recipes/banana_oat_pancakes.png"
+    ],
+    "servings": 2,
+    "season": "Ganzjährig",
+    "prepTimeMinutes": 8,
+    "cookTimeMinutes": 12,
+    "notes": "Schnell, sättigend und gut für Wochenendfrühstück.",
+    "cookCount": 0,
+    "lastCookedAt": null,
+    "cookEvents": []
+  },
+  {
+    "id": "demo-pumpkin-risotto",
+    "title": "Kürbisrisotto",
+    "createdAt": "2026-01-18T18:30:00.000",
+    "ingredients": [
+      {
+        "name": "Risottoreis",
+        "quantity": "300",
+        "unit": "g"
+      },
+      {
+        "name": "Hokkaido-Kürbis",
+        "quantity": "500",
+        "unit": "g"
+      },
+      {
+        "name": "Gemüsebrühe",
+        "quantity": "900",
+        "unit": "ml"
+      },
+      {
+        "name": "Zwiebel",
+        "quantity": "1",
+        "unit": ""
+      },
+      {
+        "name": "Parmesan",
+        "quantity": "70",
+        "unit": "g"
+      },
+      {
+        "name": "Salbei",
+        "quantity": "8",
+        "unit": "Blätter"
+      }
+    ],
+    "instructions": [
+      "Kürbis würfeln und einen Teil im Ofen rösten.",
+      "Zwiebel anschwitzen, Reis zugeben und kurz glasig rühren.",
+      "Brühe nach und nach angießen und rühren.",
+      "Kürbis, Parmesan und Salbei unterheben."
+    ],
+    "tags": [
+      "dinner",
+      "vegetarian",
+      "one_pot"
+    ],
+    "isFavorite": false,
+    "imagePaths": [
+      "assets/demo_recipes/pumpkin_risotto.png"
+    ],
+    "servings": 4,
+    "season": "Herbst",
+    "prepTimeMinutes": 15,
+    "cookTimeMinutes": 30,
+    "notes": "Cremig, aber ohne Sahne. Perfekt als Herbst-Demo.",
+    "cookCount": 0,
+    "lastCookedAt": null,
+    "cookEvents": []
+  },
+  {
+    "id": "demo-beef-chili",
+    "title": "Chili con Carne",
+    "createdAt": "2026-01-19T19:00:00.000",
+    "ingredients": [
+      {
+        "name": "Rinderhack",
+        "quantity": "500",
+        "unit": "g"
+      },
+      {
+        "name": "Kidneybohnen",
+        "quantity": "1",
+        "unit": "Dose"
+      },
+      {
+        "name": "Mais",
+        "quantity": "1",
+        "unit": "Dose"
+      },
+      {
+        "name": "Gehackte Tomaten",
+        "quantity": "800",
+        "unit": "g"
+      },
+      {
+        "name": "Zwiebel",
+        "quantity": "1",
+        "unit": ""
+      },
+      {
+        "name": "Cheddar",
+        "quantity": "80",
+        "unit": "g"
+      }
+    ],
+    "instructions": [
+      "Hackfleisch kräftig anbraten.",
+      "Zwiebel zugeben und kurz mitbraten.",
+      "Tomaten, Bohnen und Mais einrühren.",
+      "Alles köcheln lassen und mit Cheddar, Joghurt oder Chips servieren."
+    ],
+    "tags": [
+      "dinner",
+      "savory",
+      "one_pot"
+    ],
+    "isFavorite": true,
+    "imagePaths": [
+      "assets/demo_recipes/beef_chili.png"
+    ],
+    "servings": 5,
+    "season": "Winter",
+    "prepTimeMinutes": 15,
+    "cookTimeMinutes": 35,
+    "notes": "Gut vorzukochen und leicht in größerer Menge machbar.",
+    "cookCount": 0,
+    "lastCookedAt": null,
+    "cookEvents": []
+  },
+  {
+    "id": "demo-lentil-bolognese",
+    "title": "Linsen-Bolognese",
+    "createdAt": "2026-01-20T18:00:00.000",
+    "ingredients": [
+      {
+        "name": "Braune Linsen",
+        "quantity": "220",
+        "unit": "g"
+      },
+      {
+        "name": "Tagliatelle",
+        "quantity": "400",
+        "unit": "g"
+      },
+      {
+        "name": "Gehackte Tomaten",
+        "quantity": "800",
+        "unit": "g"
+      },
+      {
+        "name": "Karotte",
+        "quantity": "1",
+        "unit": ""
+      },
+      {
+        "name": "Selleriestange",
+        "quantity": "1",
+        "unit": ""
+      },
+      {
+        "name": "Parmesan",
+        "quantity": "60",
+        "unit": "g"
+      }
+    ],
+    "instructions": [
+      "Karotte, Sellerie und Zwiebel fein würfeln und anschwitzen.",
+      "Linsen und Tomaten zugeben.",
+      "Mit etwas Wasser köcheln lassen, bis die Linsen weich sind.",
+      "Pasta kochen und mit der Sauce servieren."
+    ],
+    "tags": [
+      "dinner",
+      "vegetarian",
+      "one_pot"
+    ],
+    "isFavorite": false,
+    "imagePaths": [
+      "assets/demo_recipes/lentil_bolognese.png"
+    ],
+    "servings": 4,
+    "season": "Ganzjährig",
+    "prepTimeMinutes": 12,
+    "cookTimeMinutes": 30,
+    "notes": "Vegetarischer Klassiker für den Wochenplan.",
+    "cookCount": 0,
+    "lastCookedAt": null,
+    "cookEvents": []
+  },
+  {
+    "id": "demo-sweet-potato-curry",
+    "title": "Süßkartoffel-Kokos-Curry",
+    "createdAt": "2026-01-21T18:30:00.000",
+    "ingredients": [
+      {
+        "name": "Süßkartoffeln",
+        "quantity": "650",
+        "unit": "g"
+      },
+      {
+        "name": "Kichererbsen",
+        "quantity": "1",
+        "unit": "Dose"
+      },
+      {
+        "name": "Babyspinat",
+        "quantity": "150",
+        "unit": "g"
+      },
+      {
+        "name": "Kokosmilch",
+        "quantity": "400",
+        "unit": "ml"
+      },
+      {
+        "name": "Currypulver",
+        "quantity": "2",
+        "unit": "TL"
+      },
+      {
+        "name": "Reis",
+        "quantity": "250",
+        "unit": "g"
+      }
+    ],
+    "instructions": [
+      "Reis kochen.",
+      "Süßkartoffeln würfeln und mit Curry kurz anbraten.",
+      "Kokosmilch und Kichererbsen zugeben und weich köcheln.",
+      "Spinat unterheben und mit Reis servieren."
+    ],
+    "tags": [
+      "dinner",
+      "vegetarian",
+      "one_pot"
+    ],
+    "isFavorite": true,
+    "imagePaths": [
+      "assets/demo_recipes/sweet_potato_curry.png"
+    ],
+    "servings": 4,
+    "season": "Ganzjährig",
+    "prepTimeMinutes": 15,
+    "cookTimeMinutes": 25,
+    "notes": "Mild genug für die ganze Familie, mit Chili am Tisch schärfen.",
+    "cookCount": 0,
+    "lastCookedAt": null,
+    "cookEvents": []
+  }
+]
