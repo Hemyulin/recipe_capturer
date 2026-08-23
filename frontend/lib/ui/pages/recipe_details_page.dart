@@ -112,27 +112,34 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
             color: colorScheme.surfaceContainerHigh,
             borderRadius: BorderRadius.circular(24),
             clipBehavior: Clip.antiAlias,
-            child: imagePath == null
-                ? InkWell(
-                    onTap: _addMainImage,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.add_photo_alternate_outlined,
-                          color: colorScheme.primary,
-                          size: 34,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Foto hinzufügen',
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                      ],
-                    ),
-                  )
-                : RecipeImage(path: imagePath),
+            child: RecipeImage(path: imagePath),
           ),
+          if (imagePath == null)
+            Positioned.fill(
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _addMainImage,
+                  child: Center(
+                    child: FilledButton.icon(
+                      onPressed: _addMainImage,
+                      icon: const Icon(Icons.add_photo_alternate_outlined),
+                      label: const Text('Foto hinzufügen'),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (imagePath != null)
+            Positioned(
+              left: 12,
+              bottom: 12,
+              child: FilledButton.icon(
+                onPressed: _addMainImage,
+                icon: const Icon(Icons.photo_camera_outlined),
+                label: const Text('Ändern'),
+              ),
+            ),
           Positioned(
             top: 12,
             right: 12,

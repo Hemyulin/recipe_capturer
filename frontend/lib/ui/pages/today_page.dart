@@ -201,17 +201,7 @@ class _MealSlotCard extends StatelessWidget {
                 child: SizedBox(
                   width: 86,
                   height: 86,
-                  child: imagePath == null
-                      ? ColoredBox(
-                          color: colorScheme.surfaceContainerHigh,
-                          child: Icon(
-                            isLeftovers
-                                ? Icons.rice_bowl_outlined
-                                : Icons.restaurant_menu_outlined,
-                            color: colorScheme.primary,
-                          ),
-                        )
-                      : RecipeImage(path: imagePath),
+                  child: RecipeImage(path: imagePath),
                 ),
               ),
               const SizedBox(width: 14),
