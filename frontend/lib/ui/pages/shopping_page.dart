@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cookbuk/data/meal_plan_repository.dart';
 import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
@@ -107,6 +108,18 @@ class _ShoppingPageState extends State<ShoppingPage> {
     });
   }
 
+  Future<void> _copyShoppingList() async {
+    if (_items.isEmpty) return;
+
+    final text = _items.map((item) => item.title).join('\n');
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Einkaufsliste kopiert.')));
+  }
+
   @override
   Widget build(BuildContext context) {
     final checkedCount = _checkedItemKeys.length;
@@ -115,6 +128,11 @@ class _ShoppingPageState extends State<ShoppingPage> {
       appBar: AppBar(
         title: const Text('Einkauf'),
         actions: [
+          IconButton(
+            onPressed: _items.isEmpty ? null : _copyShoppingList,
+            icon: const Icon(Icons.content_copy_rounded),
+            tooltip: 'Einkaufsliste kopieren',
+          ),
           IconButton(
             onPressed: _showCurrentWeek,
             icon: const Icon(Icons.today_outlined),

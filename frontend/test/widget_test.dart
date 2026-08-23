@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:cookbuk/data/in_memory_meal_plan_repository.dart';
@@ -10,6 +11,33 @@ import 'package:cookbuk/ui/pages/today_page.dart';
 import 'package:cookbuk/ui/pages/week_page.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  var clipboardText = '';
+
+  setUp(() {
+    clipboardText = '';
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+          switch (call.method) {
+            case 'Clipboard.setData':
+              final data = call.arguments as Map<dynamic, dynamic>;
+              clipboardText = data['text'] as String? ?? '';
+              return null;
+            case 'Clipboard.getData':
+              return {'text': clipboardText};
+            case 'Clipboard.hasStrings':
+              return {'value': clipboardText.isNotEmpty};
+          }
+          return null;
+        });
+  });
+
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null);
+  });
+
   testWidgets('shows Today as the home screen', (WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -324,6 +352,36 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('1/3'), findsOneWidget);
+  });
+
+  testWidgets('copies the shopping list as plain text', (
+    WidgetTester tester,
+  ) async {
+    final repo = InMemoryRecipeRepository();
+    final mealPlanRepo = InMemoryMealPlanRepository();
+    await repo.add(testRecipes.first);
+
+    final today = DateTime.now();
+    final selectedDate = DateTime(today.year, today.month, today.day);
+    await mealPlanRepo.setRecipe(
+      date: selectedDate,
+      meal: 'breakfast',
+      recipeId: testRecipes.first.id,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ShoppingPage(repo: repo, mealPlanRepo: mealPlanRepo),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Einkaufsliste kopieren'));
+    await tester.pumpAndSettle();
+
+    final clipboardData = await Clipboard.getData('text/plain');
+    expect(clipboardData?.text, '1 Banane\n120 g Haferflocken');
+    expect(find.text('Einkaufsliste kopiert.'), findsOneWidget);
   });
 }
 
