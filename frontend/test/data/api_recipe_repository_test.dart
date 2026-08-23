@@ -1,0 +1,123 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:cookbuk/data/api_recipe_repository.dart';
+import 'package:cookbuk/domain/recipe.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  late HttpServer server;
+  late ApiRecipeRepository repository;
+  final requests = <_RequestLog>[];
+
+  setUp(() async {
+    requests.clear();
+    server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    repository = ApiRecipeRepository(
+      baseUrl: 'http://${server.address.host}:${server.port}',
+    );
+
+    server.listen((request) async {
+      final body = await utf8.decoder.bind(request).join();
+      requests.add(
+        _RequestLog(method: request.method, path: request.uri.path, body: body),
+      );
+
+      request.response.headers.contentType = ContentType.json;
+      if (request.method == 'GET' && request.uri.path == '/recipes') {
+        request.response.write(jsonEncode([_recipeJson()]));
+      } else {
+        request.response.write(jsonEncode({'ok': true}));
+      }
+      await request.response.close();
+    });
+  });
+
+  tearDown(() async {
+    await server.close(force: true);
+  });
+
+  test('reads recipes from the backend', () async {
+    final recipes = await repository.getAll();
+
+    expect(recipes, hasLength(1));
+    expect(recipes.single.title, 'Oatmeal Buns');
+    expect(requests.single.method, 'GET');
+    expect(requests.single.path, '/recipes');
+  });
+
+  test('writes backend-safe recipe payloads', () async {
+    final recipe = Recipe.create(
+      'Oatmeal Buns',
+      ingredients: const [
+        RecipeIngredient(name: 'Oatmeal', quantity: '200', unit: 'g'),
+      ],
+      instructions: const ['Mix everything.', 'Bake until golden.'],
+      tags: const ['One pot', 'Breakfast'],
+      isFavorite: true,
+      imagePaths: const ['assets/demo_recipes/oatmeal_buns.png'],
+      servings: 4,
+      season: 'Ganzjaehrig',
+      prepTimeMinutes: 10,
+      cookTimeMinutes: 20,
+      notes: 'No flour.',
+    );
+
+    await repository.add(recipe);
+    await repository.update(recipe);
+    await repository.deleteById(recipe.id);
+
+    expect(requests.map((request) => request.method), [
+      'POST',
+      'PATCH',
+      'DELETE',
+    ]);
+    expect(requests[1].path, '/recipes/${recipe.id}');
+    expect(requests[2].path, '/recipes/${recipe.id}');
+
+    for (final request in requests.take(2)) {
+      final payload = jsonDecode(request.body) as Map<String, dynamic>;
+      expect(payload['title'], 'Oatmeal Buns');
+      expect(payload['season'], 'Ganzjaehrig');
+      expect(payload['ingredients'], isA<List<dynamic>>());
+      expect(payload.containsKey('id'), isFalse);
+      expect(payload.containsKey('createdAt'), isFalse);
+      expect(payload.containsKey('cookCount'), isFalse);
+      expect(payload.containsKey('cookEvents'), isFalse);
+      expect(payload.containsKey('lastCookedAt'), isFalse);
+    }
+  });
+}
+
+Map<String, dynamic> _recipeJson() {
+  return {
+    'id': 'oatmeal-buns',
+    'title': 'Oatmeal Buns',
+    'createdAt': '2026-08-23T10:00:00.000Z',
+    'ingredients': [
+      {'name': 'Oatmeal', 'quantity': '200', 'unit': 'g'},
+    ],
+    'instructions': ['Mix everything.', 'Bake until golden.'],
+    'tags': ['One pot', 'Breakfast'],
+    'isFavorite': true,
+    'imagePaths': ['assets/demo_recipes/oatmeal_buns.png'],
+    'servings': 4,
+    'season': 'Ganzjaehrig',
+    'prepTimeMinutes': 10,
+    'cookTimeMinutes': 20,
+    'notes': 'No flour.',
+    'cookEvents': [],
+  };
+}
+
+class _RequestLog {
+  const _RequestLog({
+    required this.method,
+    required this.path,
+    required this.body,
+  });
+
+  final String method;
+  final String path;
+  final String body;
+}

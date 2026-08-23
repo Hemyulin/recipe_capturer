@@ -10,6 +10,7 @@ type RecipeRow = {
   title: string;
   description: string | null;
   servings: number;
+  season: string | null;
   prep_minutes: number | null;
   cook_minutes: number | null;
   source_url: string | null;
@@ -77,6 +78,7 @@ export class RecipesService {
             title,
             description,
             servings,
+            season,
             prep_minutes,
             cook_minutes,
             image_url,
@@ -84,7 +86,7 @@ export class RecipesService {
             created_at,
             updated_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `,
         )
         .run(
@@ -93,6 +95,7 @@ export class RecipesService {
           input.title.trim(),
           input.notes?.trim() || null,
           servings,
+          input.season?.trim() || null,
           input.prepTimeMinutes ?? null,
           input.cookTimeMinutes ?? null,
           input.imagePaths?.[0] ?? null,
@@ -121,6 +124,7 @@ export class RecipesService {
             title = ?,
             description = ?,
             servings = ?,
+            season = ?,
             prep_minutes = ?,
             cook_minutes = ?,
             image_url = ?,
@@ -133,6 +137,7 @@ export class RecipesService {
           input.title?.trim() ?? existing.title,
           input.notes?.trim() ?? existing.description,
           input.servings ?? existing.servings,
+          input.season?.trim() ?? existing.season,
           input.prepTimeMinutes ?? existing.prep_minutes,
           input.cookTimeMinutes ?? existing.cook_minutes,
           input.imagePaths?.[0] ?? existing.image_url,
@@ -245,6 +250,7 @@ export class RecipesService {
       title: row.title,
       notes: row.description ?? "",
       servings: row.servings,
+      season: row.season ?? "",
       prepTimeMinutes: row.prep_minutes,
       cookTimeMinutes: row.cook_minutes,
       isFavorite: row.is_favorite === 1,

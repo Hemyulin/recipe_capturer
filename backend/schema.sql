@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS recipes (
   title TEXT NOT NULL,
   description TEXT,
   servings INTEGER NOT NULL DEFAULT 2,
+  season TEXT,
   prep_minutes INTEGER,
   cook_minutes INTEGER,
   source_url TEXT,

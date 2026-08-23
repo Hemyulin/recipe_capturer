@@ -1,54 +1,149 @@
 # CookBuk Backend
 
-This folder contains the Pi-hosted API that will let the household share the same
-recipes instead of keeping everything local on one device.
+NestJS API for shared CookBuk household data. For the MVP it runs locally or on a
+Raspberry Pi, stores data in SQLite, and is expected to be reached over
+Tailscale.
 
-## First API Surface
+## Stack
 
-- Recipes: list, read, create, update, archive.
-- Meal plan: assign or clear recipes for breakfast, lunch, and dinner.
-- Cooking history: record completed meal plan slots with date and meal type.
-- Shopping list: generate from planned meals, then check items off together.
-- Household access: two user accounts with shared household data.
-
-## Suggested First Stack
-
-- NestJS REST JSON API.
-- SQLite database stored on the Pi.
-- Docker deployment with a persistent data volume.
-- Caddy or nginx in front for HTTPS when exposed outside the home network.
+- NestJS REST API
+- SQLite via `better-sqlite3`
+- Environment-based config with `.env`
+- `pnpm` for dependency management
 
 ## Local Development
 
 ```sh
 pnpm install
 cp .env.example .env
+pnpm seed:demo
 pnpm start:dev
 ```
 
-The local `.env` is ignored by Git. Change `COOKBUK_DATABASE_PATH` for local
-testing or Pi hosting without changing source code.
+Useful checks:
 
-For a Pi/Tailscale deployment, set `COOKBUK_HOST=0.0.0.0`. For local
-development, `127.0.0.1` is usually nicer.
+```sh
+pnpm typecheck
+pnpm build
+pnpm seed:demo
+```
 
-Useful endpoints:
+If `better-sqlite3` native bindings are missing after install, approve/rebuild
+the package:
 
-- `GET /health`
+```sh
+pnpm approve-builds better-sqlite3
+pnpm rebuild better-sqlite3
+```
+
+## Environment
+
+`.env` is ignored by Git. Use `.env.example` as the template.
+
+| Variable | Local default | Notes |
+| --- | --- | --- |
+| `COOKBUK_PORT` | `3000` | API port |
+| `COOKBUK_HOST` | `127.0.0.1` | Use `0.0.0.0` on the Pi |
+| `COOKBUK_DATABASE_PATH` | `./data/cookbuk.sqlite` | SQLite file path |
+| `COOKBUK_HOUSEHOLD_ID` | `local-household` | MVP household scope |
+| `COOKBUK_HOUSEHOLD_NAME` | `CookBuk Household` | Display/admin label |
+| `COOKBUK_CORS_ORIGIN` | `*` | Comma-separated origins or `*` |
+
+For Pi + Tailscale, run with `COOKBUK_HOST=0.0.0.0` and point the Flutter app at
+the Pi's Tailscale hostname or `100.x.y.z` address.
+
+## API
+
+### Health
+
+```sh
+curl http://127.0.0.1:3000/health
+```
+
+### Recipes
+
+```sh
+curl http://127.0.0.1:3000/recipes
+```
+
+```sh
+curl -X POST http://127.0.0.1:3000/recipes \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "title": "Pesto Pasta",
+    "servings": 2,
+    "ingredients": [
+      { "name": "Pasta", "quantity": "200", "unit": "g" }
+    ],
+    "instructions": ["Cook pasta", "Stir through pesto"],
+    "tags": ["dinner", "quick"]
+  }'
+```
+
+Endpoints:
+
 - `GET /recipes`
+- `GET /recipes/:id`
 - `POST /recipes`
 - `PATCH /recipes/:id`
 - `DELETE /recipes/:id`
-- `GET /meal-plan?from=2026-08-23&to=2026-08-30`
-- `PUT /meal-plan/:date/:meal`
-- `DELETE /meal-plan/:date/:meal`
 
-Meal slot payloads:
+Delete currently archives recipes instead of hard-deleting them.
+
+### Meal Plan
+
+Meal values are `breakfast`, `lunch`, and `dinner`.
+
+```sh
+curl 'http://127.0.0.1:3000/meal-plan?from=2026-08-23&to=2026-08-30'
+```
+
+Recipe slot:
 
 ```json
 { "slotType": "recipe", "recipeId": "..." }
+```
+
+Leftovers slot:
+
+```json
 { "slotType": "leftovers" }
+```
+
+Clear slot:
+
+```json
 { "slotType": "empty" }
 ```
 
-See `schema.sql` for the first database sketch.
+Endpoints:
+
+- `GET /meal-plan?from=YYYY-MM-DD&to=YYYY-MM-DD`
+- `PUT /meal-plan/:date/:meal`
+- `DELETE /meal-plan/:date/:meal`
+
+## Database
+
+`schema.sql` is applied on startup with `CREATE TABLE IF NOT EXISTS`. The
+database service also adds a few expected columns for local DBs created before a
+schema change.
+
+Run `pnpm seed:demo` to load the demo recipes into the configured SQLite
+database. The command is safe to rerun: recipes are upserted by id, and their
+ingredients, steps, tags, and demo cook events are refreshed.
+
+Tracked schema includes:
+
+- households
+- users
+- recipes
+- recipe tags, ingredients, and steps
+- meal plan slots with `recipe`, `leftovers`, or `empty`
+- cook events for future automatic statistics
+
+## MVP TODO
+
+- Add image upload/storage.
+- Add cooking-history creation when a completed day is closed.
+- Add shopping-list generation from planned meals.
+- Add simple household auth/shared token before exposing beyond Tailscale.

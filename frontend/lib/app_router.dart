@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cookbuk/data/file_recipe_repository.dart';
+import 'package:cookbuk/data/api_recipe_repository.dart';
 import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
 import 'package:cookbuk/ui/pages/main_shell_page.dart';
@@ -10,7 +10,12 @@ import 'package:cookbuk/ui/pages/recipe_details_page.dart';
 import 'package:cookbuk/ui/pages/recipe_list_page.dart';
 import 'package:cookbuk/ui/pages/today_page.dart';
 
-final repo = FileRecipeRepository();
+const apiBaseUrl = String.fromEnvironment(
+  'COOKBUK_API_BASE_URL',
+  defaultValue: 'http://127.0.0.1:3000',
+);
+
+final repo = ApiRecipeRepository(baseUrl: apiBaseUrl);
 
 final router = GoRouter(
   initialLocation: '/today',

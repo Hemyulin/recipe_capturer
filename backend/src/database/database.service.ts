@@ -65,6 +65,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   private ensureColumns() {
     this.ensureColumn("recipes", "cook_count", "INTEGER NOT NULL DEFAULT 0");
     this.ensureColumn("recipes", "last_cooked_at", "TEXT");
+    this.ensureColumn("recipes", "season", "TEXT");
     this.ensureColumn(
       "meal_plan_slots",
       "slot_type",

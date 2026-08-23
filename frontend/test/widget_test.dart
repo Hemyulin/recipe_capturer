@@ -3,12 +3,14 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:cookbuk/data/demo_recipes.dart';
 import 'package:cookbuk/data/in_memory_recipe_repository.dart';
-import 'package:cookbuk/main.dart';
+import 'package:cookbuk/ui/pages/new_recipe_page.dart';
 import 'package:cookbuk/ui/pages/today_page.dart';
 
 void main() {
   testWidgets('shows Today as the home screen', (WidgetTester tester) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(
+      MaterialApp(home: TodayPage(repo: InMemoryRecipeRepository())),
+    );
 
     expect(find.text('Heute'), findsWidgets);
     expect(find.text('Was essen wir heute?'), findsNothing);
@@ -17,14 +19,15 @@ void main() {
     expect(find.text('Abendessen'), findsOneWidget);
   });
 
-  testWidgets('navigates to manual recipe form', (WidgetTester tester) async {
-    await tester.pumpWidget(const MyApp());
-    await tester.tap(find.text('Rezepte'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byIcon(Icons.edit_note_outlined));
-
-    await tester.pumpAndSettle();
+  testWidgets('shows manual recipe form', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NewRecipePage(
+          title: 'Neues Rezept',
+          repo: InMemoryRecipeRepository(),
+        ),
+      ),
+    );
 
     expect(find.text('Neues Rezept'), findsOneWidget);
   });
