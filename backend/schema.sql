@@ -1,12 +1,12 @@
 PRAGMA foreign_keys = ON;
 
-CREATE TABLE households (
+CREATE TABLE IF NOT EXISTS households (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
   display_name TEXT NOT NULL,
@@ -15,7 +15,7 @@ CREATE TABLE users (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE recipes (
+CREATE TABLE IF NOT EXISTS recipes (
   id TEXT PRIMARY KEY,
   household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
@@ -33,13 +33,13 @@ CREATE TABLE recipes (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE recipe_tags (
+CREATE TABLE IF NOT EXISTS recipe_tags (
   recipe_id TEXT NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
   tag TEXT NOT NULL,
   PRIMARY KEY (recipe_id, tag)
 );
 
-CREATE TABLE recipe_ingredients (
+CREATE TABLE IF NOT EXISTS recipe_ingredients (
   id TEXT PRIMARY KEY,
   recipe_id TEXT NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
@@ -49,14 +49,14 @@ CREATE TABLE recipe_ingredients (
   sort_order INTEGER NOT NULL
 );
 
-CREATE TABLE recipe_steps (
+CREATE TABLE IF NOT EXISTS recipe_steps (
   id TEXT PRIMARY KEY,
   recipe_id TEXT NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
   body TEXT NOT NULL,
   sort_order INTEGER NOT NULL
 );
 
-CREATE TABLE meal_plan_slots (
+CREATE TABLE IF NOT EXISTS meal_plan_slots (
   id TEXT PRIMARY KEY,
   household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
   planned_for TEXT NOT NULL,
@@ -66,7 +66,7 @@ CREATE TABLE meal_plan_slots (
   UNIQUE (household_id, planned_for, meal)
 );
 
-CREATE TABLE recipe_cook_events (
+CREATE TABLE IF NOT EXISTS recipe_cook_events (
   id TEXT PRIMARY KEY,
   household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
   recipe_id TEXT NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
