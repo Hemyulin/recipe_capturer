@@ -130,6 +130,7 @@ void main() {
   testWidgets('adds text extras to a Today meal', (WidgetTester tester) async {
     final repo = InMemoryRecipeRepository();
     final mealPlanRepo = InMemoryMealPlanRepository();
+    await repo.add(testRecipes[1]);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -144,10 +145,17 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Hummus'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Rezept'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Kichererbsen-Couscous-Bowl').last);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Fertig'));
     await tester.pumpAndSettle();
 
-    expect(find.text('+ Brot · Hummus'), findsOneWidget);
+    expect(
+      find.text('+ Kichererbsen-Couscous-Bowl · Brot · Hummus'),
+      findsOneWidget,
+    );
 
     final slots = await mealPlanRepo.getRange(
       from: DateTime.now(),
@@ -157,6 +165,10 @@ void main() {
       'Brot',
       'Hummus',
     ]);
+    expect(
+      slots.singleWhere((slot) => slot.meal == 'breakfast').recipeExtraIds,
+      [testRecipes[1].id],
+    );
   });
 
   testWidgets('closes Today from the options menu', (

@@ -56,6 +56,7 @@ class ApiMealPlanRepository implements MealPlanRepository {
         slotType: 'recipe',
         recipeId: recipeId,
         extras: existing?.extras ?? const [],
+        recipeExtraIds: existing?.recipeExtraIds ?? const [],
       );
     }
   }
@@ -75,6 +76,7 @@ class ApiMealPlanRepository implements MealPlanRepository {
         meal: meal,
         slotType: 'leftovers',
         extras: existing?.extras ?? const [],
+        recipeExtraIds: existing?.recipeExtraIds ?? const [],
       );
     }
   }
@@ -94,13 +96,18 @@ class ApiMealPlanRepository implements MealPlanRepository {
     required DateTime date,
     required String meal,
     required List<String> extras,
+    List<String> recipeExtraIds = const [],
   }) async {
     final normalized = _normalizeExtras(extras);
+    final normalizedRecipeExtraIds = _normalizeRecipeExtraIds(recipeExtraIds);
     try {
       await _send(
         'PUT',
         '/meal-plan/${_dateKey(date)}/$meal/extras',
-        body: {'extras': normalized},
+        body: {
+          'extras': normalized,
+          'recipeExtraIds': normalizedRecipeExtraIds,
+        },
       );
     } on Object catch (error) {
       if (!_isOfflineError(error)) rethrow;
@@ -111,6 +118,7 @@ class ApiMealPlanRepository implements MealPlanRepository {
         slotType: existing?.slotType ?? 'empty',
         recipeId: existing?.recipeId,
         extras: normalized,
+        recipeExtraIds: normalizedRecipeExtraIds,
       );
     }
   }
@@ -262,6 +270,7 @@ class ApiMealPlanRepository implements MealPlanRepository {
     required String slotType,
     String? recipeId,
     List<String> extras = const [],
+    List<String> recipeExtraIds = const [],
   }) {
     _offlineSlots['${_dateKey(date)}:$meal'] = MealPlanSlot(
       plannedFor: _dateOnly(date),
@@ -269,6 +278,7 @@ class ApiMealPlanRepository implements MealPlanRepository {
       slotType: slotType,
       recipeId: recipeId,
       extras: extras,
+      recipeExtraIds: recipeExtraIds,
     );
   }
 
@@ -278,6 +288,15 @@ class ApiMealPlanRepository implements MealPlanRepository {
     return values
         .map((value) => value.trim())
         .where((value) => value.isNotEmpty)
+        .take(8)
+        .toList();
+  }
+
+  List<String> _normalizeRecipeExtraIds(List<String> values) {
+    return values
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toSet()
         .take(8)
         .toList();
   }

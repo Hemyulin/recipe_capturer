@@ -51,6 +51,10 @@ class _ShoppingPageState extends State<ShoppingPage> {
         for (final slot in slots)
           if (slot.isRecipe && slot.recipeId != null) recipeById[slot.recipeId],
       ].whereType<Recipe>().toList();
+      final sideRecipes = [
+        for (final slot in slots)
+          for (final recipeId in slot.recipeExtraIds) recipeById[recipeId],
+      ].whereType<Recipe>().toList();
       final extras = [
         for (final slot in slots)
           for (final extra in slot.extras) extra,
@@ -59,7 +63,10 @@ class _ShoppingPageState extends State<ShoppingPage> {
       if (!mounted) return;
       setState(() {
         _plannedRecipeCount = plannedRecipes.length;
-        _items = _ShoppingItem.fromRecipesAndExtras(plannedRecipes, extras);
+        _items = _ShoppingItem.fromRecipesAndExtras([
+          ...plannedRecipes,
+          ...sideRecipes,
+        ], extras);
         _checkedItemKeys = _checkedItemKeys.intersection(
           _items.map((item) => item.key).toSet(),
         );

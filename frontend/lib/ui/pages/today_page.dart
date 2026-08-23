@@ -23,6 +23,7 @@ class _TodayPageState extends State<TodayPage> {
   List<Recipe> _recipes = [];
   final Map<String, String?> _mealRecipeIds = {};
   final Map<String, List<String>> _mealExtras = {};
+  final Map<String, List<String>> _mealRecipeExtraIds = {};
   late final DateTime _today = _dateOnly(DateTime.now());
   bool _isLoading = true;
   String? _loadError;
@@ -53,6 +54,9 @@ class _TodayPageState extends State<TodayPage> {
         _mealExtras
           ..clear()
           ..addAll(_extrasValues(mealSlots));
+        _mealRecipeExtraIds
+          ..clear()
+          ..addAll(_recipeExtraIdsValues(mealSlots));
         _isLoading = false;
       });
     } catch (_) {
@@ -134,25 +138,37 @@ class _TodayPageState extends State<TodayPage> {
   }
 
   Future<void> _editExtras(String slotId) async {
-    final extras = await showModalBottomSheet<List<String>>(
+    final result = await showModalBottomSheet<MealExtrasResult>(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) =>
-          MealExtrasSheet(initialExtras: _mealExtras[slotId] ?? const []),
+      builder: (context) => MealExtrasSheet(
+        initialExtras: _mealExtras[slotId] ?? const [],
+        initialRecipeExtraIds: _mealRecipeExtraIds[slotId] ?? const [],
+        recipes: _recipes,
+      ),
     );
-    if (extras == null || !mounted) return;
+    if (result == null || !mounted) return;
 
     final previous = _mealExtras[slotId] ?? const <String>[];
-    setState(() => _mealExtras[slotId] = extras);
+    final previousRecipeIds = _mealRecipeExtraIds[slotId] ?? const <String>[];
+    setState(() {
+      _mealExtras[slotId] = result.extras;
+      _mealRecipeExtraIds[slotId] = result.recipeExtraIds;
+    });
     try {
       await widget.mealPlanRepo.setExtras(
         date: _today,
         meal: slotId,
-        extras: extras,
+        extras: result.extras,
+        recipeExtraIds: result.recipeExtraIds,
       );
     } catch (_) {
       if (!mounted) return;
-      setState(() => _mealExtras[slotId] = previous);
+      setState(() {
+        _mealExtras[slotId] = previous;
+        _mealRecipeExtraIds[slotId] = previousRecipeIds;
+      });
       _showPlanError();
     }
   }
@@ -192,6 +208,18 @@ class _TodayPageState extends State<TodayPage> {
 
   Map<String, List<String>> _extrasValues(List<MealPlanSlot> slots) {
     return {for (final slot in slots) slot.meal: slot.extras};
+  }
+
+  Map<String, List<String>> _recipeExtraIdsValues(List<MealPlanSlot> slots) {
+    return {for (final slot in slots) slot.meal: slot.recipeExtraIds};
+  }
+
+  List<String> _extraLabels(String meal) {
+    return [
+      for (final id in _mealRecipeExtraIds[meal] ?? const <String>[])
+        if (_recipeById(id) != null) _recipeById(id)!.title,
+      ...(_mealExtras[meal] ?? const <String>[]),
+    ];
   }
 
   void _showPlanError() {
@@ -244,7 +272,7 @@ class _TodayPageState extends State<TodayPage> {
                   time: '07:30',
                   recipe: breakfast,
                   isLeftovers: breakfastIsLeftovers,
-                  extras: _mealExtras['breakfast'] ?? const [],
+                  extras: _extraLabels('breakfast'),
                   isRecurring: breakfast != null && !breakfastIsLeftovers,
                   onTap: breakfast == null || breakfastIsLeftovers
                       ? () => _chooseRecipe('breakfast')
@@ -259,7 +287,7 @@ class _TodayPageState extends State<TodayPage> {
                   time: '12:30',
                   recipe: lunch,
                   isLeftovers: lunchIsLeftovers,
-                  extras: _mealExtras['lunch'] ?? const [],
+                  extras: _extraLabels('lunch'),
                   onTap: lunch == null || lunchIsLeftovers
                       ? () => _chooseRecipe('lunch')
                       : () => _openRecipe(lunch),
@@ -273,7 +301,7 @@ class _TodayPageState extends State<TodayPage> {
                   time: '18:30',
                   recipe: dinner,
                   isLeftovers: dinnerIsLeftovers,
-                  extras: _mealExtras['dinner'] ?? const [],
+                  extras: _extraLabels('dinner'),
                   onTap: dinner == null || dinnerIsLeftovers
                       ? () => _chooseRecipe('dinner')
                       : () => _openRecipe(dinner),

@@ -12,4 +12,9 @@ export class UpsertMealSlotDto {
   @IsArray()
   @IsString({ each: true })
   extras?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  recipeExtraIds?: string[];
 }

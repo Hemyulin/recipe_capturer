@@ -15,6 +15,7 @@ type MealSlotRow = {
   slot_type: string;
   recipe_id: string | null;
   extras_json: string;
+  recipe_extra_ids_json: string;
 };
 
 const meals = new Set(["breakfast", "lunch", "dinner"]);
@@ -34,7 +35,7 @@ export class MealPlanService {
     const rows = this.database.db
       .prepare(
         `
-        SELECT planned_for, meal, slot_type, recipe_id, extras_json
+        SELECT planned_for, meal, slot_type, recipe_id, extras_json, recipe_extra_ids_json
         FROM meal_plan_slots
         WHERE household_id = ? AND planned_for BETWEEN ? AND ?
         ORDER BY planned_for ASC, meal ASC
@@ -69,6 +70,10 @@ export class MealPlanService {
     const recipeId = input.slotType === "recipe" ? input.recipeId! : null;
     const extras =
       input.extras == null ? undefined : this.normalizeExtras(input.extras);
+    const recipeExtraIds =
+      input.recipeExtraIds == null
+        ? undefined
+        : this.normalizeRecipeExtraIds(input.recipeExtraIds, recipeId);
 
     return this.writeSlot(
       plannedFor,
@@ -76,6 +81,7 @@ export class MealPlanService {
       input.slotType,
       recipeId,
       extras,
+      recipeExtraIds,
     );
   }
 
@@ -83,10 +89,14 @@ export class MealPlanService {
     const plannedFor = this.normalizeDate(date);
     const normalizedMeal = this.normalizeMeal(meal);
     const extras = this.normalizeExtras(input.extras);
+    const recipeExtraIds = this.normalizeRecipeExtraIds(
+      input.recipeExtraIds ?? [],
+      null,
+    );
     const existing = this.database.db
       .prepare(
         `
-        SELECT planned_for, meal, slot_type, recipe_id, extras_json
+        SELECT planned_for, meal, slot_type, recipe_id, extras_json, recipe_extra_ids_json
         FROM meal_plan_slots
         WHERE household_id = ? AND planned_for = ? AND meal = ?
         `,
@@ -95,7 +105,14 @@ export class MealPlanService {
       MealSlotRow | undefined;
 
     if (!existing) {
-      return this.writeSlot(plannedFor, normalizedMeal, "empty", null, extras);
+      return this.writeSlot(
+        plannedFor,
+        normalizedMeal,
+        "empty",
+        null,
+        extras,
+        recipeExtraIds,
+      );
     }
 
     return this.writeSlot(
@@ -104,6 +121,7 @@ export class MealPlanService {
       existing.slot_type as "recipe" | "leftovers" | "empty",
       existing.recipe_id,
       extras,
+      recipeExtraIds.filter((id) => id !== existing.recipe_id),
     );
   }
 
@@ -129,7 +147,7 @@ export class MealPlanService {
     const slots = this.database.db
       .prepare(
         `
-        SELECT planned_for, meal, slot_type, recipe_id, extras_json
+        SELECT planned_for, meal, slot_type, recipe_id, extras_json, recipe_extra_ids_json
         FROM meal_plan_slots
         WHERE household_id = ?
           AND planned_for = ?
@@ -142,36 +160,47 @@ export class MealPlanService {
 
     const transaction = this.database.db.transaction(() => {
       let recordedCount = 0;
+      let expectedCount = 0;
 
       for (const slot of slots) {
-        const result = this.database.db
-          .prepare(
-            `
-            INSERT OR IGNORE INTO recipe_cook_events (
-              id,
-              household_id,
-              recipe_id,
-              cooked_at,
-              meal
-            )
-            VALUES (?, ?, ?, ?, ?)
-            `,
-          )
-          .run(randomUUID(), householdId, slot.recipe_id, cookedAt, slot.meal);
+        const recipeIds = [
+          ...new Set([
+            slot.recipe_id!,
+            ...this.parseRecipeExtraIds(slot.recipe_extra_ids_json),
+          ]),
+        ];
+        expectedCount += recipeIds.length;
 
-        if (result.changes === 0) continue;
-        recordedCount += 1;
-        this.refreshRecipeCookStats(slot.recipe_id!);
+        for (const recipeId of recipeIds) {
+          const result = this.database.db
+            .prepare(
+              `
+              INSERT OR IGNORE INTO recipe_cook_events (
+                id,
+                household_id,
+                recipe_id,
+                cooked_at,
+                meal
+              )
+              VALUES (?, ?, ?, ?, ?)
+              `,
+            )
+            .run(randomUUID(), householdId, recipeId, cookedAt, slot.meal);
+
+          if (result.changes === 0) continue;
+          recordedCount += 1;
+          this.refreshRecipeCookStats(recipeId);
+        }
       }
 
-      return recordedCount;
+      return { recordedCount, expectedCount };
     });
 
-    const recordedCount = transaction();
+    const { recordedCount, expectedCount } = transaction();
     return {
       plannedFor,
       recordedCount,
-      skippedCount: slots.length - recordedCount,
+      skippedCount: expectedCount - recordedCount,
     };
   }
 
@@ -181,18 +210,22 @@ export class MealPlanService {
     slotType: "recipe" | "leftovers" | "empty",
     recipeId: string | null,
     extras?: string[],
+    recipeExtraIds?: string[],
   ) {
     const extrasJson = extras == null ? null : JSON.stringify(extras);
+    const recipeExtraIdsJson =
+      recipeExtraIds == null ? null : JSON.stringify(recipeExtraIds);
     this.database.db
       .prepare(
         `
-        INSERT INTO meal_plan_slots (id, household_id, planned_for, meal, slot_type, recipe_id, extras_json)
-        VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, '[]'))
+        INSERT INTO meal_plan_slots (id, household_id, planned_for, meal, slot_type, recipe_id, extras_json, recipe_extra_ids_json)
+        VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, '[]'), COALESCE(?, '[]'))
         ON CONFLICT(household_id, planned_for, meal)
         DO UPDATE SET
           slot_type = excluded.slot_type,
           recipe_id = excluded.recipe_id,
-          extras_json = COALESCE(?, meal_plan_slots.extras_json)
+          extras_json = COALESCE(?, meal_plan_slots.extras_json),
+          recipe_extra_ids_json = COALESCE(?, meal_plan_slots.recipe_extra_ids_json)
         `,
       )
       .run(
@@ -203,16 +236,22 @@ export class MealPlanService {
         slotType,
         recipeId,
         extrasJson,
+        recipeExtraIdsJson,
         extrasJson,
+        recipeExtraIdsJson,
       );
 
-    return {
-      plannedFor,
-      meal,
-      slotType,
-      recipeId,
-      extras: extras ?? [],
-    };
+    const row = this.database.db
+      .prepare(
+        `
+        SELECT planned_for, meal, slot_type, recipe_id, extras_json, recipe_extra_ids_json
+        FROM meal_plan_slots
+        WHERE household_id = ? AND planned_for = ? AND meal = ?
+        `,
+      )
+      .get(this.householdId(), plannedFor, meal) as MealSlotRow;
+
+    return this.toApiSlot(row);
   }
 
   private ensureRecipeExists(recipeId: string) {
@@ -267,6 +306,7 @@ export class MealPlanService {
       slotType: row.slot_type,
       recipeId: row.recipe_id,
       extras: this.parseExtras(row.extras_json),
+      recipeExtraIds: this.parseRecipeExtraIds(row.recipe_extra_ids_json),
     };
   }
 
@@ -282,6 +322,38 @@ export class MealPlanService {
       const parsed = JSON.parse(value);
       if (!Array.isArray(parsed)) return [];
       return this.normalizeExtras(parsed.map((item) => String(item)));
+    } catch {
+      return [];
+    }
+  }
+
+  private normalizeRecipeExtraIds(
+    values: string[],
+    mainRecipeId: string | null,
+  ) {
+    const ids = [
+      ...new Set(
+        values
+          .map((value) => value.trim())
+          .filter((value) => value.length > 0 && value !== mainRecipeId),
+      ),
+    ].slice(0, 8);
+
+    ids.forEach((id) => this.ensureRecipeExists(id));
+    return ids;
+  }
+
+  private parseRecipeExtraIds(value: string) {
+    try {
+      const parsed = JSON.parse(value);
+      if (!Array.isArray(parsed)) return [];
+      return [
+        ...new Set(
+          parsed
+            .map((item) => String(item).trim())
+            .filter((item) => item.length > 0),
+        ),
+      ].slice(0, 8);
     } catch {
       return [];
     }

@@ -40,6 +40,7 @@ abstract class MealPlanRepository {
     required DateTime date,
     required String meal,
     required List<String> extras,
+    List<String> recipeExtraIds = const [],
   });
 
   Future<CloseDayResult> closeDay(DateTime date);

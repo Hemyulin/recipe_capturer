@@ -118,7 +118,12 @@ curl 'http://127.0.0.1:3000/meal-plan?from=2026-08-23&to=2026-08-30'
 Recipe slot:
 
 ```json
-{ "slotType": "recipe", "recipeId": "...", "extras": ["Brot", "Salat"] }
+{
+  "slotType": "recipe",
+  "recipeId": "...",
+  "extras": ["Brot", "Salat"],
+  "recipeExtraIds": ["..."]
+}
 ```
 
 Leftovers slot:
@@ -141,12 +146,15 @@ Endpoints:
 - `PUT /meal-plan/:date/:meal/extras`
 - `DELETE /meal-plan/:date/:meal`
 
-Meal slots can carry lightweight text extras such as bread, salad, hummus, or
-quark. Extras are shown with the planned meal and are included as plain shopping
-list items.
+Meal slots can carry lightweight text extras such as bread, salad, or quark.
+They can also carry recipe extras for side dishes such as hummus, dips, cakes, or
+anything else that should still behave like a standalone recipe. Text extras are
+included as plain shopping list items; recipe extras contribute their ingredients
+to the shopping list.
 
-Closing a day creates cook-history events for each planned recipe slot on that
-date. It ignores leftovers and empty slots, and it is safe to call repeatedly.
+Closing a day creates cook-history events for each planned recipe and recipe
+extra on that date. It ignores leftovers and empty slots, and it is safe to call
+repeatedly.
 
 ## Database
 

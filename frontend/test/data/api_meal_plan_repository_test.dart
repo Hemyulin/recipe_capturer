@@ -38,6 +38,7 @@ void main() {
               'slotType': 'recipe',
               'recipeId': 'recipe-1',
               'extras': ['Brot'],
+              'recipeExtraIds': ['recipe-side'],
             },
           ]),
         );
@@ -71,6 +72,7 @@ void main() {
     expect(slots.single.meal, 'breakfast');
     expect(slots.single.recipeId, 'recipe-1');
     expect(slots.single.extras, ['Brot']);
+    expect(slots.single.recipeExtraIds, ['recipe-side']);
     expect(requests.single.method, 'GET');
     expect(requests.single.path, '/meal-plan');
     expect(requests.single.query, 'from=2026-08-23&to=2026-08-24');
@@ -104,6 +106,7 @@ void main() {
       date: date,
       meal: 'dinner',
       extras: ['Brot', 'Butter'],
+      recipeExtraIds: ['recipe-side'],
     );
 
     expect(requests.map((request) => request.method), [
@@ -126,6 +129,7 @@ void main() {
     expect(jsonDecode(requests[2].body), {'slotType': 'empty'});
     expect(jsonDecode(requests[3].body), {
       'extras': ['Brot', 'Butter'],
+      'recipeExtraIds': ['recipe-side'],
     });
   });
 

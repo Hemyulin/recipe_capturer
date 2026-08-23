@@ -40,6 +40,7 @@ class _WeekPageState extends State<WeekPage> {
   List<Recipe> _recipes = [];
   Map<String, String?> _slotValues = {};
   Map<String, List<String>> _slotExtras = {};
+  Map<String, List<String>> _slotRecipeExtraIds = {};
   late DateTime _weekStart = _startOfWeek(DateTime.now());
   late DateTime _selectedDate = _dateOnly(DateTime.now());
   bool _isLoading = true;
@@ -69,6 +70,7 @@ class _WeekPageState extends State<WeekPage> {
         _recipes = recipes;
         _slotValues = _slotValuesFrom(slots);
         _slotExtras = _slotExtrasFrom(slots);
+        _slotRecipeExtraIds = _slotRecipeExtraIdsFrom(slots);
         _isLoading = false;
       });
     } catch (_) {
@@ -110,6 +112,10 @@ class _WeekPageState extends State<WeekPage> {
 
   List<String> _extrasValue(DateTime date, String meal) {
     return _slotExtras[_slotKey(date, meal)] ?? const [];
+  }
+
+  List<String> _recipeExtraIdsValue(DateTime date, String meal) {
+    return _slotRecipeExtraIds[_slotKey(date, meal)] ?? const [];
   }
 
   Future<void> _chooseSlot(DateTime date, String meal) async {
@@ -156,27 +162,39 @@ class _WeekPageState extends State<WeekPage> {
   }
 
   Future<void> _editExtras(DateTime date, String meal) async {
-    final selectedExtras = await showModalBottomSheet<List<String>>(
+    final selectedExtras = await showModalBottomSheet<MealExtrasResult>(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) =>
-          MealExtrasSheet(initialExtras: _extrasValue(date, meal)),
+      builder: (context) => MealExtrasSheet(
+        initialExtras: _extrasValue(date, meal),
+        initialRecipeExtraIds: _recipeExtraIdsValue(date, meal),
+        recipes: _recipes,
+      ),
     );
     if (selectedExtras == null || !mounted) return;
 
     final key = _slotKey(date, meal);
     final previousExtras = _slotExtras[key] ?? const <String>[];
-    setState(() => _slotExtras[key] = selectedExtras);
+    final previousRecipeIds = _slotRecipeExtraIds[key] ?? const <String>[];
+    setState(() {
+      _slotExtras[key] = selectedExtras.extras;
+      _slotRecipeExtraIds[key] = selectedExtras.recipeExtraIds;
+    });
 
     try {
       await widget.mealPlanRepo.setExtras(
         date: date,
         meal: meal,
-        extras: selectedExtras,
+        extras: selectedExtras.extras,
+        recipeExtraIds: selectedExtras.recipeExtraIds,
       );
     } catch (_) {
       if (!mounted) return;
-      setState(() => _slotExtras[key] = previousExtras);
+      setState(() {
+        _slotExtras[key] = previousExtras;
+        _slotRecipeExtraIds[key] = previousRecipeIds;
+      });
       _showPlanError('Extras konnten nicht gespeichert werden.');
     }
   }
@@ -197,6 +215,21 @@ class _WeekPageState extends State<WeekPage> {
       for (final slot in slots)
         _slotKey(slot.plannedFor, slot.meal): slot.extras,
     };
+  }
+
+  Map<String, List<String>> _slotRecipeExtraIdsFrom(List<MealPlanSlot> slots) {
+    return {
+      for (final slot in slots)
+        _slotKey(slot.plannedFor, slot.meal): slot.recipeExtraIds,
+    };
+  }
+
+  List<String> _extraLabels(DateTime date, String meal) {
+    return [
+      for (final id in _recipeExtraIdsValue(date, meal))
+        if (_recipeById(id) != null) _recipeById(id)!.title,
+      ..._extrasValue(date, meal),
+    ];
   }
 
   void _showPlanError(String message) {
@@ -273,7 +306,7 @@ class _WeekPageState extends State<WeekPage> {
                 isLeftoversForMeal: (meal) =>
                     _slotValue(_selectedDate, meal) ==
                     MealChoiceSheet.leftoversValue,
-                extrasForMeal: (meal) => _extrasValue(_selectedDate, meal),
+                extrasForMeal: (meal) => _extraLabels(_selectedDate, meal),
                 onChooseMeal: (meal) => _chooseSlot(_selectedDate, meal),
                 onClearMeal: (meal) => _clearSlot(_selectedDate, meal),
                 onEditExtras: (meal) => _editExtras(_selectedDate, meal),
