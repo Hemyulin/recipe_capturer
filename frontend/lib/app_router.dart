@@ -1,16 +1,26 @@
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cookbuk/data/file_recipe_repository.dart';
+import 'package:cookbuk/config/app_config.dart';
+import 'package:cookbuk/data/api_meal_plan_repository.dart';
+import 'package:cookbuk/data/api_recipe_repository.dart';
+import 'package:cookbuk/data/meal_plan_repository.dart';
 import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
 import 'package:cookbuk/ui/pages/main_shell_page.dart';
 import 'package:cookbuk/ui/pages/new_recipe_page.dart';
-import 'package:cookbuk/ui/pages/placeholder_page.dart';
 import 'package:cookbuk/ui/pages/recipe_details_page.dart';
 import 'package:cookbuk/ui/pages/recipe_list_page.dart';
+import 'package:cookbuk/ui/pages/shopping_page.dart';
 import 'package:cookbuk/ui/pages/today_page.dart';
+import 'package:cookbuk/ui/pages/week_page.dart';
 
-final repo = FileRecipeRepository();
+final repo = ApiRecipeRepository(
+  baseUrl: AppConfig.apiBaseUrl,
+  sharedToken: AppConfig.sharedToken,
+);
+final mealPlanRepo = ApiMealPlanRepository(
+  baseUrl: AppConfig.apiBaseUrl,
+  sharedToken: AppConfig.sharedToken,
+);
 
 final router = GoRouter(
   initialLocation: '/today',
@@ -22,16 +32,13 @@ final router = GoRouter(
         GoRoute(path: '/', redirect: (_, _) => '/today'),
         GoRoute(
           path: '/today',
-          builder: (context, state) => TodayPage(repo: repo),
+          builder: (context, state) =>
+              TodayPage(repo: repo, mealPlanRepo: mealPlanRepo),
         ),
         GoRoute(
           path: '/week',
-          builder: (context, state) => const PlaceholderPage(
-            title: 'Woche',
-            icon: Icons.calendar_view_week_outlined,
-            message:
-                'Der Wochenplan bekommt später Frühstück, Mittagessen und Abendessen pro Tag.',
-          ),
+          builder: (context, state) =>
+              WeekPage(repo: repo, mealPlanRepo: mealPlanRepo),
         ),
         GoRoute(
           path: '/recipes',
@@ -40,12 +47,8 @@ final router = GoRouter(
         ),
         GoRoute(
           path: '/shopping',
-          builder: (context, state) => const PlaceholderPage(
-            title: 'Einkauf',
-            icon: Icons.shopping_basket_outlined,
-            message:
-                'Die Einkaufsliste wird später aus geplanten Rezepten aggregiert.',
-          ),
+          builder: (context, state) =>
+              ShoppingPage(repo: repo, mealPlanRepo: mealPlanRepo),
         ),
       ],
     ),
@@ -76,3 +79,4 @@ final router = GoRouter(
 );
 
 RecipeRepository get recipeRepository => repo;
+MealPlanRepository get mealPlanRepository => mealPlanRepo;

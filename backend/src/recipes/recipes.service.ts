@@ -1,6 +1,12 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { extname, join, resolve } from "node:path";
 import { DatabaseService } from "../database/database.service";
 import { CreateRecipeDto, RecipeIngredientDto } from "./dto/create-recipe.dto";
 import { UpdateRecipeDto } from "./dto/update-recipe.dto";
@@ -10,6 +16,7 @@ type RecipeRow = {
   title: string;
   description: string | null;
   servings: number;
+  season: string | null;
   prep_minutes: number | null;
   cook_minutes: number | null;
   source_url: string | null;
@@ -32,6 +39,18 @@ type IngredientRow = {
 type StepRow = {
   body: string;
   sort_order: number;
+};
+
+type CookEventRow = {
+  cooked_at: string;
+  meal: string | null;
+};
+
+export type UploadedRecipeImage = {
+  originalname: string;
+  mimetype: string;
+  buffer: Buffer;
+  size: number;
 };
 
 @Injectable()
@@ -77,6 +96,7 @@ export class RecipesService {
             title,
             description,
             servings,
+            season,
             prep_minutes,
             cook_minutes,
             image_url,
@@ -84,7 +104,7 @@ export class RecipesService {
             created_at,
             updated_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `,
         )
         .run(
@@ -93,6 +113,7 @@ export class RecipesService {
           input.title.trim(),
           input.notes?.trim() || null,
           servings,
+          input.season?.trim() || null,
           input.prepTimeMinutes ?? null,
           input.cookTimeMinutes ?? null,
           input.imagePaths?.[0] ?? null,
@@ -121,6 +142,7 @@ export class RecipesService {
             title = ?,
             description = ?,
             servings = ?,
+            season = ?,
             prep_minutes = ?,
             cook_minutes = ?,
             image_url = ?,
@@ -133,6 +155,7 @@ export class RecipesService {
           input.title?.trim() ?? existing.title,
           input.notes?.trim() ?? existing.description,
           input.servings ?? existing.servings,
+          input.season?.trim() ?? existing.season,
           input.prepTimeMinutes ?? existing.prep_minutes,
           input.cookTimeMinutes ?? existing.cook_minutes,
           input.imagePaths?.[0] ?? existing.image_url,
@@ -172,6 +195,39 @@ export class RecipesService {
     if (result.changes === 0) {
       throw new NotFoundException("Recipe not found");
     }
+  }
+
+  setMainImage(id: string, image: UploadedRecipeImage) {
+    const existing = this.findRecipeRow(id);
+    if (!existing) throw new NotFoundException("Recipe not found");
+    if (!image.buffer || image.buffer.length === 0) {
+      throw new BadRequestException("Image file is empty");
+    }
+    if (!image.mimetype.startsWith("image/")) {
+      throw new BadRequestException("Only image uploads are supported");
+    }
+
+    const storagePath = this.imageStoragePath();
+    mkdirSync(storagePath, { recursive: true });
+
+    const filename = `${id}-${randomUUID()}${this.imageExtension(image)}`;
+    const targetPath = join(storagePath, filename);
+    writeFileSync(targetPath, image.buffer);
+
+    const imageUrl = `/images/${filename}`;
+    this.database.db
+      .prepare(
+        `
+        UPDATE recipes
+        SET image_url = ?, updated_at = ?
+        WHERE id = ? AND household_id = ? AND archived_at IS NULL
+        `,
+      )
+      .run(imageUrl, new Date().toISOString(), id, this.householdId());
+
+    this.deletePreviousStoredImage(existing.image_url);
+
+    return this.findOne(id);
   }
 
   private findRecipeRow(id: string) {
@@ -245,6 +301,7 @@ export class RecipesService {
       title: row.title,
       notes: row.description ?? "",
       servings: row.servings,
+      season: row.season ?? "",
       prepTimeMinutes: row.prep_minutes,
       cookTimeMinutes: row.cook_minutes,
       isFavorite: row.is_favorite === 1,
@@ -254,6 +311,7 @@ export class RecipesService {
       tags: this.tagsFor(row.id),
       cookCount: row.cook_count,
       lastCookedAt: row.last_cooked_at,
+      cookEvents: this.cookEventsFor(row.id),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -308,6 +366,24 @@ export class RecipesService {
     return rows.map((row) => row.tag);
   }
 
+  private cookEventsFor(recipeId: string) {
+    const rows = this.database.db
+      .prepare(
+        `
+        SELECT cooked_at, meal
+        FROM recipe_cook_events
+        WHERE recipe_id = ? AND household_id = ?
+        ORDER BY cooked_at DESC
+        `,
+      )
+      .all(recipeId, this.householdId()) as CookEventRow[];
+
+    return rows.map((row) => ({
+      cookedAt: row.cooked_at,
+      mealType: row.meal ?? "",
+    }));
+  }
+
   private parseAmount(ingredient: RecipeIngredientDto) {
     if (!ingredient.quantity) return null;
     const parsed = Number(ingredient.quantity.replace(",", "."));
@@ -316,5 +392,44 @@ export class RecipesService {
 
   private householdId() {
     return this.config.get<string>("COOKBUK_HOUSEHOLD_ID", "local-household");
+  }
+
+  private imageStoragePath() {
+    return resolve(
+      process.cwd(),
+      this.config.get<string>("COOKBUK_IMAGE_STORAGE_PATH", "./data/images"),
+    );
+  }
+
+  private imageExtension(image: UploadedRecipeImage) {
+    const mimeExtensions: Record<string, string> = {
+      "image/gif": ".gif",
+      "image/heic": ".heic",
+      "image/jpeg": ".jpg",
+      "image/png": ".png",
+      "image/webp": ".webp",
+    };
+    const extension =
+      mimeExtensions[image.mimetype] ||
+      extname(image.originalname).toLowerCase();
+
+    if (/^\.[a-z0-9]{1,8}$/.test(extension)) return extension;
+    return ".jpg";
+  }
+
+  private deletePreviousStoredImage(imageUrl: string | null) {
+    if (!imageUrl?.startsWith("/images/")) return;
+
+    const filename = imageUrl.slice("/images/".length);
+    if (filename.includes("/") || filename.includes("\\")) return;
+
+    const filePath = join(this.imageStoragePath(), filename);
+    if (!existsSync(filePath)) return;
+
+    try {
+      unlinkSync(filePath);
+    } catch {
+      // Replacing the database value is more important than cleaning old files.
+    }
   }
 }

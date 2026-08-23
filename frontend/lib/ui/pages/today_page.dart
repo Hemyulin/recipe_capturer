@@ -1,23 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cookbuk/data/meal_plan_repository.dart';
 import 'package:cookbuk/data/recipe_repository.dart';
+import 'package:cookbuk/domain/meal_plan_slot.dart';
 import 'package:cookbuk/domain/recipe.dart';
+import 'package:cookbuk/ui/widgets/meal_choice_sheet.dart';
+import 'package:cookbuk/ui/widgets/meal_extras_sheet.dart';
+import 'package:cookbuk/ui/widgets/load_state_view.dart';
 import 'package:cookbuk/ui/widgets/recipe_image.dart';
 
 class TodayPage extends StatefulWidget {
-  const TodayPage({super.key, required this.repo});
+  const TodayPage({super.key, required this.repo, required this.mealPlanRepo});
 
   final RecipeRepository repo;
+  final MealPlanRepository mealPlanRepo;
 
   @override
   State<TodayPage> createState() => _TodayPageState();
 }
 
 class _TodayPageState extends State<TodayPage> {
-  static const String _leftoversSlotValue = '__leftovers__';
-
   List<Recipe> _recipes = [];
   final Map<String, String?> _mealRecipeIds = {};
+  final Map<String, List<String>> _mealExtras = {};
+  final Map<String, List<String>> _mealRecipeExtraIds = {};
+  late final DateTime _today = _dateOnly(DateTime.now());
+  bool _isLoading = true;
+  String? _loadError;
 
   @override
   void initState() {
@@ -26,9 +35,37 @@ class _TodayPageState extends State<TodayPage> {
   }
 
   Future<void> _loadRecipes() async {
-    final recipes = await widget.repo.getAll();
-    if (!mounted) return;
-    setState(() => _recipes = recipes);
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
+    try {
+      final recipes = await widget.repo.getAll();
+      final mealSlots = await widget.mealPlanRepo.getRange(
+        from: _today,
+        to: _today,
+      );
+      if (!mounted) return;
+      setState(() {
+        _recipes = recipes;
+        _mealRecipeIds
+          ..clear()
+          ..addAll(_slotValues(mealSlots));
+        _mealExtras
+          ..clear()
+          ..addAll(_extrasValues(mealSlots));
+        _mealRecipeExtraIds
+          ..clear()
+          ..addAll(_recipeExtraIdsValues(mealSlots));
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _loadError = 'Backend nicht erreichbar.';
+      });
+    }
   }
 
   Recipe? _recipeById(String? id) {
@@ -54,7 +91,7 @@ class _TodayPageState extends State<TodayPage> {
   }
 
   bool _isLeftoversSlot(String slotId) {
-    return _mealRecipeIds[slotId] == _leftoversSlotValue;
+    return _mealRecipeIds[slotId] == MealChoiceSheet.leftoversValue;
   }
 
   Future<void> _openRecipe(Recipe? recipe) async {
@@ -67,18 +104,132 @@ class _TodayPageState extends State<TodayPage> {
     final selected = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
-      builder: (context) => _MealChoiceSheet(
-        recipes: _recipes,
-        leftoversValue: _leftoversSlotValue,
-      ),
+      builder: (context) => MealChoiceSheet(recipes: _recipes),
     );
     if (selected == null || !mounted) return;
 
     setState(() => _mealRecipeIds[slotId] = selected);
+    try {
+      if (selected == MealChoiceSheet.leftoversValue) {
+        await widget.mealPlanRepo.setLeftovers(date: _today, meal: slotId);
+      } else {
+        await widget.mealPlanRepo.setRecipe(
+          date: _today,
+          meal: slotId,
+          recipeId: selected,
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      await _loadRecipes();
+      _showPlanError();
+    }
   }
 
-  void _clearRecipe(String slotId) {
+  Future<void> _clearRecipe(String slotId) async {
     setState(() => _mealRecipeIds[slotId] = null);
+    try {
+      await widget.mealPlanRepo.setEmpty(date: _today, meal: slotId);
+    } catch (_) {
+      if (!mounted) return;
+      await _loadRecipes();
+      _showPlanError();
+    }
+  }
+
+  Future<void> _editExtras(String slotId) async {
+    final result = await showModalBottomSheet<MealExtrasResult>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => MealExtrasSheet(
+        initialExtras: _mealExtras[slotId] ?? const [],
+        initialRecipeExtraIds: _mealRecipeExtraIds[slotId] ?? const [],
+        recipes: _recipes,
+      ),
+    );
+    if (result == null || !mounted) return;
+
+    final previous = _mealExtras[slotId] ?? const <String>[];
+    final previousRecipeIds = _mealRecipeExtraIds[slotId] ?? const <String>[];
+    setState(() {
+      _mealExtras[slotId] = result.extras;
+      _mealRecipeExtraIds[slotId] = result.recipeExtraIds;
+    });
+    try {
+      await widget.mealPlanRepo.setExtras(
+        date: _today,
+        meal: slotId,
+        extras: result.extras,
+        recipeExtraIds: result.recipeExtraIds,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _mealExtras[slotId] = previous;
+        _mealRecipeExtraIds[slotId] = previousRecipeIds;
+      });
+      _showPlanError();
+    }
+  }
+
+  Future<void> _closeToday() async {
+    try {
+      final result = await widget.mealPlanRepo.closeDay(_today);
+      await _loadRecipes();
+      if (!mounted) return;
+
+      final message = result.recordedCount == 0
+          ? 'Heute war schon abgeschlossen.'
+          : result.recordedCount == 1
+          ? '1 Mahlzeit gezählt.'
+          : '${result.recordedCount} Mahlzeiten gezählt.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tag konnte nicht abgeschlossen werden.')),
+      );
+    }
+  }
+
+  Map<String, String?> _slotValues(List<MealPlanSlot> slots) {
+    return {
+      for (final slot in slots)
+        slot.meal: slot.isLeftovers
+            ? MealChoiceSheet.leftoversValue
+            : slot.isRecipe
+            ? slot.recipeId
+            : null,
+    };
+  }
+
+  Map<String, List<String>> _extrasValues(List<MealPlanSlot> slots) {
+    return {for (final slot in slots) slot.meal: slot.extras};
+  }
+
+  Map<String, List<String>> _recipeExtraIdsValues(List<MealPlanSlot> slots) {
+    return {for (final slot in slots) slot.meal: slot.recipeExtraIds};
+  }
+
+  List<String> _extraLabels(String meal) {
+    return [
+      for (final id in _mealRecipeExtraIds[meal] ?? const <String>[])
+        if (_recipeById(id) != null) _recipeById(id)!.title,
+      ...(_mealExtras[meal] ?? const <String>[]),
+    ];
+  }
+
+  void _showPlanError() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Plan konnte nicht gespeichert werden.')),
+    );
+  }
+
+  static DateTime _dateOnly(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
   }
 
   @override
@@ -91,101 +242,135 @@ class _TodayPageState extends State<TodayPage> {
     final dinnerIsLeftovers = _isLeftoversSlot('dinner');
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Heute')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-        children: [
-          _MealSlotCard(
-            title: 'Frühstück',
-            time: '07:30',
-            recipe: breakfast,
-            isLeftovers: breakfastIsLeftovers,
-            isRecurring: breakfast != null && !breakfastIsLeftovers,
-            onTap: breakfast == null || breakfastIsLeftovers
-                ? () => _chooseRecipe('breakfast')
-                : () => _openRecipe(breakfast),
-            onChange: () => _chooseRecipe('breakfast'),
-            onClear: () => _clearRecipe('breakfast'),
-          ),
-          const SizedBox(height: 12),
-          _MealSlotCard(
-            title: 'Mittagessen',
-            time: '12:30',
-            recipe: lunch,
-            isLeftovers: lunchIsLeftovers,
-            onTap: lunch == null || lunchIsLeftovers
-                ? () => _chooseRecipe('lunch')
-                : () => _openRecipe(lunch),
-            onChange: () => _chooseRecipe('lunch'),
-            onClear: () => _clearRecipe('lunch'),
-          ),
-          const SizedBox(height: 12),
-          _MealSlotCard(
-            title: 'Abendessen',
-            time: '18:30',
-            recipe: dinner,
-            isLeftovers: dinnerIsLeftovers,
-            onTap: dinner == null || dinnerIsLeftovers
-                ? () => _chooseRecipe('dinner')
-                : () => _openRecipe(dinner),
-            onChange: () => _chooseRecipe('dinner'),
-            onClear: () => _clearRecipe('dinner'),
-          ),
-          const SizedBox(height: 18),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Heute vorbereiten',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Noch keine Vorbereitung geplant.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+      appBar: AppBar(
+        title: const Text('Heute'),
+        actions: [
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'close-day') _closeToday();
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'close-day', child: Text('Tag abschließen')),
+            ],
           ),
         ],
       ),
+      body: _isLoading
+          ? const LoadStateView.loading()
+          : _loadError != null
+          ? LoadStateView.error(
+              title: 'Heute konnte nicht geladen werden',
+              message:
+                  'Prüfe, ob der CookBuk-Backendserver läuft und dein Gerät im Tailscale ist.',
+              onRetry: _loadRecipes,
+            )
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+              children: [
+                _MealSlotCard(
+                  title: 'Frühstück',
+                  time: '07:30',
+                  recipe: breakfast,
+                  isLeftovers: breakfastIsLeftovers,
+                  extras: _extraLabels('breakfast'),
+                  isRecurring: breakfast != null && !breakfastIsLeftovers,
+                  onTap: breakfast == null || breakfastIsLeftovers
+                      ? () => _chooseRecipe('breakfast')
+                      : () => _openRecipe(breakfast),
+                  onChange: () => _chooseRecipe('breakfast'),
+                  onClear: () => _clearRecipe('breakfast'),
+                  onExtras: () => _editExtras('breakfast'),
+                ),
+                const SizedBox(height: 12),
+                _MealSlotCard(
+                  title: 'Mittagessen',
+                  time: '12:30',
+                  recipe: lunch,
+                  isLeftovers: lunchIsLeftovers,
+                  extras: _extraLabels('lunch'),
+                  onTap: lunch == null || lunchIsLeftovers
+                      ? () => _chooseRecipe('lunch')
+                      : () => _openRecipe(lunch),
+                  onChange: () => _chooseRecipe('lunch'),
+                  onClear: () => _clearRecipe('lunch'),
+                  onExtras: () => _editExtras('lunch'),
+                ),
+                const SizedBox(height: 12),
+                _MealSlotCard(
+                  title: 'Abendessen',
+                  time: '18:30',
+                  recipe: dinner,
+                  isLeftovers: dinnerIsLeftovers,
+                  extras: _extraLabels('dinner'),
+                  onTap: dinner == null || dinnerIsLeftovers
+                      ? () => _chooseRecipe('dinner')
+                      : () => _openRecipe(dinner),
+                  onChange: () => _chooseRecipe('dinner'),
+                  onClear: () => _clearRecipe('dinner'),
+                  onExtras: () => _editExtras('dinner'),
+                ),
+                const SizedBox(height: 18),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Heute vorbereiten',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Noch keine Vorbereitung geplant.',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
     );
   }
 }
 
 class _MealSlotCard extends StatelessWidget {
-  static const String _leftoversImagePath = 'assets/demo_recipes/leftovers.png';
-
   const _MealSlotCard({
     required this.title,
     required this.time,
     this.recipe,
     this.isLeftovers = false,
+    this.extras = const [],
     this.isRecurring = false,
     this.onTap,
     this.onChange,
     this.onClear,
+    this.onExtras,
   });
 
   final String title;
   final String time;
   final Recipe? recipe;
   final bool isLeftovers;
+  final List<String> extras;
   final bool isRecurring;
   final VoidCallback? onTap;
   final VoidCallback? onChange;
   final VoidCallback? onClear;
+  final VoidCallback? onExtras;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final imagePath = isLeftovers ? _leftoversImagePath : recipe?.mainImagePath;
+    final imagePath = isLeftovers
+        ? MealChoiceSheet.leftoversImagePath
+        : recipe?.mainImagePath;
     final isPlanned = recipe != null || isLeftovers;
 
     final card = Card(
@@ -201,17 +386,12 @@ class _MealSlotCard extends StatelessWidget {
                 child: SizedBox(
                   width: 86,
                   height: 86,
-                  child: imagePath == null
-                      ? ColoredBox(
-                          color: colorScheme.surfaceContainerHigh,
-                          child: Icon(
-                            isLeftovers
-                                ? Icons.rice_bowl_outlined
-                                : Icons.restaurant_menu_outlined,
-                            color: colorScheme.primary,
-                          ),
+                  child: isPlanned
+                      ? RecipeImage(
+                          path: imagePath,
+                          placeholderSeed: recipe?.id ?? title,
                         )
-                      : RecipeImage(path: imagePath),
+                      : UnplannedMealImage(title: title),
                 ),
               ),
               const SizedBox(width: 14),
@@ -234,6 +414,17 @@ class _MealSlotCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyLarge,
                     ),
+                    if (extras.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        '+ ${extras.join(' · ')}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
@@ -259,6 +450,11 @@ class _MealSlotCard extends StatelessWidget {
                   ],
                 ),
               ),
+              IconButton(
+                onPressed: onExtras,
+                icon: const Icon(Icons.add_circle_outline_rounded),
+                tooltip: 'Extras bearbeiten',
+              ),
             ],
           ),
         ),
@@ -271,140 +467,6 @@ class _MealSlotCard extends StatelessWidget {
       onChange: onChange,
       onClear: onClear,
       child: card,
-    );
-  }
-}
-
-class _MealChoiceSheet extends StatefulWidget {
-  const _MealChoiceSheet({required this.recipes, required this.leftoversValue});
-
-  final List<Recipe> recipes;
-  final String leftoversValue;
-
-  @override
-  State<_MealChoiceSheet> createState() => _MealChoiceSheetState();
-}
-
-class _MealChoiceSheetState extends State<_MealChoiceSheet> {
-  final TextEditingController _searchController = TextEditingController();
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  List<Recipe> _filteredRecipes() {
-    final query = _searchController.text.trim().toLowerCase();
-    final sortedRecipes = [...widget.recipes]
-      ..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
-
-    if (query.isEmpty) return sortedRecipes;
-
-    return sortedRecipes.where((recipe) {
-      final inTitle = recipe.title.toLowerCase().contains(query);
-      final inIngredients = recipe.ingredients.any(
-        (ingredient) => ingredient.matches(query),
-      );
-      final inTags = recipe.tags.any(
-        (tag) => tag.toLowerCase().contains(query),
-      );
-      return inTitle || inIngredients || inTags;
-    }).toList();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final filteredRecipes = _filteredRecipes();
-
-    return SafeArea(
-      child: ListView.separated(
-        shrinkWrap: true,
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-        itemCount: filteredRecipes.isEmpty ? 4 : filteredRecipes.length + 3,
-        separatorBuilder: (_, index) =>
-            index <= 1 ? const SizedBox(height: 8) : const Divider(height: 1),
-        itemBuilder: (context, index) {
-          if (index == 0) {
-            return Text(
-              'Rezept auswählen',
-              style: Theme.of(context).textTheme.titleLarge,
-            );
-          }
-
-          if (index == 1) {
-            return TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Suchen',
-                prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: _searchController.text.isEmpty
-                    ? null
-                    : IconButton(
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() {});
-                        },
-                        icon: const Icon(Icons.close_rounded),
-                        tooltip: 'Suche löschen',
-                      ),
-              ),
-              onChanged: (_) => setState(() {}),
-            );
-          }
-
-          if (index == 2) {
-            return ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: const SizedBox(
-                  width: 56,
-                  height: 56,
-                  child: RecipeImage(path: _MealSlotCard._leftoversImagePath),
-                ),
-              ),
-              title: const Text('Reste'),
-              subtitle: const Text('Keine Rezeptauswahl für diese Mahlzeit'),
-              onTap: () => Navigator.of(context).pop(widget.leftoversValue),
-            );
-          }
-
-          if (filteredRecipes.isEmpty) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              child: Text(
-                'Keine Treffer',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            );
-          }
-
-          final recipe = filteredRecipes[index - 3];
-          return ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: SizedBox(
-                width: 56,
-                height: 56,
-                child: RecipeImage(path: recipe.mainImagePath),
-              ),
-            ),
-            title: Text(recipe.title),
-            subtitle: Text(
-              [
-                '${recipe.ingredients.length} Zutaten',
-                if (recipe.totalTimeMinutes != null)
-                  '${recipe.totalTimeMinutes} min',
-              ].join(' · '),
-            ),
-            onTap: () => Navigator.of(context).pop(recipe.id),
-          );
-        },
-      ),
     );
   }
 }

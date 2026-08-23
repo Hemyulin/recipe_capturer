@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
+import 'package:cookbuk/ui/widgets/load_state_view.dart';
 import 'package:cookbuk/ui/widgets/recipe_card.dart';
 
 class RecipeListPage extends StatefulWidget {
@@ -19,6 +20,8 @@ class _RecipeListPageState extends State<RecipeListPage> {
   final TextEditingController _searchController = TextEditingController();
   bool _favoritesOnly = false;
   bool _withImagesOnly = false;
+  bool _isLoading = true;
+  String? _loadError;
 
   @override
   void initState() {
@@ -33,10 +36,25 @@ class _RecipeListPageState extends State<RecipeListPage> {
   }
 
   Future<void> _refresh() async {
-    final snapshot = await widget.repo.getAll();
-    snapshot.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    if (!mounted) return;
-    setState(() => recipesSnapshot = snapshot);
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
+    try {
+      final snapshot = await widget.repo.getAll();
+      snapshot.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      if (!mounted) return;
+      setState(() {
+        recipesSnapshot = snapshot;
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _loadError = 'Backend nicht erreichbar.';
+      });
+    }
   }
 
   List<Recipe> _filteredRecipes() {
@@ -67,7 +85,16 @@ class _RecipeListPageState extends State<RecipeListPage> {
     final hasAnyRecipe = recipesSnapshot.isNotEmpty;
     final needsReviewCount = recipesSnapshot.where(_needsReview).length;
 
-    final Widget content = !hasAnyRecipe
+    final Widget content = _isLoading
+        ? const LoadStateView.loading()
+        : _loadError != null
+        ? LoadStateView.error(
+            title: 'Rezepte konnten nicht geladen werden',
+            message:
+                'Prüfe, ob der CookBuk-Backendserver läuft und dein Gerät im Tailscale ist.',
+            onRetry: _refresh,
+          )
+        : !hasAnyRecipe
         ? _EmptyLibraryState(title: 'Noch keine Rezepte')
         : filteredRecipes.isEmpty
         ? _EmptyLibraryState(title: 'Keine Treffer')

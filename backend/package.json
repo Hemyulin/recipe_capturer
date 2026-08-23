@@ -6,6 +6,7 @@
     "build": "tsc -p tsconfig.build.json",
     "dev": "nest start --watch",
     "format": "prettier --write \"src/**/*.ts\"",
+    "seed:demo": "node scripts/seed-demo-recipes.cjs",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "typecheck": "tsc --noEmit -p tsconfig.json"

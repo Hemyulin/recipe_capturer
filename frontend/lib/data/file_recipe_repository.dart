@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:cookbuk/data/demo_recipes.dart';
 import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
 
@@ -34,45 +33,21 @@ class FileRecipeRepository implements RecipeRepository {
   Future<List<dynamic>> _readItems() async {
     final file = await _recipesFile();
     if (!(await file.exists())) {
-      return _seedDemoItems();
+      return [];
     }
 
     final fileAsString = await file.readAsString();
-    if (fileAsString.trim().isEmpty) return _seedDemoItems();
+    if (fileAsString.trim().isEmpty) return [];
 
     final decoded = jsonDecode(fileAsString);
-    if (decoded is! List) return _seedDemoItems();
+    if (decoded is! List) return [];
 
-    return _withMissingDemoItems(decoded);
+    return decoded;
   }
 
   Future<void> _writeItems(List<dynamic> items) async {
     final file = await _recipesFile();
     await file.writeAsString(jsonEncode(items));
-  }
-
-  Future<List<dynamic>> _seedDemoItems() async {
-    final items = demoRecipes.map((recipe) => recipe.toJson()).toList();
-    await _writeItems(items);
-    return items;
-  }
-
-  Future<List<dynamic>> _withMissingDemoItems(List<dynamic> items) async {
-    final existingIds = items
-        .whereType<Map<String, dynamic>>()
-        .map((item) => item['id'])
-        .whereType<String>()
-        .toSet();
-    final missingDemoItems = demoRecipes
-        .where((recipe) => !existingIds.contains(recipe.id))
-        .map((recipe) => recipe.toJson())
-        .toList();
-
-    if (missingDemoItems.isEmpty) return items;
-
-    final updatedItems = [...items, ...missingDemoItems];
-    await _writeItems(updatedItems);
-    return updatedItems;
   }
 
   Future<void> _writeAll(List<Recipe> recipes) async {
@@ -137,13 +112,14 @@ class FileRecipeRepository implements RecipeRepository {
   }
 
   @override
-  Future<void> add(Recipe recipe) async {
+  Future<Recipe> add(Recipe recipe) async {
     final items = await _readItems();
     final persistedRecipe = recipe.copyWith(
       imagePaths: await _persistImages(recipe),
     );
     items.add(persistedRecipe.toJson());
     await _writeItems(items);
+    return persistedRecipe;
   }
 
   @override
@@ -170,10 +146,10 @@ class FileRecipeRepository implements RecipeRepository {
   }
 
   @override
-  Future<void> update(Recipe recipe) async {
+  Future<Recipe> update(Recipe recipe) async {
     final recipes = await getAll();
     final index = recipes.indexWhere((r) => r.id == recipe.id);
-    if (index == -1) return;
+    if (index == -1) return recipe;
 
     final updatedRecipe = recipe.copyWith(
       imagePaths: await _persistImages(recipe),
@@ -182,5 +158,6 @@ class FileRecipeRepository implements RecipeRepository {
     final updated = [...recipes];
     updated[index] = updatedRecipe;
     await _writeAll(updated);
+    return updatedRecipe;
   }
 }

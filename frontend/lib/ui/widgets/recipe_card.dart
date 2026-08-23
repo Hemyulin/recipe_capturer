@@ -32,7 +32,7 @@ class RecipeCard extends StatelessWidget {
           children: [
             AspectRatio(
               aspectRatio: 16 / 10,
-              child: RecipeImage(path: imagePath),
+              child: RecipeImage(path: imagePath, placeholderSeed: recipe.id),
             ),
             Padding(
               padding: const EdgeInsets.all(14),
