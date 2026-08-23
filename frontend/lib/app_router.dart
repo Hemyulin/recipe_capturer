@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cookbuk/config/app_config.dart';
 import 'package:cookbuk/data/api_meal_plan_repository.dart';
@@ -8,9 +7,9 @@ import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
 import 'package:cookbuk/ui/pages/main_shell_page.dart';
 import 'package:cookbuk/ui/pages/new_recipe_page.dart';
-import 'package:cookbuk/ui/pages/placeholder_page.dart';
 import 'package:cookbuk/ui/pages/recipe_details_page.dart';
 import 'package:cookbuk/ui/pages/recipe_list_page.dart';
+import 'package:cookbuk/ui/pages/shopping_page.dart';
 import 'package:cookbuk/ui/pages/today_page.dart';
 import 'package:cookbuk/ui/pages/week_page.dart';
 
@@ -42,12 +41,8 @@ final router = GoRouter(
         ),
         GoRoute(
           path: '/shopping',
-          builder: (context, state) => const PlaceholderPage(
-            title: 'Einkauf',
-            icon: Icons.shopping_basket_outlined,
-            message:
-                'Die Einkaufsliste wird später aus geplanten Rezepten aggregiert.',
-          ),
+          builder: (context, state) =>
+              ShoppingPage(repo: repo, mealPlanRepo: mealPlanRepo),
         ),
       ],
     ),

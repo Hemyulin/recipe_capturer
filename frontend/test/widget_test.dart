@@ -5,6 +5,7 @@ import 'package:cookbuk/data/in_memory_meal_plan_repository.dart';
 import 'package:cookbuk/data/in_memory_recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
 import 'package:cookbuk/ui/pages/new_recipe_page.dart';
+import 'package:cookbuk/ui/pages/shopping_page.dart';
 import 'package:cookbuk/ui/pages/today_page.dart';
 import 'package:cookbuk/ui/pages/week_page.dart';
 
@@ -197,6 +198,57 @@ void main() {
     final breakfast = slots.singleWhere((slot) => slot.meal == 'breakfast');
     expect(breakfast.isRecipe, true);
     expect(breakfast.recipeId, testRecipes.first.id);
+  });
+
+  testWidgets('builds a shopping list from planned recipes', (
+    WidgetTester tester,
+  ) async {
+    final repo = InMemoryRecipeRepository();
+    final mealPlanRepo = InMemoryMealPlanRepository();
+    final secondOatRecipe = Recipe.create(
+      'Oatmeal Buns',
+      ingredients: const [
+        RecipeIngredient(name: 'Haferflocken', quantity: '80', unit: 'g'),
+        RecipeIngredient(name: 'Magerquark', quantity: '250', unit: 'g'),
+      ],
+      instructions: const ['Mischen und backen.'],
+      tags: const ['breakfast'],
+    );
+
+    await repo.add(testRecipes.first);
+    await repo.add(secondOatRecipe);
+
+    final today = DateTime.now();
+    final selectedDate = DateTime(today.year, today.month, today.day);
+    await mealPlanRepo.setRecipe(
+      date: selectedDate,
+      meal: 'breakfast',
+      recipeId: testRecipes.first.id,
+    );
+    await mealPlanRepo.setRecipe(
+      date: selectedDate,
+      meal: 'lunch',
+      recipeId: secondOatRecipe.id,
+    );
+    await mealPlanRepo.setLeftovers(date: selectedDate, meal: 'dinner');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ShoppingPage(repo: repo, mealPlanRepo: mealPlanRepo),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Einkauf'), findsOneWidget);
+    expect(find.text('2 Rezepte, 3 Zutaten'), findsOneWidget);
+    expect(find.text('200 g Haferflocken'), findsOneWidget);
+    expect(find.text('250 g Magerquark'), findsOneWidget);
+    expect(find.text('1 Banane'), findsOneWidget);
+
+    await tester.tap(find.text('200 g Haferflocken'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1/3'), findsOneWidget);
   });
 }
 
