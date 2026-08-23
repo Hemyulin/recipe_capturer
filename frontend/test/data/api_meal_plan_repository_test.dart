@@ -40,6 +40,15 @@ void main() {
             },
           ]),
         );
+      } else if (request.method == 'POST' &&
+          request.uri.path == '/meal-plan/close-day/2026-08-23') {
+        request.response.write(
+          jsonEncode({
+            'plannedFor': '2026-08-23',
+            'recordedCount': 2,
+            'skippedCount': 1,
+          }),
+        );
       } else {
         request.response.write(jsonEncode({'ok': true}));
       }
@@ -102,6 +111,16 @@ void main() {
     });
     expect(jsonDecode(requests[1].body), {'slotType': 'leftovers'});
     expect(jsonDecode(requests[2].body), {'slotType': 'empty'});
+  });
+
+  test('closes a planned day', () async {
+    final result = await repository.closeDay(DateTime(2026, 8, 23));
+
+    expect(result.plannedFor, DateTime(2026, 8, 23));
+    expect(result.recordedCount, 2);
+    expect(result.skippedCount, 1);
+    expect(requests.single.method, 'POST');
+    expect(requests.single.path, '/meal-plan/close-day/2026-08-23');
   });
 }
 

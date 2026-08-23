@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  Post,
   Put,
   Query,
 } from "@nestjs/common";
@@ -17,6 +18,11 @@ export class MealPlanController {
   @Get()
   findRange(@Query("from") from?: string, @Query("to") to?: string) {
     return this.mealPlanService.findRange(from, to);
+  }
+
+  @Post("close-day/:date")
+  closeDay(@Param("date") date: string) {
+    return this.mealPlanService.closeDay(date);
   }
 
   @Put(":date/:meal")

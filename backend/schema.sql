@@ -75,3 +75,6 @@ CREATE TABLE IF NOT EXISTS recipe_cook_events (
   meal TEXT,
   user_id TEXT REFERENCES users(id) ON DELETE SET NULL
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_recipe_cook_events_unique_planned_meal
+ON recipe_cook_events (household_id, recipe_id, cooked_at, meal);

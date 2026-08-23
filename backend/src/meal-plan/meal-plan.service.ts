@@ -78,6 +78,59 @@ export class MealPlanService {
       );
   }
 
+  closeDay(date: string) {
+    const plannedFor = this.normalizeDate(date);
+    const cookedAt = `${plannedFor}T12:00:00.000Z`;
+    const householdId = this.householdId();
+    const slots = this.database.db
+      .prepare(
+        `
+        SELECT planned_for, meal, slot_type, recipe_id
+        FROM meal_plan_slots
+        WHERE household_id = ?
+          AND planned_for = ?
+          AND slot_type = 'recipe'
+          AND recipe_id IS NOT NULL
+        ORDER BY meal ASC
+        `,
+      )
+      .all(householdId, plannedFor) as MealSlotRow[];
+
+    const transaction = this.database.db.transaction(() => {
+      let recordedCount = 0;
+
+      for (const slot of slots) {
+        const result = this.database.db
+          .prepare(
+            `
+            INSERT OR IGNORE INTO recipe_cook_events (
+              id,
+              household_id,
+              recipe_id,
+              cooked_at,
+              meal
+            )
+            VALUES (?, ?, ?, ?, ?)
+            `,
+          )
+          .run(randomUUID(), householdId, slot.recipe_id, cookedAt, slot.meal);
+
+        if (result.changes === 0) continue;
+        recordedCount += 1;
+        this.refreshRecipeCookStats(slot.recipe_id!);
+      }
+
+      return recordedCount;
+    });
+
+    const recordedCount = transaction();
+    return {
+      plannedFor,
+      recordedCount,
+      skippedCount: slots.length - recordedCount,
+    };
+  }
+
   private writeSlot(
     plannedFor: string,
     meal: string,
@@ -122,6 +175,37 @@ export class MealPlanService {
       .get(this.householdId(), recipeId);
 
     if (!recipe) throw new NotFoundException("Recipe not found");
+  }
+
+  private refreshRecipeCookStats(recipeId: string) {
+    this.database.db
+      .prepare(
+        `
+        UPDATE recipes
+        SET
+          cook_count = (
+            SELECT COUNT(*)
+            FROM recipe_cook_events
+            WHERE household_id = ? AND recipe_id = ?
+          ),
+          last_cooked_at = (
+            SELECT MAX(cooked_at)
+            FROM recipe_cook_events
+            WHERE household_id = ? AND recipe_id = ?
+          ),
+          updated_at = ?
+        WHERE household_id = ? AND id = ?
+        `,
+      )
+      .run(
+        this.householdId(),
+        recipeId,
+        this.householdId(),
+        recipeId,
+        new Date().toISOString(),
+        this.householdId(),
+        recipeId,
+      );
   }
 
   private toApiSlot(row: MealSlotRow) {

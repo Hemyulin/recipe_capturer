@@ -127,6 +127,37 @@ void main() {
     expect(lunch.recipeId, testRecipes.first.id);
   });
 
+  testWidgets('closes Today from the options menu', (
+    WidgetTester tester,
+  ) async {
+    final repo = InMemoryRecipeRepository();
+    final mealPlanRepo = InMemoryMealPlanRepository();
+    await repo.add(testRecipes.first);
+
+    final today = DateTime.now();
+    final selectedDate = DateTime(today.year, today.month, today.day);
+    await mealPlanRepo.setRecipe(
+      date: selectedDate,
+      meal: 'breakfast',
+      recipeId: testRecipes.first.id,
+    );
+    await mealPlanRepo.setLeftovers(date: selectedDate, meal: 'lunch');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TodayPage(repo: repo, mealPlanRepo: mealPlanRepo),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tag abschließen'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 Mahlzeit gezählt.'), findsOneWidget);
+  });
+
   testWidgets('filters recipes in the Today meal picker', (
     WidgetTester tester,
   ) async {

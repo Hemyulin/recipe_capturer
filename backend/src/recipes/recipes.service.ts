@@ -41,6 +41,11 @@ type StepRow = {
   sort_order: number;
 };
 
+type CookEventRow = {
+  cooked_at: string;
+  meal: string | null;
+};
+
 export type UploadedRecipeImage = {
   originalname: string;
   mimetype: string;
@@ -306,6 +311,7 @@ export class RecipesService {
       tags: this.tagsFor(row.id),
       cookCount: row.cook_count,
       lastCookedAt: row.last_cooked_at,
+      cookEvents: this.cookEventsFor(row.id),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -358,6 +364,24 @@ export class RecipesService {
       .all(recipeId) as { tag: string }[];
 
     return rows.map((row) => row.tag);
+  }
+
+  private cookEventsFor(recipeId: string) {
+    const rows = this.database.db
+      .prepare(
+        `
+        SELECT cooked_at, meal
+        FROM recipe_cook_events
+        WHERE recipe_id = ? AND household_id = ?
+        ORDER BY cooked_at DESC
+        `,
+      )
+      .all(recipeId, this.householdId()) as CookEventRow[];
+
+    return rows.map((row) => ({
+      cookedAt: row.cooked_at,
+      mealType: row.meal ?? "",
+    }));
   }
 
   private parseAmount(ingredient: RecipeIngredientDto) {

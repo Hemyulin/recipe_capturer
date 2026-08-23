@@ -51,6 +51,27 @@ class InMemoryMealPlanRepository implements MealPlanRepository {
     return Future.value();
   }
 
+  @override
+  Future<CloseDayResult> closeDay(DateTime date) {
+    final dateKey = _dateKey(date);
+    final recordedCount = _slots.values
+        .where(
+          (slot) =>
+              _dateKey(slot.plannedFor) == dateKey &&
+              slot.isRecipe &&
+              slot.recipeId != null,
+        )
+        .length;
+
+    return Future.value(
+      CloseDayResult(
+        plannedFor: _dateOnly(date),
+        recordedCount: recordedCount,
+        skippedCount: 0,
+      ),
+    );
+  }
+
   String _slotKey(DateTime date, String meal) => '${_dateKey(date)}:$meal';
 
   String _dateKey(DateTime date) {

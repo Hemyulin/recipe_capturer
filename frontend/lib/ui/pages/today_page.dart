@@ -128,6 +128,28 @@ class _TodayPageState extends State<TodayPage> {
     }
   }
 
+  Future<void> _closeToday() async {
+    try {
+      final result = await widget.mealPlanRepo.closeDay(_today);
+      await _loadRecipes();
+      if (!mounted) return;
+
+      final message = result.recordedCount == 0
+          ? 'Heute war schon abgeschlossen.'
+          : result.recordedCount == 1
+          ? '1 Mahlzeit gezählt.'
+          : '${result.recordedCount} Mahlzeiten gezählt.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tag konnte nicht abgeschlossen werden.')),
+      );
+    }
+  }
+
   Map<String, String?> _slotValues(List<MealPlanSlot> slots) {
     return {
       for (final slot in slots)
@@ -159,7 +181,19 @@ class _TodayPageState extends State<TodayPage> {
     final dinnerIsLeftovers = _isLeftoversSlot('dinner');
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Heute')),
+      appBar: AppBar(
+        title: const Text('Heute'),
+        actions: [
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'close-day') _closeToday();
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'close-day', child: Text('Tag abschließen')),
+            ],
+          ),
+        ],
+      ),
       body: _isLoading
           ? const LoadStateView.loading()
           : _loadError != null

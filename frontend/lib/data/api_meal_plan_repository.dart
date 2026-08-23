@@ -51,6 +51,17 @@ class ApiMealPlanRepository implements MealPlanRepository {
     return _upsert(date: date, meal: meal, body: {'slotType': 'empty'});
   }
 
+  @override
+  Future<CloseDayResult> closeDay(DateTime date) async {
+    final response = await _send(
+      'POST',
+      '/meal-plan/close-day/${_dateKey(date)}',
+    );
+    return CloseDayResult.fromJson(
+      jsonDecode(response) as Map<String, dynamic>,
+    );
+  }
+
   Future<void> _upsert({
     required DateTime date,
     required String meal,
@@ -80,6 +91,7 @@ class ApiMealPlanRepository implements MealPlanRepository {
     final uri = _uri(path, queryParameters: queryParameters);
     final response = await switch (method) {
       'GET' => http.get(uri, headers: headers),
+      'POST' => http.post(uri, headers: headers, body: encodedBody),
       'PUT' => http.put(uri, headers: headers, body: encodedBody),
       _ => throw ApiMealPlanRepositoryException('Unsupported method: $method'),
     };

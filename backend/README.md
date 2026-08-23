@@ -136,8 +136,12 @@ Clear slot:
 Endpoints:
 
 - `GET /meal-plan?from=YYYY-MM-DD&to=YYYY-MM-DD`
+- `POST /meal-plan/close-day/:date`
 - `PUT /meal-plan/:date/:meal`
 - `DELETE /meal-plan/:date/:meal`
+
+Closing a day creates cook-history events for each planned recipe slot on that
+date. It ignores leftovers and empty slots, and it is safe to call repeatedly.
 
 ## Database
 
@@ -156,10 +160,9 @@ Tracked schema includes:
 - recipes
 - recipe tags, ingredients, and steps
 - meal plan slots with `recipe`, `leftovers`, or `empty`
-- cook events for future automatic statistics
+- cook events for automatic statistics
 
 ## MVP TODO
 
-- Add cooking-history creation when a completed day is closed.
-- Add shopping-list generation from planned meals.
-- Add simple household auth/shared token before exposing beyond Tailscale.
+- Add manual shopping-list items.
+- Add Pi deployment and backup scripts.
