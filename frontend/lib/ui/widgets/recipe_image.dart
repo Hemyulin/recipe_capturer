@@ -43,27 +43,27 @@ class _RecipePlaceholder extends StatelessWidget {
 
   static const _variants = [
     _PlaceholderVariant(
-      icon: Icons.flatware_rounded,
+      icon: Icons.add_a_photo_outlined,
       background: Color(0xFFF5EFE6),
       foreground: Color(0xFF7A6854),
     ),
     _PlaceholderVariant(
-      icon: Icons.restaurant_menu_rounded,
+      icon: Icons.photo_camera_outlined,
       background: Color(0xFFEFF3EA),
       foreground: Color(0xFF60724F),
     ),
     _PlaceholderVariant(
-      icon: Icons.ramen_dining_rounded,
+      icon: Icons.add_photo_alternate_outlined,
       background: Color(0xFFF4ECEC),
       foreground: Color(0xFF815E5E),
     ),
     _PlaceholderVariant(
-      icon: Icons.bakery_dining_rounded,
+      icon: Icons.photo_library_outlined,
       background: Color(0xFFEEF1F5),
       foreground: Color(0xFF596B80),
     ),
     _PlaceholderVariant(
-      icon: Icons.local_dining_rounded,
+      icon: Icons.camera_alt_outlined,
       background: Color(0xFFF3F0D9),
       foreground: Color(0xFF756F3F),
     ),

@@ -257,10 +257,12 @@ class _MealSlotCard extends StatelessWidget {
                 child: SizedBox(
                   width: 86,
                   height: 86,
-                  child: RecipeImage(
-                    path: imagePath,
-                    placeholderSeed: recipe?.id ?? title,
-                  ),
+                  child: isPlanned
+                      ? RecipeImage(
+                          path: imagePath,
+                          placeholderSeed: recipe?.id ?? title,
+                        )
+                      : _UnplannedMealImage(title: title),
                 ),
               ),
               const SizedBox(width: 14),
@@ -332,6 +334,29 @@ class _MealChoiceSheet extends StatefulWidget {
 
   @override
   State<_MealChoiceSheet> createState() => _MealChoiceSheetState();
+}
+
+class _UnplannedMealImage extends StatelessWidget {
+  const _UnplannedMealImage({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return ColoredBox(
+      color: colorScheme.surfaceContainerHigh,
+      child: Center(
+        child: Icon(
+          Icons.add_rounded,
+          color: colorScheme.primary,
+          size: 34,
+          semanticLabel: '$title planen',
+        ),
+      ),
+    );
+  }
 }
 
 class _MealChoiceSheetState extends State<_MealChoiceSheet> {
