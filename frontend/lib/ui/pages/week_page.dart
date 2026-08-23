@@ -372,67 +372,59 @@ class _WeekDayChip extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final isToday = _isSameDate(date, DateTime.now());
 
-    return Material(
-      color: isSelected
-          ? colorScheme.primaryContainer
-          : colorScheme.surfaceContainerHigh,
-      borderRadius: BorderRadius.circular(14),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                _weekdayLabel(date),
-                style: textTheme.labelMedium?.copyWith(
-                  color: isSelected
-                      ? colorScheme.onPrimaryContainer
-                      : colorScheme.onSurface,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                _dateLabel(date),
-                style: textTheme.bodySmall?.copyWith(
-                  color: isSelected
-                      ? colorScheme.onPrimaryContainer
-                      : colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const Spacer(),
-              if (isToday)
-                SizedBox(
-                  height: 6,
-                  width: 6,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? colorScheme.onPrimaryContainer
-                          : colorScheme.primary,
-                      shape: BoxShape.circle,
-                    ),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        border: isToday
+            ? Border.all(color: colorScheme.primary, width: 1)
+            : null,
+      ),
+      child: Material(
+        color: isSelected
+            ? colorScheme.primaryContainer
+            : colorScheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  _weekdayLabel(date),
+                  style: textTheme.labelMedium?.copyWith(
+                    color: isSelected
+                        ? colorScheme.onPrimaryContainer
+                        : colorScheme.onSurface,
+                    fontWeight: FontWeight.w700,
                   ),
-                )
-              else
-                const SizedBox(height: 6),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  for (final meal in meals) ...[
-                    _MealStatusDot(
-                      value: slotValueFor(meal.id),
-                      isSelectedDay: isSelected,
-                    ),
-                    if (meal != meals.last) const SizedBox(width: 3),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  _dateLabel(date),
+                  style: textTheme.bodySmall?.copyWith(
+                    color: isSelected
+                        ? colorScheme.onPrimaryContainer
+                        : colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const Spacer(),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (final meal in meals) ...[
+                      _MealStatusDot(
+                        value: slotValueFor(meal.id),
+                        isSelectedDay: isSelected,
+                      ),
+                      if (meal != meals.last) const SizedBox(width: 3),
+                    ],
                   ],
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
