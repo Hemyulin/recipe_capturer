@@ -6,6 +6,7 @@ import 'package:cookbuk/data/in_memory_recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
 import 'package:cookbuk/ui/pages/new_recipe_page.dart';
 import 'package:cookbuk/ui/pages/today_page.dart';
+import 'package:cookbuk/ui/pages/week_page.dart';
 
 void main() {
   testWidgets('shows Today as the home screen', (WidgetTester tester) async {
@@ -164,6 +165,38 @@ void main() {
       ),
       findsNothing,
     );
+  });
+
+  testWidgets('sets a recipe in the Week planner', (WidgetTester tester) async {
+    final repo = InMemoryRecipeRepository();
+    final mealPlanRepo = InMemoryMealPlanRepository();
+    for (final recipe in testRecipes) {
+      await repo.add(recipe);
+    }
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: WeekPage(repo: repo, mealPlanRepo: mealPlanRepo),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Woche'), findsOneWidget);
+    await tester.tap(find.text('Nichts geplant').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Oatmeal mit Banane und Blaubeeren').last);
+    await tester.pumpAndSettle();
+
+    final today = DateTime.now();
+    final weekStart = DateTime(
+      today.year,
+      today.month,
+      today.day,
+    ).subtract(Duration(days: today.weekday - 1));
+    final slots = await mealPlanRepo.getRange(from: weekStart, to: weekStart);
+    final breakfast = slots.singleWhere((slot) => slot.meal == 'breakfast');
+    expect(breakfast.isRecipe, true);
+    expect(breakfast.recipeId, testRecipes.first.id);
   });
 }
 

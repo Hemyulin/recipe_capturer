@@ -4,6 +4,7 @@ import 'package:cookbuk/data/meal_plan_repository.dart';
 import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/meal_plan_slot.dart';
 import 'package:cookbuk/domain/recipe.dart';
+import 'package:cookbuk/ui/widgets/meal_choice_sheet.dart';
 import 'package:cookbuk/ui/widgets/recipe_image.dart';
 
 class TodayPage extends StatefulWidget {
@@ -17,8 +18,6 @@ class TodayPage extends StatefulWidget {
 }
 
 class _TodayPageState extends State<TodayPage> {
-  static const String _leftoversSlotValue = '__leftovers__';
-
   List<Recipe> _recipes = [];
   final Map<String, String?> _mealRecipeIds = {};
   late final DateTime _today = _dateOnly(DateTime.now());
@@ -67,7 +66,7 @@ class _TodayPageState extends State<TodayPage> {
   }
 
   bool _isLeftoversSlot(String slotId) {
-    return _mealRecipeIds[slotId] == _leftoversSlotValue;
+    return _mealRecipeIds[slotId] == MealChoiceSheet.leftoversValue;
   }
 
   Future<void> _openRecipe(Recipe? recipe) async {
@@ -80,16 +79,13 @@ class _TodayPageState extends State<TodayPage> {
     final selected = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
-      builder: (context) => _MealChoiceSheet(
-        recipes: _recipes,
-        leftoversValue: _leftoversSlotValue,
-      ),
+      builder: (context) => MealChoiceSheet(recipes: _recipes),
     );
     if (selected == null || !mounted) return;
 
     setState(() => _mealRecipeIds[slotId] = selected);
     try {
-      if (selected == _leftoversSlotValue) {
+      if (selected == MealChoiceSheet.leftoversValue) {
         await widget.mealPlanRepo.setLeftovers(date: _today, meal: slotId);
       } else {
         await widget.mealPlanRepo.setRecipe(
@@ -120,7 +116,7 @@ class _TodayPageState extends State<TodayPage> {
     return {
       for (final slot in slots)
         slot.meal: slot.isLeftovers
-            ? _leftoversSlotValue
+            ? MealChoiceSheet.leftoversValue
             : slot.isRecipe
             ? slot.recipeId
             : null,
@@ -216,8 +212,6 @@ class _TodayPageState extends State<TodayPage> {
 }
 
 class _MealSlotCard extends StatelessWidget {
-  static const String _leftoversImagePath = 'assets/demo_recipes/leftovers.png';
-
   const _MealSlotCard({
     required this.title,
     required this.time,
@@ -241,7 +235,9 @@ class _MealSlotCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final imagePath = isLeftovers ? _leftoversImagePath : recipe?.mainImagePath;
+    final imagePath = isLeftovers
+        ? MealChoiceSheet.leftoversImagePath
+        : recipe?.mainImagePath;
     final isPlanned = recipe != null || isLeftovers;
 
     final card = Card(
@@ -262,7 +258,7 @@ class _MealSlotCard extends StatelessWidget {
                           path: imagePath,
                           placeholderSeed: recipe?.id ?? title,
                         )
-                      : _UnplannedMealImage(title: title),
+                      : UnplannedMealImage(title: title),
                 ),
               ),
               const SizedBox(width: 14),
@@ -322,166 +318,6 @@ class _MealSlotCard extends StatelessWidget {
       onChange: onChange,
       onClear: onClear,
       child: card,
-    );
-  }
-}
-
-class _MealChoiceSheet extends StatefulWidget {
-  const _MealChoiceSheet({required this.recipes, required this.leftoversValue});
-
-  final List<Recipe> recipes;
-  final String leftoversValue;
-
-  @override
-  State<_MealChoiceSheet> createState() => _MealChoiceSheetState();
-}
-
-class _UnplannedMealImage extends StatelessWidget {
-  const _UnplannedMealImage({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return ColoredBox(
-      color: colorScheme.surfaceContainerHigh,
-      child: Center(
-        child: Icon(
-          Icons.add_rounded,
-          color: colorScheme.primary,
-          size: 34,
-          semanticLabel: '$title planen',
-        ),
-      ),
-    );
-  }
-}
-
-class _MealChoiceSheetState extends State<_MealChoiceSheet> {
-  final TextEditingController _searchController = TextEditingController();
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  List<Recipe> _filteredRecipes() {
-    final query = _searchController.text.trim().toLowerCase();
-    final sortedRecipes = [...widget.recipes]
-      ..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
-
-    if (query.isEmpty) return sortedRecipes;
-
-    return sortedRecipes.where((recipe) {
-      final inTitle = recipe.title.toLowerCase().contains(query);
-      final inIngredients = recipe.ingredients.any(
-        (ingredient) => ingredient.matches(query),
-      );
-      final inTags = recipe.tags.any(
-        (tag) => tag.toLowerCase().contains(query),
-      );
-      return inTitle || inIngredients || inTags;
-    }).toList();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final filteredRecipes = _filteredRecipes();
-
-    return SafeArea(
-      child: ListView.separated(
-        shrinkWrap: true,
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-        itemCount: filteredRecipes.isEmpty ? 4 : filteredRecipes.length + 3,
-        separatorBuilder: (_, index) =>
-            index <= 1 ? const SizedBox(height: 8) : const Divider(height: 1),
-        itemBuilder: (context, index) {
-          if (index == 0) {
-            return Text(
-              'Rezept auswählen',
-              style: Theme.of(context).textTheme.titleLarge,
-            );
-          }
-
-          if (index == 1) {
-            return TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Suchen',
-                prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: _searchController.text.isEmpty
-                    ? null
-                    : IconButton(
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() {});
-                        },
-                        icon: const Icon(Icons.close_rounded),
-                        tooltip: 'Suche löschen',
-                      ),
-              ),
-              onChanged: (_) => setState(() {}),
-            );
-          }
-
-          if (index == 2) {
-            return ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: const SizedBox(
-                  width: 56,
-                  height: 56,
-                  child: RecipeImage(path: _MealSlotCard._leftoversImagePath),
-                ),
-              ),
-              title: const Text('Reste'),
-              subtitle: const Text('Keine Rezeptauswahl für diese Mahlzeit'),
-              onTap: () => Navigator.of(context).pop(widget.leftoversValue),
-            );
-          }
-
-          if (filteredRecipes.isEmpty) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              child: Text(
-                'Keine Treffer',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            );
-          }
-
-          final recipe = filteredRecipes[index - 3];
-          return ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: SizedBox(
-                width: 56,
-                height: 56,
-                child: RecipeImage(
-                  path: recipe.mainImagePath,
-                  placeholderSeed: recipe.id,
-                ),
-              ),
-            ),
-            title: Text(recipe.title),
-            subtitle: Text(
-              [
-                '${recipe.ingredients.length} Zutaten',
-                if (recipe.totalTimeMinutes != null)
-                  '${recipe.totalTimeMinutes} min',
-              ].join(' · '),
-            ),
-            onTap: () => Navigator.of(context).pop(recipe.id),
-          );
-        },
-      ),
     );
   }
 }

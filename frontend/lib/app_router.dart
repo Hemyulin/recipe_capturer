@@ -11,6 +11,7 @@ import 'package:cookbuk/ui/pages/placeholder_page.dart';
 import 'package:cookbuk/ui/pages/recipe_details_page.dart';
 import 'package:cookbuk/ui/pages/recipe_list_page.dart';
 import 'package:cookbuk/ui/pages/today_page.dart';
+import 'package:cookbuk/ui/pages/week_page.dart';
 
 const apiBaseUrl = String.fromEnvironment(
   'COOKBUK_API_BASE_URL',
@@ -35,12 +36,8 @@ final router = GoRouter(
         ),
         GoRoute(
           path: '/week',
-          builder: (context, state) => const PlaceholderPage(
-            title: 'Woche',
-            icon: Icons.calendar_view_week_outlined,
-            message:
-                'Der Wochenplan bekommt später Frühstück, Mittagessen und Abendessen pro Tag.',
-          ),
+          builder: (context, state) =>
+              WeekPage(repo: repo, mealPlanRepo: mealPlanRepo),
         ),
         GoRoute(
           path: '/recipes',
