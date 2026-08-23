@@ -112,13 +112,14 @@ class FileRecipeRepository implements RecipeRepository {
   }
 
   @override
-  Future<void> add(Recipe recipe) async {
+  Future<Recipe> add(Recipe recipe) async {
     final items = await _readItems();
     final persistedRecipe = recipe.copyWith(
       imagePaths: await _persistImages(recipe),
     );
     items.add(persistedRecipe.toJson());
     await _writeItems(items);
+    return persistedRecipe;
   }
 
   @override
@@ -145,10 +146,10 @@ class FileRecipeRepository implements RecipeRepository {
   }
 
   @override
-  Future<void> update(Recipe recipe) async {
+  Future<Recipe> update(Recipe recipe) async {
     final recipes = await getAll();
     final index = recipes.indexWhere((r) => r.id == recipe.id);
-    if (index == -1) return;
+    if (index == -1) return recipe;
 
     final updatedRecipe = recipe.copyWith(
       imagePaths: await _persistImages(recipe),
@@ -157,5 +158,6 @@ class FileRecipeRepository implements RecipeRepository {
     final updated = [...recipes];
     updated[index] = updatedRecipe;
     await _writeAll(updated);
+    return updatedRecipe;
   }
 }

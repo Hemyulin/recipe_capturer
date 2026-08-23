@@ -26,6 +26,18 @@ void main() {
       request.response.headers.contentType = ContentType.json;
       if (request.method == 'GET' && request.uri.path == '/recipes') {
         request.response.write(jsonEncode([_recipeJson()]));
+      } else if (request.method == 'POST' && request.uri.path == '/recipes') {
+        request.response.write(jsonEncode(_recipeJson()));
+      } else if (request.method == 'PATCH' &&
+          request.uri.path.startsWith('/recipes/')) {
+        request.response.write(jsonEncode(_recipeJson()));
+      } else if (request.method == 'POST' &&
+          request.uri.path == '/recipes/oatmeal-buns/image') {
+        request.response.write(
+          jsonEncode(
+            _recipeJson(imagePaths: const ['/images/oatmeal-buns.jpg']),
+          ),
+        );
       } else {
         request.response.write(jsonEncode({'ok': true}));
       }
@@ -42,6 +54,10 @@ void main() {
 
     expect(recipes, hasLength(1));
     expect(recipes.single.title, 'Oatmeal Buns');
+    expect(
+      recipes.single.mainImagePath,
+      'http://${server.address.host}:${server.port}/images/oatmeal-buns.jpg',
+    );
     expect(requests.single.method, 'GET');
     expect(requests.single.path, '/recipes');
   });
@@ -63,9 +79,12 @@ void main() {
       notes: 'No flour.',
     );
 
-    await repository.add(recipe);
-    await repository.update(recipe);
+    final addedRecipe = await repository.add(recipe);
+    final updatedRecipe = await repository.update(recipe);
     await repository.deleteById(recipe.id);
+
+    expect(addedRecipe.title, 'Oatmeal Buns');
+    expect(updatedRecipe.title, 'Oatmeal Buns');
 
     expect(requests.map((request) => request.method), [
       'POST',
@@ -87,9 +106,30 @@ void main() {
       expect(payload.containsKey('lastCookedAt'), isFalse);
     }
   });
+
+  test('uploads recipe images to the backend', () async {
+    final file = await File(
+      '${Directory.systemTemp.path}/cookbuk_api_upload_test.jpg',
+    ).writeAsString('fake image');
+
+    final recipe = await repository.uploadImage(
+      recipeId: 'oatmeal-buns',
+      imagePath: file.path,
+    );
+
+    expect(requests.single.method, 'POST');
+    expect(requests.single.path, '/recipes/oatmeal-buns/image');
+    expect(requests.single.body, contains('form-data'));
+    expect(
+      recipe.mainImagePath,
+      'http://${server.address.host}:${server.port}/images/oatmeal-buns.jpg',
+    );
+
+    await file.delete();
+  });
 }
 
-Map<String, dynamic> _recipeJson() {
+Map<String, dynamic> _recipeJson({List<String>? imagePaths}) {
   return {
     'id': 'oatmeal-buns',
     'title': 'Oatmeal Buns',
@@ -100,7 +140,7 @@ Map<String, dynamic> _recipeJson() {
     'instructions': ['Mix everything.', 'Bake until golden.'],
     'tags': ['One pot', 'Breakfast'],
     'isFavorite': true,
-    'imagePaths': ['assets/demo_recipes/oatmeal_buns.png'],
+    'imagePaths': imagePaths ?? ['/images/oatmeal-buns.jpg'],
     'servings': 4,
     'season': 'Ganzjaehrig',
     'prepTimeMinutes': 10,

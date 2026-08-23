@@ -10,8 +10,9 @@ class InMemoryRecipeRepository implements RecipeRepository {
   }
 
   @override
-  Future<void> add(Recipe recipe) async {
+  Future<Recipe> add(Recipe recipe) async {
     _recipe.add(recipe);
+    return recipe;
   }
 
   @override
@@ -20,9 +21,10 @@ class InMemoryRecipeRepository implements RecipeRepository {
   }
 
   @override
-  Future<void> update(Recipe recipe) async {
+  Future<Recipe> update(Recipe recipe) async {
     final index = _recipe.indexWhere((r) => r.id == recipe.id);
-    if (index == -1) return;
+    if (index == -1) return recipe;
     _recipe[index] = recipe;
+    return recipe;
   }
 }

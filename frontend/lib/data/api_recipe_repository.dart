@@ -4,7 +4,7 @@ import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
 import 'package:http/http.dart' as http;
 
-class ApiRecipeRepository implements RecipeRepository {
+class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
   ApiRecipeRepository({required String baseUrl})
     : _baseUri = Uri.parse(baseUrl.replaceFirst(RegExp(r'/$'), ''));
 
@@ -15,13 +15,18 @@ class ApiRecipeRepository implements RecipeRepository {
     final response = await _send('GET', '/recipes');
     final decoded = jsonDecode(response);
     return (decoded as List<dynamic>)
-        .map((item) => Recipe.fromJson(item as Map<String, dynamic>))
+        .map((item) => _recipeFromJson(item as Map<String, dynamic>))
         .toList();
   }
 
   @override
-  Future<void> add(Recipe recipe) async {
-    await _send('POST', '/recipes', body: _recipePayload(recipe));
+  Future<Recipe> add(Recipe recipe) async {
+    final response = await _send(
+      'POST',
+      '/recipes',
+      body: _recipePayload(recipe),
+    );
+    return _recipeFromJson(jsonDecode(response) as Map<String, dynamic>);
   }
 
   @override
@@ -30,8 +35,36 @@ class ApiRecipeRepository implements RecipeRepository {
   }
 
   @override
-  Future<void> update(Recipe recipe) async {
-    await _send('PATCH', '/recipes/${recipe.id}', body: _recipePayload(recipe));
+  Future<Recipe> update(Recipe recipe) async {
+    final response = await _send(
+      'PATCH',
+      '/recipes/${recipe.id}',
+      body: _recipePayload(recipe),
+    );
+    return _recipeFromJson(jsonDecode(response) as Map<String, dynamic>);
+  }
+
+  @override
+  Future<Recipe> uploadImage({
+    required String recipeId,
+    required String imagePath,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      _uri('/recipes/$recipeId/image'),
+    );
+    request.files.add(await http.MultipartFile.fromPath('image', imagePath));
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiRecipeRepositoryException(
+        'Backend request failed: POST /recipes/$recipeId/image ${response.statusCode} ${response.body}',
+      );
+    }
+
+    return _recipeFromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Uri _uri(String path) {
@@ -54,6 +87,34 @@ class ApiRecipeRepository implements RecipeRepository {
       'tags': recipe.tags,
       'imagePaths': recipe.imagePaths,
     };
+  }
+
+  Recipe _recipeFromJson(Map<String, dynamic> json) {
+    final normalized = Map<String, dynamic>.from(json);
+    normalized['imagePaths'] = (json['imagePaths'] as List<dynamic>? ?? [])
+        .map((path) => _absoluteImagePath(path.toString()))
+        .toList();
+    return Recipe.fromJson(normalized);
+  }
+
+  String _absoluteImagePath(String value) {
+    if (value.startsWith('http://') ||
+        value.startsWith('https://') ||
+        value.startsWith('assets/')) {
+      return value;
+    }
+
+    if (value.startsWith('/')) {
+      return Uri(
+        scheme: _baseUri.scheme,
+        userInfo: _baseUri.userInfo,
+        host: _baseUri.host,
+        port: _baseUri.hasPort ? _baseUri.port : null,
+        path: value,
+      ).toString();
+    }
+
+    return value;
   }
 
   Future<String> _send(

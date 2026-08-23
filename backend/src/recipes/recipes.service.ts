@@ -1,6 +1,12 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { extname, join, resolve } from "node:path";
 import { DatabaseService } from "../database/database.service";
 import { CreateRecipeDto, RecipeIngredientDto } from "./dto/create-recipe.dto";
 import { UpdateRecipeDto } from "./dto/update-recipe.dto";
@@ -33,6 +39,13 @@ type IngredientRow = {
 type StepRow = {
   body: string;
   sort_order: number;
+};
+
+export type UploadedRecipeImage = {
+  originalname: string;
+  mimetype: string;
+  buffer: Buffer;
+  size: number;
 };
 
 @Injectable()
@@ -179,6 +192,39 @@ export class RecipesService {
     }
   }
 
+  setMainImage(id: string, image: UploadedRecipeImage) {
+    const existing = this.findRecipeRow(id);
+    if (!existing) throw new NotFoundException("Recipe not found");
+    if (!image.buffer || image.buffer.length === 0) {
+      throw new BadRequestException("Image file is empty");
+    }
+    if (!image.mimetype.startsWith("image/")) {
+      throw new BadRequestException("Only image uploads are supported");
+    }
+
+    const storagePath = this.imageStoragePath();
+    mkdirSync(storagePath, { recursive: true });
+
+    const filename = `${id}-${randomUUID()}${this.imageExtension(image)}`;
+    const targetPath = join(storagePath, filename);
+    writeFileSync(targetPath, image.buffer);
+
+    const imageUrl = `/images/${filename}`;
+    this.database.db
+      .prepare(
+        `
+        UPDATE recipes
+        SET image_url = ?, updated_at = ?
+        WHERE id = ? AND household_id = ? AND archived_at IS NULL
+        `,
+      )
+      .run(imageUrl, new Date().toISOString(), id, this.householdId());
+
+    this.deletePreviousStoredImage(existing.image_url);
+
+    return this.findOne(id);
+  }
+
   private findRecipeRow(id: string) {
     return this.database.db
       .prepare(
@@ -322,5 +368,44 @@ export class RecipesService {
 
   private householdId() {
     return this.config.get<string>("COOKBUK_HOUSEHOLD_ID", "local-household");
+  }
+
+  private imageStoragePath() {
+    return resolve(
+      process.cwd(),
+      this.config.get<string>("COOKBUK_IMAGE_STORAGE_PATH", "./data/images"),
+    );
+  }
+
+  private imageExtension(image: UploadedRecipeImage) {
+    const mimeExtensions: Record<string, string> = {
+      "image/gif": ".gif",
+      "image/heic": ".heic",
+      "image/jpeg": ".jpg",
+      "image/png": ".png",
+      "image/webp": ".webp",
+    };
+    const extension =
+      mimeExtensions[image.mimetype] ||
+      extname(image.originalname).toLowerCase();
+
+    if (/^\.[a-z0-9]{1,8}$/.test(extension)) return extension;
+    return ".jpg";
+  }
+
+  private deletePreviousStoredImage(imageUrl: string | null) {
+    if (!imageUrl?.startsWith("/images/")) return;
+
+    const filename = imageUrl.slice("/images/".length);
+    if (filename.includes("/") || filename.includes("\\")) return;
+
+    const filePath = join(this.imageStoragePath(), filename);
+    if (!existsSync(filePath)) return;
+
+    try {
+      unlinkSync(filePath);
+    } catch {
+      // Replacing the database value is more important than cleaning old files.
+    }
   }
 }

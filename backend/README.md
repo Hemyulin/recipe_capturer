@@ -45,6 +45,7 @@ pnpm rebuild better-sqlite3
 | `COOKBUK_PORT` | `3000` | API port |
 | `COOKBUK_HOST` | `127.0.0.1` | Use `0.0.0.0` on the Pi |
 | `COOKBUK_DATABASE_PATH` | `./data/cookbuk.sqlite` | SQLite file path |
+| `COOKBUK_IMAGE_STORAGE_PATH` | `./data/images` | Uploaded recipe image folder |
 | `COOKBUK_HOUSEHOLD_ID` | `local-household` | MVP household scope |
 | `COOKBUK_HOUSEHOLD_NAME` | `CookBuk Household` | Display/admin label |
 | `COOKBUK_CORS_ORIGIN` | `*` | Comma-separated origins or `*` |
@@ -86,9 +87,14 @@ Endpoints:
 - `GET /recipes/:id`
 - `POST /recipes`
 - `PATCH /recipes/:id`
+- `POST /recipes/:id/image` with multipart field `image`
 - `DELETE /recipes/:id`
 
 Delete currently archives recipes instead of hard-deleting them.
+
+Uploaded images are stored on disk and served back from `/images/<filename>`.
+Keep `COOKBUK_IMAGE_STORAGE_PATH` on persistent storage on the Pi, ideally next
+to the SQLite database backup path.
 
 ### Meal Plan
 
@@ -143,7 +149,6 @@ Tracked schema includes:
 
 ## MVP TODO
 
-- Add image upload/storage.
 - Add cooking-history creation when a completed day is closed.
 - Add shopping-list generation from planned meals.
 - Add simple household auth/shared token before exposing beyond Tailscale.

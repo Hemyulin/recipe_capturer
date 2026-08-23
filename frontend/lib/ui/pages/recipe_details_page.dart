@@ -53,6 +53,15 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
   Future<void> _addMainImage() async {
     final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
     if (picked == null) return;
+
+    if (widget.repo is RecipeImageRepository) {
+      final updatedRecipe = await (widget.repo as RecipeImageRepository)
+          .uploadImage(recipeId: recipe.id, imagePath: picked.path);
+      if (!mounted) return;
+      setState(() => recipe = updatedRecipe);
+      return;
+    }
+
     final updatedRecipe = recipe.copyWith(
       imagePaths: [picked.path, ...recipe.imagePaths.skip(1)],
     );

@@ -30,6 +30,14 @@ class RecipeImage extends StatelessWidget {
       );
     }
 
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return Image.network(
+        value,
+        fit: fit,
+        errorBuilder: (_, _, _) => _RecipePlaceholder(seed: seed),
+      );
+    }
+
     return Image.file(
       File(value),
       fit: fit,
