@@ -5,6 +5,7 @@ import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/meal_plan_slot.dart';
 import 'package:cookbuk/domain/recipe.dart';
 import 'package:cookbuk/ui/widgets/meal_choice_sheet.dart';
+import 'package:cookbuk/ui/widgets/load_state_view.dart';
 import 'package:cookbuk/ui/widgets/recipe_image.dart';
 
 class TodayPage extends StatefulWidget {
@@ -21,6 +22,8 @@ class _TodayPageState extends State<TodayPage> {
   List<Recipe> _recipes = [];
   final Map<String, String?> _mealRecipeIds = {};
   late final DateTime _today = _dateOnly(DateTime.now());
+  bool _isLoading = true;
+  String? _loadError;
 
   @override
   void initState() {
@@ -29,18 +32,31 @@ class _TodayPageState extends State<TodayPage> {
   }
 
   Future<void> _loadRecipes() async {
-    final recipes = await widget.repo.getAll();
-    final mealSlots = await widget.mealPlanRepo.getRange(
-      from: _today,
-      to: _today,
-    );
-    if (!mounted) return;
     setState(() {
-      _recipes = recipes;
-      _mealRecipeIds
-        ..clear()
-        ..addAll(_slotValues(mealSlots));
+      _isLoading = true;
+      _loadError = null;
     });
+    try {
+      final recipes = await widget.repo.getAll();
+      final mealSlots = await widget.mealPlanRepo.getRange(
+        from: _today,
+        to: _today,
+      );
+      if (!mounted) return;
+      setState(() {
+        _recipes = recipes;
+        _mealRecipeIds
+          ..clear()
+          ..addAll(_slotValues(mealSlots));
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _loadError = 'Backend nicht erreichbar.';
+      });
+    }
   }
 
   Recipe? _recipeById(String? id) {
@@ -144,69 +160,81 @@ class _TodayPageState extends State<TodayPage> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Heute')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-        children: [
-          _MealSlotCard(
-            title: 'Frühstück',
-            time: '07:30',
-            recipe: breakfast,
-            isLeftovers: breakfastIsLeftovers,
-            isRecurring: breakfast != null && !breakfastIsLeftovers,
-            onTap: breakfast == null || breakfastIsLeftovers
-                ? () => _chooseRecipe('breakfast')
-                : () => _openRecipe(breakfast),
-            onChange: () => _chooseRecipe('breakfast'),
-            onClear: () => _clearRecipe('breakfast'),
-          ),
-          const SizedBox(height: 12),
-          _MealSlotCard(
-            title: 'Mittagessen',
-            time: '12:30',
-            recipe: lunch,
-            isLeftovers: lunchIsLeftovers,
-            onTap: lunch == null || lunchIsLeftovers
-                ? () => _chooseRecipe('lunch')
-                : () => _openRecipe(lunch),
-            onChange: () => _chooseRecipe('lunch'),
-            onClear: () => _clearRecipe('lunch'),
-          ),
-          const SizedBox(height: 12),
-          _MealSlotCard(
-            title: 'Abendessen',
-            time: '18:30',
-            recipe: dinner,
-            isLeftovers: dinnerIsLeftovers,
-            onTap: dinner == null || dinnerIsLeftovers
-                ? () => _chooseRecipe('dinner')
-                : () => _openRecipe(dinner),
-            onChange: () => _chooseRecipe('dinner'),
-            onClear: () => _clearRecipe('dinner'),
-          ),
-          const SizedBox(height: 18),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Heute vorbereiten',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Noch keine Vorbereitung geplant.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+      body: _isLoading
+          ? const LoadStateView.loading()
+          : _loadError != null
+          ? LoadStateView.error(
+              title: 'Heute konnte nicht geladen werden',
+              message:
+                  'Prüfe, ob der CookBuk-Backendserver läuft und dein Gerät im Tailscale ist.',
+              onRetry: _loadRecipes,
+            )
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+              children: [
+                _MealSlotCard(
+                  title: 'Frühstück',
+                  time: '07:30',
+                  recipe: breakfast,
+                  isLeftovers: breakfastIsLeftovers,
+                  isRecurring: breakfast != null && !breakfastIsLeftovers,
+                  onTap: breakfast == null || breakfastIsLeftovers
+                      ? () => _chooseRecipe('breakfast')
+                      : () => _openRecipe(breakfast),
+                  onChange: () => _chooseRecipe('breakfast'),
+                  onClear: () => _clearRecipe('breakfast'),
+                ),
+                const SizedBox(height: 12),
+                _MealSlotCard(
+                  title: 'Mittagessen',
+                  time: '12:30',
+                  recipe: lunch,
+                  isLeftovers: lunchIsLeftovers,
+                  onTap: lunch == null || lunchIsLeftovers
+                      ? () => _chooseRecipe('lunch')
+                      : () => _openRecipe(lunch),
+                  onChange: () => _chooseRecipe('lunch'),
+                  onClear: () => _clearRecipe('lunch'),
+                ),
+                const SizedBox(height: 12),
+                _MealSlotCard(
+                  title: 'Abendessen',
+                  time: '18:30',
+                  recipe: dinner,
+                  isLeftovers: dinnerIsLeftovers,
+                  onTap: dinner == null || dinnerIsLeftovers
+                      ? () => _chooseRecipe('dinner')
+                      : () => _openRecipe(dinner),
+                  onChange: () => _chooseRecipe('dinner'),
+                  onClear: () => _clearRecipe('dinner'),
+                ),
+                const SizedBox(height: 18),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Heute vorbereiten',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Noch keine Vorbereitung geplant.',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
     );
   }
 }

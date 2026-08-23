@@ -4,6 +4,7 @@ import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/meal_plan_slot.dart';
 import 'package:cookbuk/domain/recipe.dart';
 import 'package:cookbuk/ui/widgets/meal_choice_sheet.dart';
+import 'package:cookbuk/ui/widgets/load_state_view.dart';
 import 'package:cookbuk/ui/widgets/recipe_image.dart';
 
 class WeekPage extends StatefulWidget {
@@ -40,6 +41,7 @@ class _WeekPageState extends State<WeekPage> {
   late DateTime _weekStart = _startOfWeek(DateTime.now());
   late DateTime _selectedDate = _dateOnly(DateTime.now());
   bool _isLoading = true;
+  String? _loadError;
 
   DateTime get _weekEnd => _weekStart.add(const Duration(days: 6));
 
@@ -50,7 +52,10 @@ class _WeekPageState extends State<WeekPage> {
   }
 
   Future<void> _loadWeek() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
     try {
       final recipes = await widget.repo.getAll();
       final slots = await widget.mealPlanRepo.getRange(
@@ -65,8 +70,10 @@ class _WeekPageState extends State<WeekPage> {
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() => _isLoading = false);
-      _showPlanError('Wochenplan konnte nicht geladen werden.');
+      setState(() {
+        _isLoading = false;
+        _loadError = 'Backend nicht erreichbar.';
+      });
     }
   }
 
@@ -192,7 +199,17 @@ class _WeekPageState extends State<WeekPage> {
             if (_isLoading)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 40),
-                child: Center(child: CircularProgressIndicator()),
+                child: LoadStateView.loading(),
+              )
+            else if (_loadError != null)
+              SizedBox(
+                height: 360,
+                child: LoadStateView.error(
+                  title: 'Woche konnte nicht geladen werden',
+                  message:
+                      'Prüfe, ob der CookBuk-Backendserver läuft und dein Gerät im Tailscale ist.',
+                  onRetry: _loadWeek,
+                ),
               )
             else ...[
               _WeekDayStrip(

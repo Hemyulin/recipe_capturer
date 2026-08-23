@@ -18,8 +18,27 @@ flutter run
 flutter test
 ```
 
+For a phone talking to the Pi or another machine on Tailscale, pass the backend
+URL at build/run time:
+
+```sh
+flutter run \
+  --dart-define=COOKBUK_API_BASE_URL=http://cookbuk-pi:3000
+```
+
+Use the Pi's Tailscale hostname or `100.x.y.z` address. The default is
+`http://127.0.0.1:3000`, which is only right when the app and backend run on the
+same machine.
+
+Useful local checks:
+
+```sh
+flutter analyze
+flutter test
+flutter build web
+```
+
 ## Backend Direction
 
-The backend should become the shared source of truth for the household: recipes,
-meal plans, and shopping state. A small REST API backed by SQLite is enough for the
-first Pi version, with simple household auth and regular database backups.
+The backend is the shared source of truth for recipes and meal plans. See
+`backend/README.md` for local setup, seed data, and API details.

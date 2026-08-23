@@ -18,6 +18,7 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
     expect(find.text('Heute'), findsWidgets);
     expect(find.text('Was essen wir heute?'), findsNothing);
