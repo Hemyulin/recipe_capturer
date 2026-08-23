@@ -8,6 +8,7 @@ import {
   Put,
   Query,
 } from "@nestjs/common";
+import { UpdateMealExtrasDto } from "./dto/update-meal-extras.dto";
 import { UpsertMealSlotDto } from "./dto/upsert-meal-slot.dto";
 import { MealPlanService } from "./meal-plan.service";
 
@@ -32,6 +33,15 @@ export class MealPlanController {
     @Body() body: UpsertMealSlotDto,
   ) {
     return this.mealPlanService.upsert(date, meal, body);
+  }
+
+  @Put(":date/:meal/extras")
+  updateExtras(
+    @Param("date") date: string,
+    @Param("meal") meal: string,
+    @Body() body: UpdateMealExtrasDto,
+  ) {
+    return this.mealPlanService.updateExtras(date, meal, body);
   }
 
   @Delete(":date/:meal")

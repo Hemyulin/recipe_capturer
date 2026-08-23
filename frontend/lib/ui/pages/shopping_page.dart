@@ -51,11 +51,15 @@ class _ShoppingPageState extends State<ShoppingPage> {
         for (final slot in slots)
           if (slot.isRecipe && slot.recipeId != null) recipeById[slot.recipeId],
       ].whereType<Recipe>().toList();
+      final extras = [
+        for (final slot in slots)
+          for (final extra in slot.extras) extra,
+      ];
 
       if (!mounted) return;
       setState(() {
         _plannedRecipeCount = plannedRecipes.length;
-        _items = _ShoppingItem.fromRecipes(plannedRecipes);
+        _items = _ShoppingItem.fromRecipesAndExtras(plannedRecipes, extras);
         _checkedItemKeys = _checkedItemKeys.intersection(
           _items.map((item) => item.key).toSet(),
         );
@@ -361,7 +365,10 @@ class _ShoppingItem {
     return '$quantityLabel $name';
   }
 
-  static List<_ShoppingItem> fromRecipes(List<Recipe> recipes) {
+  static List<_ShoppingItem> fromRecipesAndExtras(
+    List<Recipe> recipes,
+    List<String> extras,
+  ) {
     final builders = <String, _ShoppingItemBuilder>{};
 
     for (final recipe in recipes) {
@@ -376,6 +383,16 @@ class _ShoppingItem {
         );
         builder.add(ingredient.quantity.trim(), recipe.title);
       }
+    }
+
+    for (final extra in extras) {
+      final name = extra.trim();
+      if (name.isEmpty) continue;
+      final key = 'extra|${name.toLowerCase()}';
+      builders.putIfAbsent(
+        key,
+        () => _ShoppingItemBuilder(name: name, unit: ''),
+      );
     }
 
     final items = builders.entries

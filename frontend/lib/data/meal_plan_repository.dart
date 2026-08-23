@@ -36,5 +36,11 @@ abstract class MealPlanRepository {
 
   Future<void> setEmpty({required DateTime date, required String meal});
 
+  Future<void> setExtras({
+    required DateTime date,
+    required String meal,
+    required List<String> extras,
+  });
+
   Future<CloseDayResult> closeDay(DateTime date);
 }

@@ -4,6 +4,7 @@ import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/meal_plan_slot.dart';
 import 'package:cookbuk/domain/recipe.dart';
 import 'package:cookbuk/ui/widgets/meal_choice_sheet.dart';
+import 'package:cookbuk/ui/widgets/meal_extras_sheet.dart';
 import 'package:cookbuk/ui/widgets/load_state_view.dart';
 import 'package:cookbuk/ui/widgets/recipe_image.dart';
 
@@ -38,6 +39,7 @@ class _WeekPageState extends State<WeekPage> {
 
   List<Recipe> _recipes = [];
   Map<String, String?> _slotValues = {};
+  Map<String, List<String>> _slotExtras = {};
   late DateTime _weekStart = _startOfWeek(DateTime.now());
   late DateTime _selectedDate = _dateOnly(DateTime.now());
   bool _isLoading = true;
@@ -66,6 +68,7 @@ class _WeekPageState extends State<WeekPage> {
       setState(() {
         _recipes = recipes;
         _slotValues = _slotValuesFrom(slots);
+        _slotExtras = _slotExtrasFrom(slots);
         _isLoading = false;
       });
     } catch (_) {
@@ -103,6 +106,10 @@ class _WeekPageState extends State<WeekPage> {
 
   String? _slotValue(DateTime date, String meal) {
     return _slotValues[_slotKey(date, meal)];
+  }
+
+  List<String> _extrasValue(DateTime date, String meal) {
+    return _slotExtras[_slotKey(date, meal)] ?? const [];
   }
 
   Future<void> _chooseSlot(DateTime date, String meal) async {
@@ -148,6 +155,32 @@ class _WeekPageState extends State<WeekPage> {
     }
   }
 
+  Future<void> _editExtras(DateTime date, String meal) async {
+    final selectedExtras = await showModalBottomSheet<List<String>>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) =>
+          MealExtrasSheet(initialExtras: _extrasValue(date, meal)),
+    );
+    if (selectedExtras == null || !mounted) return;
+
+    final key = _slotKey(date, meal);
+    final previousExtras = _slotExtras[key] ?? const <String>[];
+    setState(() => _slotExtras[key] = selectedExtras);
+
+    try {
+      await widget.mealPlanRepo.setExtras(
+        date: date,
+        meal: meal,
+        extras: selectedExtras,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _slotExtras[key] = previousExtras);
+      _showPlanError('Extras konnten nicht gespeichert werden.');
+    }
+  }
+
   Map<String, String?> _slotValuesFrom(List<MealPlanSlot> slots) {
     return {
       for (final slot in slots)
@@ -156,6 +189,13 @@ class _WeekPageState extends State<WeekPage> {
             : slot.isRecipe
             ? slot.recipeId
             : null,
+    };
+  }
+
+  Map<String, List<String>> _slotExtrasFrom(List<MealPlanSlot> slots) {
+    return {
+      for (final slot in slots)
+        _slotKey(slot.plannedFor, slot.meal): slot.extras,
     };
   }
 
@@ -233,8 +273,10 @@ class _WeekPageState extends State<WeekPage> {
                 isLeftoversForMeal: (meal) =>
                     _slotValue(_selectedDate, meal) ==
                     MealChoiceSheet.leftoversValue,
+                extrasForMeal: (meal) => _extrasValue(_selectedDate, meal),
                 onChooseMeal: (meal) => _chooseSlot(_selectedDate, meal),
                 onClearMeal: (meal) => _clearSlot(_selectedDate, meal),
+                onEditExtras: (meal) => _editExtras(_selectedDate, meal),
               ),
             ],
           ],
@@ -505,16 +547,20 @@ class _SelectedDayPlan extends StatelessWidget {
     required this.meals,
     required this.recipeForMeal,
     required this.isLeftoversForMeal,
+    required this.extrasForMeal,
     required this.onChooseMeal,
     required this.onClearMeal,
+    required this.onEditExtras,
   });
 
   final DateTime date;
   final List<_MealInfo> meals;
   final Recipe? Function(String meal) recipeForMeal;
   final bool Function(String meal) isLeftoversForMeal;
+  final List<String> Function(String meal) extrasForMeal;
   final void Function(String meal) onChooseMeal;
   final void Function(String meal) onClearMeal;
+  final void Function(String meal) onEditExtras;
 
   @override
   Widget build(BuildContext context) {
@@ -525,8 +571,10 @@ class _SelectedDayPlan extends StatelessWidget {
             meal: meal,
             recipe: recipeForMeal(meal.id),
             isLeftovers: isLeftoversForMeal(meal.id),
+            extras: extrasForMeal(meal.id),
             onTap: () => onChooseMeal(meal.id),
             onClear: () => onClearMeal(meal.id),
+            onExtras: () => onEditExtras(meal.id),
           ),
           if (meal != meals.last) const SizedBox(height: 12),
         ],
@@ -540,15 +588,19 @@ class _WeekMealCard extends StatelessWidget {
     required this.meal,
     this.recipe,
     required this.isLeftovers,
+    this.extras = const [],
     required this.onTap,
     required this.onClear,
+    required this.onExtras,
   });
 
   final _MealInfo meal;
   final Recipe? recipe;
   final bool isLeftovers;
+  final List<String> extras;
   final VoidCallback onTap;
   final VoidCallback onClear;
+  final VoidCallback onExtras;
 
   @override
   Widget build(BuildContext context) {
@@ -601,6 +653,17 @@ class _WeekMealCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyLarge,
                     ),
+                    if (extras.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        '+ ${extras.join(' · ')}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                     if (recipe?.totalTimeMinutes != null) ...[
                       const SizedBox(height: 8),
                       Text(
@@ -614,15 +677,26 @@ class _WeekMealCard extends StatelessWidget {
                 ),
               ),
               if (isPlanned)
-                IconButton(
-                  onPressed: onClear,
-                  icon: const Icon(Icons.close_rounded),
-                  tooltip: 'Mahlzeit leeren',
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      onPressed: onExtras,
+                      icon: const Icon(Icons.add_circle_outline_rounded),
+                      tooltip: 'Extras bearbeiten',
+                    ),
+                    IconButton(
+                      onPressed: onClear,
+                      icon: const Icon(Icons.close_rounded),
+                      tooltip: 'Mahlzeit leeren',
+                    ),
+                  ],
                 )
               else
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 8),
-                  child: Icon(Icons.add_rounded),
+                IconButton(
+                  onPressed: onExtras,
+                  icon: const Icon(Icons.add_circle_outline_rounded),
+                  tooltip: 'Extras bearbeiten',
                 ),
             ],
           ),

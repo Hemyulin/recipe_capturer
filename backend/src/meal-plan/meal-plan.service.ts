@@ -6,6 +6,7 @@ import {
 import { ConfigService } from "@nestjs/config";
 import { randomUUID } from "node:crypto";
 import { DatabaseService } from "../database/database.service";
+import { UpdateMealExtrasDto } from "./dto/update-meal-extras.dto";
 import { UpsertMealSlotDto } from "./dto/upsert-meal-slot.dto";
 
 type MealSlotRow = {
@@ -13,6 +14,7 @@ type MealSlotRow = {
   meal: string;
   slot_type: string;
   recipe_id: string | null;
+  extras_json: string;
 };
 
 const meals = new Set(["breakfast", "lunch", "dinner"]);
@@ -32,7 +34,7 @@ export class MealPlanService {
     const rows = this.database.db
       .prepare(
         `
-        SELECT planned_for, meal, slot_type, recipe_id
+        SELECT planned_for, meal, slot_type, recipe_id, extras_json
         FROM meal_plan_slots
         WHERE household_id = ? AND planned_for BETWEEN ? AND ?
         ORDER BY planned_for ASC, meal ASC
@@ -48,7 +50,13 @@ export class MealPlanService {
     const normalizedMeal = this.normalizeMeal(meal);
 
     if (input.slotType === "empty") {
-      return this.writeSlot(plannedFor, normalizedMeal, "empty", null);
+      return this.writeSlot(
+        plannedFor,
+        normalizedMeal,
+        "empty",
+        null,
+        input.extras == null ? [] : this.normalizeExtras(input.extras),
+      );
     }
 
     if (input.slotType === "recipe") {
@@ -59,8 +67,44 @@ export class MealPlanService {
     }
 
     const recipeId = input.slotType === "recipe" ? input.recipeId! : null;
+    const extras =
+      input.extras == null ? undefined : this.normalizeExtras(input.extras);
 
-    return this.writeSlot(plannedFor, normalizedMeal, input.slotType, recipeId);
+    return this.writeSlot(
+      plannedFor,
+      normalizedMeal,
+      input.slotType,
+      recipeId,
+      extras,
+    );
+  }
+
+  updateExtras(date: string, meal: string, input: UpdateMealExtrasDto) {
+    const plannedFor = this.normalizeDate(date);
+    const normalizedMeal = this.normalizeMeal(meal);
+    const extras = this.normalizeExtras(input.extras);
+    const existing = this.database.db
+      .prepare(
+        `
+        SELECT planned_for, meal, slot_type, recipe_id, extras_json
+        FROM meal_plan_slots
+        WHERE household_id = ? AND planned_for = ? AND meal = ?
+        `,
+      )
+      .get(this.householdId(), plannedFor, normalizedMeal) as
+      MealSlotRow | undefined;
+
+    if (!existing) {
+      return this.writeSlot(plannedFor, normalizedMeal, "empty", null, extras);
+    }
+
+    return this.writeSlot(
+      plannedFor,
+      normalizedMeal,
+      existing.slot_type as "recipe" | "leftovers" | "empty",
+      existing.recipe_id,
+      extras,
+    );
   }
 
   clear(date: string, meal: string) {
@@ -85,7 +129,7 @@ export class MealPlanService {
     const slots = this.database.db
       .prepare(
         `
-        SELECT planned_for, meal, slot_type, recipe_id
+        SELECT planned_for, meal, slot_type, recipe_id, extras_json
         FROM meal_plan_slots
         WHERE household_id = ?
           AND planned_for = ?
@@ -136,14 +180,19 @@ export class MealPlanService {
     meal: string,
     slotType: "recipe" | "leftovers" | "empty",
     recipeId: string | null,
+    extras?: string[],
   ) {
+    const extrasJson = extras == null ? null : JSON.stringify(extras);
     this.database.db
       .prepare(
         `
-        INSERT INTO meal_plan_slots (id, household_id, planned_for, meal, slot_type, recipe_id)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO meal_plan_slots (id, household_id, planned_for, meal, slot_type, recipe_id, extras_json)
+        VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, '[]'))
         ON CONFLICT(household_id, planned_for, meal)
-        DO UPDATE SET slot_type = excluded.slot_type, recipe_id = excluded.recipe_id
+        DO UPDATE SET
+          slot_type = excluded.slot_type,
+          recipe_id = excluded.recipe_id,
+          extras_json = COALESCE(?, meal_plan_slots.extras_json)
         `,
       )
       .run(
@@ -153,6 +202,8 @@ export class MealPlanService {
         meal,
         slotType,
         recipeId,
+        extrasJson,
+        extrasJson,
       );
 
     return {
@@ -160,6 +211,7 @@ export class MealPlanService {
       meal,
       slotType,
       recipeId,
+      extras: extras ?? [],
     };
   }
 
@@ -214,7 +266,25 @@ export class MealPlanService {
       meal: row.meal,
       slotType: row.slot_type,
       recipeId: row.recipe_id,
+      extras: this.parseExtras(row.extras_json),
     };
+  }
+
+  private normalizeExtras(values: string[]) {
+    return values
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0)
+      .slice(0, 8);
+  }
+
+  private parseExtras(value: string) {
+    try {
+      const parsed = JSON.parse(value);
+      if (!Array.isArray(parsed)) return [];
+      return this.normalizeExtras(parsed.map((item) => String(item)));
+    } catch {
+      return [];
+    }
   }
 
   private normalizeDate(value: string) {

@@ -28,6 +28,7 @@ class InMemoryMealPlanRepository implements MealPlanRepository {
       meal: meal,
       slotType: 'recipe',
       recipeId: recipeId,
+      extras: _slots[_slotKey(date, meal)]?.extras ?? const [],
     );
   }
 
@@ -37,6 +38,7 @@ class InMemoryMealPlanRepository implements MealPlanRepository {
       plannedFor: _dateOnly(date),
       meal: meal,
       slotType: 'leftovers',
+      extras: _slots[_slotKey(date, meal)]?.extras ?? const [],
     );
     return Future.value();
   }
@@ -47,6 +49,25 @@ class InMemoryMealPlanRepository implements MealPlanRepository {
       plannedFor: _dateOnly(date),
       meal: meal,
       slotType: 'empty',
+      extras: const [],
+    );
+    return Future.value();
+  }
+
+  @override
+  Future<void> setExtras({
+    required DateTime date,
+    required String meal,
+    required List<String> extras,
+  }) {
+    final key = _slotKey(date, meal);
+    final existing = _slots[key];
+    _slots[key] = MealPlanSlot(
+      plannedFor: _dateOnly(date),
+      meal: meal,
+      slotType: existing?.slotType ?? 'empty',
+      recipeId: existing?.recipeId,
+      extras: _normalizeExtras(extras),
     );
     return Future.value();
   }
@@ -84,5 +105,13 @@ class InMemoryMealPlanRepository implements MealPlanRepository {
 
   DateTime _dateOnly(DateTime date) {
     return DateTime(date.year, date.month, date.day);
+  }
+
+  List<String> _normalizeExtras(List<String> values) {
+    return values
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .take(8)
+        .toList();
   }
 }

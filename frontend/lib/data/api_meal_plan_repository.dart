@@ -49,11 +49,13 @@ class ApiMealPlanRepository implements MealPlanRepository {
       );
     } on Object catch (error) {
       if (!_isOfflineError(error)) rethrow;
+      final existing = _offlineSlots[_slotKey(date, meal)];
       _writeOfflineSlot(
         date: date,
         meal: meal,
         slotType: 'recipe',
         recipeId: recipeId,
+        extras: existing?.extras ?? const [],
       );
     }
   }
@@ -67,7 +69,13 @@ class ApiMealPlanRepository implements MealPlanRepository {
       await _upsert(date: date, meal: meal, body: {'slotType': 'leftovers'});
     } on Object catch (error) {
       if (!_isOfflineError(error)) rethrow;
-      _writeOfflineSlot(date: date, meal: meal, slotType: 'leftovers');
+      final existing = _offlineSlots[_slotKey(date, meal)];
+      _writeOfflineSlot(
+        date: date,
+        meal: meal,
+        slotType: 'leftovers',
+        extras: existing?.extras ?? const [],
+      );
     }
   }
 
@@ -78,6 +86,32 @@ class ApiMealPlanRepository implements MealPlanRepository {
     } on Object catch (error) {
       if (!_isOfflineError(error)) rethrow;
       _writeOfflineSlot(date: date, meal: meal, slotType: 'empty');
+    }
+  }
+
+  @override
+  Future<void> setExtras({
+    required DateTime date,
+    required String meal,
+    required List<String> extras,
+  }) async {
+    final normalized = _normalizeExtras(extras);
+    try {
+      await _send(
+        'PUT',
+        '/meal-plan/${_dateKey(date)}/$meal/extras',
+        body: {'extras': normalized},
+      );
+    } on Object catch (error) {
+      if (!_isOfflineError(error)) rethrow;
+      final existing = _offlineSlots[_slotKey(date, meal)];
+      _writeOfflineSlot(
+        date: date,
+        meal: meal,
+        slotType: existing?.slotType ?? 'empty',
+        recipeId: existing?.recipeId,
+        extras: normalized,
+      );
     }
   }
 
@@ -227,13 +261,25 @@ class ApiMealPlanRepository implements MealPlanRepository {
     required String meal,
     required String slotType,
     String? recipeId,
+    List<String> extras = const [],
   }) {
     _offlineSlots['${_dateKey(date)}:$meal'] = MealPlanSlot(
       plannedFor: _dateOnly(date),
       meal: meal,
       slotType: slotType,
       recipeId: recipeId,
+      extras: extras,
     );
+  }
+
+  String _slotKey(DateTime date, String meal) => '${_dateKey(date)}:$meal';
+
+  List<String> _normalizeExtras(List<String> values) {
+    return values
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .take(8)
+        .toList();
   }
 
   DateTime _dateOnly(DateTime date) {

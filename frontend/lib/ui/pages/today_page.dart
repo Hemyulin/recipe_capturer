@@ -5,6 +5,7 @@ import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/meal_plan_slot.dart';
 import 'package:cookbuk/domain/recipe.dart';
 import 'package:cookbuk/ui/widgets/meal_choice_sheet.dart';
+import 'package:cookbuk/ui/widgets/meal_extras_sheet.dart';
 import 'package:cookbuk/ui/widgets/load_state_view.dart';
 import 'package:cookbuk/ui/widgets/recipe_image.dart';
 
@@ -21,6 +22,7 @@ class TodayPage extends StatefulWidget {
 class _TodayPageState extends State<TodayPage> {
   List<Recipe> _recipes = [];
   final Map<String, String?> _mealRecipeIds = {};
+  final Map<String, List<String>> _mealExtras = {};
   late final DateTime _today = _dateOnly(DateTime.now());
   bool _isLoading = true;
   String? _loadError;
@@ -48,6 +50,9 @@ class _TodayPageState extends State<TodayPage> {
         _mealRecipeIds
           ..clear()
           ..addAll(_slotValues(mealSlots));
+        _mealExtras
+          ..clear()
+          ..addAll(_extrasValues(mealSlots));
         _isLoading = false;
       });
     } catch (_) {
@@ -128,6 +133,30 @@ class _TodayPageState extends State<TodayPage> {
     }
   }
 
+  Future<void> _editExtras(String slotId) async {
+    final extras = await showModalBottomSheet<List<String>>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) =>
+          MealExtrasSheet(initialExtras: _mealExtras[slotId] ?? const []),
+    );
+    if (extras == null || !mounted) return;
+
+    final previous = _mealExtras[slotId] ?? const <String>[];
+    setState(() => _mealExtras[slotId] = extras);
+    try {
+      await widget.mealPlanRepo.setExtras(
+        date: _today,
+        meal: slotId,
+        extras: extras,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _mealExtras[slotId] = previous);
+      _showPlanError();
+    }
+  }
+
   Future<void> _closeToday() async {
     try {
       final result = await widget.mealPlanRepo.closeDay(_today);
@@ -159,6 +188,10 @@ class _TodayPageState extends State<TodayPage> {
             ? slot.recipeId
             : null,
     };
+  }
+
+  Map<String, List<String>> _extrasValues(List<MealPlanSlot> slots) {
+    return {for (final slot in slots) slot.meal: slot.extras};
   }
 
   void _showPlanError() {
@@ -211,12 +244,14 @@ class _TodayPageState extends State<TodayPage> {
                   time: '07:30',
                   recipe: breakfast,
                   isLeftovers: breakfastIsLeftovers,
+                  extras: _mealExtras['breakfast'] ?? const [],
                   isRecurring: breakfast != null && !breakfastIsLeftovers,
                   onTap: breakfast == null || breakfastIsLeftovers
                       ? () => _chooseRecipe('breakfast')
                       : () => _openRecipe(breakfast),
                   onChange: () => _chooseRecipe('breakfast'),
                   onClear: () => _clearRecipe('breakfast'),
+                  onExtras: () => _editExtras('breakfast'),
                 ),
                 const SizedBox(height: 12),
                 _MealSlotCard(
@@ -224,11 +259,13 @@ class _TodayPageState extends State<TodayPage> {
                   time: '12:30',
                   recipe: lunch,
                   isLeftovers: lunchIsLeftovers,
+                  extras: _mealExtras['lunch'] ?? const [],
                   onTap: lunch == null || lunchIsLeftovers
                       ? () => _chooseRecipe('lunch')
                       : () => _openRecipe(lunch),
                   onChange: () => _chooseRecipe('lunch'),
                   onClear: () => _clearRecipe('lunch'),
+                  onExtras: () => _editExtras('lunch'),
                 ),
                 const SizedBox(height: 12),
                 _MealSlotCard(
@@ -236,11 +273,13 @@ class _TodayPageState extends State<TodayPage> {
                   time: '18:30',
                   recipe: dinner,
                   isLeftovers: dinnerIsLeftovers,
+                  extras: _mealExtras['dinner'] ?? const [],
                   onTap: dinner == null || dinnerIsLeftovers
                       ? () => _chooseRecipe('dinner')
                       : () => _openRecipe(dinner),
                   onChange: () => _chooseRecipe('dinner'),
                   onClear: () => _clearRecipe('dinner'),
+                  onExtras: () => _editExtras('dinner'),
                 ),
                 const SizedBox(height: 18),
                 Card(
@@ -279,20 +318,24 @@ class _MealSlotCard extends StatelessWidget {
     required this.time,
     this.recipe,
     this.isLeftovers = false,
+    this.extras = const [],
     this.isRecurring = false,
     this.onTap,
     this.onChange,
     this.onClear,
+    this.onExtras,
   });
 
   final String title;
   final String time;
   final Recipe? recipe;
   final bool isLeftovers;
+  final List<String> extras;
   final bool isRecurring;
   final VoidCallback? onTap;
   final VoidCallback? onChange;
   final VoidCallback? onClear;
+  final VoidCallback? onExtras;
 
   @override
   Widget build(BuildContext context) {
@@ -343,6 +386,17 @@ class _MealSlotCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyLarge,
                     ),
+                    if (extras.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        '+ ${extras.join(' · ')}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
@@ -367,6 +421,11 @@ class _MealSlotCard extends StatelessWidget {
                     ),
                   ],
                 ),
+              ),
+              IconButton(
+                onPressed: onExtras,
+                icon: const Icon(Icons.add_circle_outline_rounded),
+                tooltip: 'Extras bearbeiten',
               ),
             ],
           ),

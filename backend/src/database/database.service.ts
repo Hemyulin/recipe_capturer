@@ -71,6 +71,11 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       "slot_type",
       "TEXT NOT NULL DEFAULT 'recipe'",
     );
+    this.ensureColumn(
+      "meal_plan_slots",
+      "extras_json",
+      "TEXT NOT NULL DEFAULT '[]'",
+    );
   }
 
   private ensureColumn(table: string, column: string, definition: string) {

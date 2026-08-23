@@ -4,12 +4,14 @@ class MealPlanSlot {
     required this.meal,
     required this.slotType,
     this.recipeId,
+    this.extras = const [],
   });
 
   final DateTime plannedFor;
   final String meal;
   final String slotType;
   final String? recipeId;
+  final List<String> extras;
 
   bool get isRecipe => slotType == 'recipe';
   bool get isLeftovers => slotType == 'leftovers';
@@ -21,6 +23,10 @@ class MealPlanSlot {
       meal: json['meal'] as String,
       slotType: json['slotType'] as String,
       recipeId: json['recipeId'] as String?,
+      extras: (json['extras'] as List<dynamic>? ?? [])
+          .map((item) => item.toString().trim())
+          .where((item) => item.isNotEmpty)
+          .toList(),
     );
   }
 }

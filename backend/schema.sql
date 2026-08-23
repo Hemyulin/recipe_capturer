@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS meal_plan_slots (
   meal TEXT NOT NULL,
   slot_type TEXT NOT NULL DEFAULT 'recipe',
   recipe_id TEXT REFERENCES recipes(id) ON DELETE SET NULL,
+  extras_json TEXT NOT NULL DEFAULT '[]',
   UNIQUE (household_id, planned_for, meal)
 );
 

@@ -37,6 +37,7 @@ void main() {
               'meal': 'breakfast',
               'slotType': 'recipe',
               'recipeId': 'recipe-1',
+              'extras': ['Brot'],
             },
           ]),
         );
@@ -69,6 +70,7 @@ void main() {
     expect(slots, hasLength(1));
     expect(slots.single.meal, 'breakfast');
     expect(slots.single.recipeId, 'recipe-1');
+    expect(slots.single.extras, ['Brot']);
     expect(requests.single.method, 'GET');
     expect(requests.single.path, '/meal-plan');
     expect(requests.single.query, 'from=2026-08-23&to=2026-08-24');
@@ -98,12 +100,23 @@ void main() {
     );
     await repository.setLeftovers(date: date, meal: 'lunch');
     await repository.setEmpty(date: date, meal: 'dinner');
+    await repository.setExtras(
+      date: date,
+      meal: 'dinner',
+      extras: ['Brot', 'Butter'],
+    );
 
-    expect(requests.map((request) => request.method), ['PUT', 'PUT', 'PUT']);
+    expect(requests.map((request) => request.method), [
+      'PUT',
+      'PUT',
+      'PUT',
+      'PUT',
+    ]);
     expect(requests.map((request) => request.path), [
       '/meal-plan/2026-08-23/breakfast',
       '/meal-plan/2026-08-23/lunch',
       '/meal-plan/2026-08-23/dinner',
+      '/meal-plan/2026-08-23/dinner/extras',
     ]);
     expect(jsonDecode(requests[0].body), {
       'slotType': 'recipe',
@@ -111,6 +124,9 @@ void main() {
     });
     expect(jsonDecode(requests[1].body), {'slotType': 'leftovers'});
     expect(jsonDecode(requests[2].body), {'slotType': 'empty'});
+    expect(jsonDecode(requests[3].body), {
+      'extras': ['Brot', 'Butter'],
+    });
   });
 
   test('closes a planned day', () async {

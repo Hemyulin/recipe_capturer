@@ -127,6 +127,38 @@ void main() {
     expect(lunch.recipeId, testRecipes.first.id);
   });
 
+  testWidgets('adds text extras to a Today meal', (WidgetTester tester) async {
+    final repo = InMemoryRecipeRepository();
+    final mealPlanRepo = InMemoryMealPlanRepository();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TodayPage(repo: repo, mealPlanRepo: mealPlanRepo),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.add_circle_outline_rounded).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Brot'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Hummus'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Fertig'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('+ Brot · Hummus'), findsOneWidget);
+
+    final slots = await mealPlanRepo.getRange(
+      from: DateTime.now(),
+      to: DateTime.now(),
+    );
+    expect(slots.singleWhere((slot) => slot.meal == 'breakfast').extras, [
+      'Brot',
+      'Hummus',
+    ]);
+  });
+
   testWidgets('closes Today from the options menu', (
     WidgetTester tester,
   ) async {
