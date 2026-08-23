@@ -5,10 +5,12 @@ import 'package:cookbuk/domain/meal_plan_slot.dart';
 import 'package:http/http.dart' as http;
 
 class ApiMealPlanRepository implements MealPlanRepository {
-  ApiMealPlanRepository({required String baseUrl})
-    : _baseUri = Uri.parse(baseUrl.replaceFirst(RegExp(r'/$'), ''));
+  ApiMealPlanRepository({required String baseUrl, String sharedToken = ''})
+    : _baseUri = Uri.parse(baseUrl.replaceFirst(RegExp(r'/$'), '')),
+      _sharedToken = sharedToken.trim();
 
   final Uri _baseUri;
+  final String _sharedToken;
 
   @override
   Future<List<MealPlanSlot>> getRange({
@@ -70,13 +72,14 @@ class ApiMealPlanRepository implements MealPlanRepository {
     Map<String, String>? queryParameters,
     Map<String, dynamic>? body,
   }) async {
-    final headers = body == null
-        ? null
-        : const {'Content-Type': 'application/json'};
+    final headers = {
+      ..._authHeaders(),
+      if (body != null) 'Content-Type': 'application/json',
+    };
     final encodedBody = body == null ? null : jsonEncode(body);
     final uri = _uri(path, queryParameters: queryParameters);
     final response = await switch (method) {
-      'GET' => http.get(uri),
+      'GET' => http.get(uri, headers: headers),
       'PUT' => http.put(uri, headers: headers, body: encodedBody),
       _ => throw ApiMealPlanRepositoryException('Unsupported method: $method'),
     };
@@ -88,6 +91,11 @@ class ApiMealPlanRepository implements MealPlanRepository {
     }
 
     return response.body;
+  }
+
+  Map<String, String> _authHeaders() {
+    if (_sharedToken.isEmpty) return const {};
+    return {'x-cookbuk-token': _sharedToken};
   }
 
   String _dateKey(DateTime date) {

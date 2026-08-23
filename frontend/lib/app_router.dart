@@ -13,8 +13,14 @@ import 'package:cookbuk/ui/pages/shopping_page.dart';
 import 'package:cookbuk/ui/pages/today_page.dart';
 import 'package:cookbuk/ui/pages/week_page.dart';
 
-final repo = ApiRecipeRepository(baseUrl: AppConfig.apiBaseUrl);
-final mealPlanRepo = ApiMealPlanRepository(baseUrl: AppConfig.apiBaseUrl);
+final repo = ApiRecipeRepository(
+  baseUrl: AppConfig.apiBaseUrl,
+  sharedToken: AppConfig.sharedToken,
+);
+final mealPlanRepo = ApiMealPlanRepository(
+  baseUrl: AppConfig.apiBaseUrl,
+  sharedToken: AppConfig.sharedToken,
+);
 
 final router = GoRouter(
   initialLocation: '/today',

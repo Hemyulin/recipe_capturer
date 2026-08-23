@@ -46,12 +46,23 @@ pnpm rebuild better-sqlite3
 | `COOKBUK_HOST` | `127.0.0.1` | Use `0.0.0.0` on the Pi |
 | `COOKBUK_DATABASE_PATH` | `./data/cookbuk.sqlite` | SQLite file path |
 | `COOKBUK_IMAGE_STORAGE_PATH` | `./data/images` | Uploaded recipe image folder |
+| `COOKBUK_SHARED_TOKEN` | empty | Optional API token; set this on the Pi |
 | `COOKBUK_HOUSEHOLD_ID` | `local-household` | MVP household scope |
 | `COOKBUK_HOUSEHOLD_NAME` | `CookBuk Household` | Display/admin label |
 | `COOKBUK_CORS_ORIGIN` | `*` | Comma-separated origins or `*` |
 
 For Pi + Tailscale, run with `COOKBUK_HOST=0.0.0.0` and point the Flutter app at
 the Pi's Tailscale hostname or `100.x.y.z` address.
+
+If `COOKBUK_SHARED_TOKEN` is set, all API routes except `/health` require the
+same value in the `x-cookbuk-token` header. Build or run Flutter with matching
+dart defines:
+
+```sh
+flutter run \
+  --dart-define=COOKBUK_API_BASE_URL=http://your-pi:3000 \
+  --dart-define=COOKBUK_SHARED_TOKEN=your-secret
+```
 
 ## API
 

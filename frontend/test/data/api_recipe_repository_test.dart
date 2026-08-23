@@ -20,7 +20,12 @@ void main() {
     server.listen((request) async {
       final body = await utf8.decoder.bind(request).join();
       requests.add(
-        _RequestLog(method: request.method, path: request.uri.path, body: body),
+        _RequestLog(
+          method: request.method,
+          path: request.uri.path,
+          body: body,
+          token: request.headers.value('x-cookbuk-token'),
+        ),
       );
 
       request.response.headers.contentType = ContentType.json;
@@ -60,6 +65,17 @@ void main() {
     );
     expect(requests.single.method, 'GET');
     expect(requests.single.path, '/recipes');
+  });
+
+  test('sends shared token headers when configured', () async {
+    repository = ApiRecipeRepository(
+      baseUrl: 'http://${server.address.host}:${server.port}',
+      sharedToken: 'secret',
+    );
+
+    await repository.getAll();
+
+    expect(requests.single.token, 'secret');
   });
 
   test('writes backend-safe recipe payloads', () async {
@@ -108,6 +124,10 @@ void main() {
   });
 
   test('uploads recipe images to the backend', () async {
+    repository = ApiRecipeRepository(
+      baseUrl: 'http://${server.address.host}:${server.port}',
+      sharedToken: 'secret',
+    );
     final file = await File(
       '${Directory.systemTemp.path}/cookbuk_api_upload_test.jpg',
     ).writeAsString('fake image');
@@ -119,6 +139,7 @@ void main() {
 
     expect(requests.single.method, 'POST');
     expect(requests.single.path, '/recipes/oatmeal-buns/image');
+    expect(requests.single.token, 'secret');
     expect(requests.single.body, contains('form-data'));
     expect(
       recipe.mainImagePath,
@@ -155,9 +176,11 @@ class _RequestLog {
     required this.method,
     required this.path,
     required this.body,
+    required this.token,
   });
 
   final String method;
   final String path;
   final String body;
+  final String? token;
 }

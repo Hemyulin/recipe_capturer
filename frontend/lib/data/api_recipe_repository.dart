@@ -5,10 +5,12 @@ import 'package:cookbuk/domain/recipe.dart';
 import 'package:http/http.dart' as http;
 
 class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
-  ApiRecipeRepository({required String baseUrl})
-    : _baseUri = Uri.parse(baseUrl.replaceFirst(RegExp(r'/$'), ''));
+  ApiRecipeRepository({required String baseUrl, String sharedToken = ''})
+    : _baseUri = Uri.parse(baseUrl.replaceFirst(RegExp(r'/$'), '')),
+      _sharedToken = sharedToken.trim();
 
   final Uri _baseUri;
+  final String _sharedToken;
 
   @override
   Future<List<Recipe>> getAll() async {
@@ -53,6 +55,7 @@ class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
       'POST',
       _uri('/recipes/$recipeId/image'),
     );
+    request.headers.addAll(_authHeaders());
     request.files.add(await http.MultipartFile.fromPath('image', imagePath));
 
     final streamedResponse = await request.send();
@@ -122,15 +125,16 @@ class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
     String path, {
     Map<String, dynamic>? body,
   }) async {
-    final headers = body == null
-        ? null
-        : const {'Content-Type': 'application/json'};
+    final headers = {
+      ..._authHeaders(),
+      if (body != null) 'Content-Type': 'application/json',
+    };
     final encodedBody = body == null ? null : jsonEncode(body);
     final response = await switch (method) {
-      'GET' => http.get(_uri(path)),
+      'GET' => http.get(_uri(path), headers: headers),
       'POST' => http.post(_uri(path), headers: headers, body: encodedBody),
       'PATCH' => http.patch(_uri(path), headers: headers, body: encodedBody),
-      'DELETE' => http.delete(_uri(path)),
+      'DELETE' => http.delete(_uri(path), headers: headers),
       _ => throw ApiRecipeRepositoryException('Unsupported method: $method'),
     };
 
@@ -141,6 +145,11 @@ class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
     }
 
     return response.body;
+  }
+
+  Map<String, String> _authHeaders() {
+    if (_sharedToken.isEmpty) return const {};
+    return {'x-cookbuk-token': _sharedToken};
   }
 }
 

@@ -24,6 +24,7 @@ void main() {
           path: request.uri.path,
           query: request.uri.query,
           body: body,
+          token: request.headers.value('x-cookbuk-token'),
         ),
       );
 
@@ -64,6 +65,20 @@ void main() {
     expect(requests.single.query, 'from=2026-08-23&to=2026-08-24');
   });
 
+  test('sends shared token headers when configured', () async {
+    repository = ApiMealPlanRepository(
+      baseUrl: 'http://${server.address.host}:${server.port}',
+      sharedToken: 'secret',
+    );
+
+    await repository.getRange(
+      from: DateTime(2026, 8, 23),
+      to: DateTime(2026, 8, 24),
+    );
+
+    expect(requests.single.token, 'secret');
+  });
+
   test('writes meal plan slot payloads', () async {
     final date = DateTime(2026, 8, 23);
 
@@ -96,10 +111,12 @@ class _RequestLog {
     required this.path,
     required this.query,
     required this.body,
+    required this.token,
   });
 
   final String method;
   final String path;
   final String query;
   final String body;
+  final String? token;
 }

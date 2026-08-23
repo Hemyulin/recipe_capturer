@@ -21,6 +21,7 @@ async function bootstrap() {
       corsOrigin === "*"
         ? true
         : corsOrigin.split(",").map((value) => value.trim()),
+    allowedHeaders: ["Content-Type", "x-cookbuk-token"],
   });
   app.useGlobalPipes(
     new ValidationPipe({
