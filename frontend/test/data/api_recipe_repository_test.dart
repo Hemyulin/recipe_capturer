@@ -69,7 +69,18 @@ void main() {
             'prepTimeMinutes': 10,
             'cookTimeMinutes': 20,
             'ingredients': [
-              {'name': 'Pasta', 'quantity': '200', 'unit': 'g'},
+              {
+                'name': 'Pasta',
+                'quantity': '200',
+                'unit': 'g',
+                'excludeFromShopping': false,
+              },
+              {
+                'name': 'boiling water',
+                'quantity': '1',
+                'unit': 'l',
+                'excludeFromShopping': true,
+              },
             ],
             'instructions': ['Kochen.', 'Servieren.'],
             'tags': ['dinner', 'quick'],
@@ -140,6 +151,7 @@ void main() {
       'Oatmeal Buns',
       ingredients: const [
         RecipeIngredient(name: 'Oatmeal', quantity: '200', unit: 'g'),
+        RecipeIngredient(name: 'boiling water', excludeFromShopping: true),
       ],
       instructions: const ['Mix everything.', 'Bake until golden.'],
       tags: const ['One pot', 'Breakfast'],
@@ -172,6 +184,10 @@ void main() {
       expect(payload['title'], 'Oatmeal Buns');
       expect(payload['season'], 'Ganzjaehrig');
       expect(payload['ingredients'], isA<List<dynamic>>());
+      expect(
+        payload['ingredients'],
+        contains(containsPair('excludeFromShopping', true)),
+      );
       expect(payload.containsKey('id'), isFalse);
       expect(payload.containsKey('createdAt'), isFalse);
       expect(payload.containsKey('cookCount'), isFalse);
@@ -217,7 +233,8 @@ void main() {
     expect(requests.single.path, '/recipes/imports/photo');
     expect(requests.single.body, contains('form-data'));
     expect(draft.title, 'Foto Pasta');
-    expect(draft.ingredients.single.name, 'Pasta');
+    expect(draft.ingredients.first.name, 'Pasta');
+    expect(draft.ingredients.last.excludeFromShopping, true);
     expect(draft.instructions, ['Kochen.', 'Servieren.']);
     expect(draft.tags, contains('quick'));
     expect(draft.mainImagePath, file.path);

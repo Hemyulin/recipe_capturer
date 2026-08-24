@@ -5,11 +5,13 @@ class RecipeIngredient {
     required this.name,
     this.quantity = '',
     this.unit = '',
+    this.excludeFromShopping = false,
   });
 
   final String name;
   final String quantity;
   final String unit;
+  final bool excludeFromShopping;
 
   String get label {
     final amount = [
@@ -29,7 +31,12 @@ class RecipeIngredient {
   }
 
   Map<String, dynamic> toJson() {
-    return {'name': name, 'quantity': quantity, 'unit': unit};
+    return {
+      'name': name,
+      'quantity': quantity,
+      'unit': unit,
+      'excludeFromShopping': excludeFromShopping,
+    };
   }
 
   factory RecipeIngredient.fromJson(dynamic value) {
@@ -42,6 +49,7 @@ class RecipeIngredient {
       name: (json['name'] as String? ?? '').trim(),
       quantity: (json['quantity'] as String? ?? '').trim(),
       unit: (json['unit'] as String? ?? '').trim(),
+      excludeFromShopping: json['excludeFromShopping'] as bool? ?? false,
     );
   }
 }

@@ -22,6 +22,10 @@ export class RecipeIngredientDto {
   @IsOptional()
   @IsString()
   unit?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  excludeFromShopping?: boolean;
 }
 
 export class CreateRecipeDto {
