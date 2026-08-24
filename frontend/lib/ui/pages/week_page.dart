@@ -311,64 +311,81 @@ class _WeekPageState extends State<WeekPage> {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadWeek,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
-          children: [
-            _WeekHeader(
-              label: _weekLabel(_weekStart, _weekEnd),
-              onPrevious: () => _moveWeek(-1),
-              onNext: () => _moveWeek(1),
-            ),
-            const SizedBox(height: 8),
-            MealPlanSyncBanner(status: _syncStatus),
-            if (_syncStatus.isVisible) const SizedBox(height: 12),
-            if (_isLoading)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 40),
-                child: LoadStateView.loading(),
-              )
-            else if (_loadError != null)
-              SizedBox(
-                height: 360,
-                child: LoadStateView.error(
-                  title: 'Woche konnte nicht geladen werden',
-                  message:
-                      'Prüfe, ob der CookBuk-Backendserver läuft und dein Gerät im Tailscale ist.',
-                  onRetry: _loadWeek,
+      body: Stack(
+        children: [
+          RefreshIndicator(
+            onRefresh: _loadWeek,
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                4,
+                16,
+                _isLoading || _loadError != null ? 28 : 132,
+              ),
+              children: [
+                _WeekHeader(
+                  label: _weekLabel(_weekStart, _weekEnd),
+                  onPrevious: () => _moveWeek(-1),
+                  onNext: () => _moveWeek(1),
                 ),
-              )
-            else ...[
-              _WeekDayStrip(
-                days: days,
-                selectedDate: _selectedDate,
-                meals: _meals,
-                slotValueFor: _slotValue,
-                onSelectDate: (date) => setState(() => _selectedDate = date),
+                const SizedBox(height: 8),
+                MealPlanSyncBanner(status: _syncStatus),
+                if (_syncStatus.isVisible) const SizedBox(height: 12),
+                if (_isLoading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 40),
+                    child: LoadStateView.loading(),
+                  )
+                else if (_loadError != null)
+                  SizedBox(
+                    height: 360,
+                    child: LoadStateView.error(
+                      title: 'Woche konnte nicht geladen werden',
+                      message:
+                          'Prüfe, ob der CookBuk-Backendserver läuft und dein Gerät im Tailscale ist.',
+                      onRetry: _loadWeek,
+                    ),
+                  )
+                else ...[
+                  Text(
+                    selectedTitle,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 10),
+                  _SelectedDayPlan(
+                    date: _selectedDate,
+                    meals: _meals,
+                    recipeForMeal: (meal) =>
+                        _recipeById(_slotValue(_selectedDate, meal)),
+                    isLeftoversForMeal: (meal) =>
+                        _slotValue(_selectedDate, meal) ==
+                        MealChoiceSheet.leftoversValue,
+                    extrasForMeal: (meal) => _extraLabels(_selectedDate, meal),
+                    onChooseMeal: (meal) => _chooseSlot(_selectedDate, meal),
+                    onClearMeal: (meal) => _clearSlot(_selectedDate, meal),
+                    onEditExtras: (meal) => _editExtras(_selectedDate, meal),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (!_isLoading && _loadError == null)
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 12,
+              child: SafeArea(
+                top: false,
+                child: _WeekDayStrip(
+                  days: days,
+                  selectedDate: _selectedDate,
+                  meals: _meals,
+                  slotValueFor: _slotValue,
+                  onSelectDate: (date) => setState(() => _selectedDate = date),
+                ),
               ),
-              const SizedBox(height: 18),
-              Text(
-                selectedTitle,
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 10),
-              _SelectedDayPlan(
-                date: _selectedDate,
-                meals: _meals,
-                recipeForMeal: (meal) =>
-                    _recipeById(_slotValue(_selectedDate, meal)),
-                isLeftoversForMeal: (meal) =>
-                    _slotValue(_selectedDate, meal) ==
-                    MealChoiceSheet.leftoversValue,
-                extrasForMeal: (meal) => _extraLabels(_selectedDate, meal),
-                onChooseMeal: (meal) => _chooseSlot(_selectedDate, meal),
-                onClearMeal: (meal) => _clearSlot(_selectedDate, meal),
-                onEditExtras: (meal) => _editExtras(_selectedDate, meal),
-              ),
-            ],
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }
@@ -768,11 +785,11 @@ class _WeekMealCard extends StatelessWidget {
                 Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    IconButton(
+                    _ExtrasButton(
                       onPressed: onExtras,
-                      icon: const Icon(Icons.add_circle_outline_rounded),
-                      tooltip: 'Extras bearbeiten',
+                      hasExtras: extras.isNotEmpty,
                     ),
+                    const SizedBox(height: 2),
                     IconButton(
                       onPressed: onClear,
                       icon: const Icon(Icons.close_rounded),
@@ -781,14 +798,46 @@ class _WeekMealCard extends StatelessWidget {
                   ],
                 )
               else
-                IconButton(
+                _ExtrasButton(
                   onPressed: onExtras,
-                  icon: const Icon(Icons.add_circle_outline_rounded),
-                  tooltip: 'Extras bearbeiten',
+                  hasExtras: extras.isNotEmpty,
                 ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ExtrasButton extends StatelessWidget {
+  const _ExtrasButton({required this.onPressed, required this.hasExtras});
+
+  final VoidCallback onPressed;
+  final bool hasExtras;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Tooltip(
+      message: 'Beilagen bearbeiten',
+      child: TextButton.icon(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          visualDensity: VisualDensity.compact,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          minimumSize: const Size(0, 34),
+          foregroundColor: hasExtras
+              ? colorScheme.onSecondaryContainer
+              : colorScheme.onSurfaceVariant,
+          backgroundColor: hasExtras
+              ? colorScheme.secondaryContainer
+              : colorScheme.surfaceContainerHighest,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        icon: const Icon(Icons.restaurant_menu_rounded, size: 16),
+        label: const Text('Beilagen'),
       ),
     );
   }

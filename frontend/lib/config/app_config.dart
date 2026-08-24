@@ -3,10 +3,14 @@ class AppConfig {
 
   static const apiBaseUrl = String.fromEnvironment(
     'COOKBUK_API_BASE_URL',
-    defaultValue: 'http://127.0.0.1:3000',
+    defaultValue: 'http://192.168.178.54:3000',
   );
 
-  static const apiBaseUrlList = String.fromEnvironment('COOKBUK_API_BASE_URLS');
+  static const apiBaseUrlList = String.fromEnvironment(
+    'COOKBUK_API_BASE_URLS',
+    defaultValue:
+        'http://192.168.178.54:3000,http://pi-server.local:3000,http://pi-server:3000,http://100.125.110.4:3000,http://127.0.0.1:3000',
+  );
 
   static List<String> get apiBaseUrls {
     final values = apiBaseUrlList
@@ -18,5 +22,8 @@ class AppConfig {
     return [apiBaseUrl];
   }
 
-  static const sharedToken = String.fromEnvironment('COOKBUK_SHARED_TOKEN');
+  static const sharedToken = String.fromEnvironment(
+    'COOKBUK_SHARED_TOKEN',
+    defaultValue: 'token',
+  );
 }

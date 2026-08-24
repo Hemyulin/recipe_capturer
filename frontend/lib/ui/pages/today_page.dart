@@ -466,11 +466,7 @@ class _MealSlotCard extends StatelessWidget {
                   ],
                 ),
               ),
-              IconButton(
-                onPressed: onExtras,
-                icon: const Icon(Icons.add_circle_outline_rounded),
-                tooltip: 'Extras bearbeiten',
-              ),
+              _ExtrasButton(onPressed: onExtras, hasExtras: extras.isNotEmpty),
             ],
           ),
         ),
@@ -483,6 +479,39 @@ class _MealSlotCard extends StatelessWidget {
       onChange: onChange,
       onClear: onClear,
       child: card,
+    );
+  }
+}
+
+class _ExtrasButton extends StatelessWidget {
+  const _ExtrasButton({required this.onPressed, required this.hasExtras});
+
+  final VoidCallback? onPressed;
+  final bool hasExtras;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Tooltip(
+      message: 'Beilagen bearbeiten',
+      child: TextButton.icon(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          visualDensity: VisualDensity.compact,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          minimumSize: const Size(0, 34),
+          foregroundColor: hasExtras
+              ? colorScheme.onSecondaryContainer
+              : colorScheme.onSurfaceVariant,
+          backgroundColor: hasExtras
+              ? colorScheme.secondaryContainer
+              : colorScheme.surfaceContainerHighest,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        icon: const Icon(Icons.restaurant_menu_rounded, size: 16),
+        label: const Text('Beilagen'),
+      ),
     );
   }
 }

@@ -198,7 +198,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.add_circle_outline_rounded).first);
+    await tester.tap(find.text('Beilagen').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Brot'));
     await tester.pumpAndSettle();

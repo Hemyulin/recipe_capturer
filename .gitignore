@@ -34,6 +34,8 @@ migrate_working_dir/
 **/build/
 **/coverage/
 infra/pi/.env
+frontend/.env
+frontend/cookbuk.local.json
 
 # Symbolication related
 app.*.symbols

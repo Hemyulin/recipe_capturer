@@ -42,6 +42,8 @@ dependencies:
   http: ^1.6.0
   shared_preferences: ^2.5.5
   camera: ^0.12.0+2
+  url_launcher: ^6.3.2
+  external_app_launcher: ^4.0.3
 
 dev_dependencies:
   flutter_test:
