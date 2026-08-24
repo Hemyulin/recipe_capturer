@@ -105,6 +105,65 @@ const recipeImportTags = [
   "baking",
 ] as const;
 
+const germanIngredientAliases: Record<string, string> = {
+  aubergine: "Aubergine",
+  "baby spinach": "Babyspinat",
+  basil: "Basilikum",
+  "bell pepper": "Paprika",
+  "black pepper": "schwarzer Pfeffer",
+  "boiling water": "kochendes Wasser",
+  breadcrumbs: "Paniermehl",
+  butter: "Butter",
+  carrot: "Karotte",
+  carrots: "Karotten",
+  chickpeas: "Kichererbsen",
+  cinnamon: "Zimt",
+  cucumber: "Gurke",
+  cumin: "Kreuzkümmel",
+  egg: "Ei",
+  eggs: "Eier",
+  flour: "Mehl",
+  garlic: "Knoblauch",
+  "garlic cloves": "Knoblauchzehen",
+  ginger: "Ingwer",
+  honey: "Honig",
+  lemon: "Zitrone",
+  "lemon juice": "Zitronensaft",
+  lentils: "Linsen",
+  milk: "Milch",
+  mint: "Minze",
+  noodles: "Nudeln",
+  oats: "Haferflocken",
+  oil: "Öl",
+  "olive oil": "Olivenöl",
+  onion: "Zwiebel",
+  onions: "Zwiebeln",
+  parsley: "Petersilie",
+  pepper: "Pfeffer",
+  potatoes: "Kartoffeln",
+  quark: "Quark",
+  rice: "Reis",
+  salt: "Salz",
+  spinach: "Spinat",
+  "sweet potato": "Süßkartoffel",
+  "sweet potatoes": "Süßkartoffeln",
+  tahini: "Tahini",
+  tomato: "Tomate",
+  tomatoes: "Tomaten",
+  water: "Wasser",
+  yoghurt: "Joghurt",
+  yogurt: "Joghurt",
+};
+
+const germanIngredientNoteAliases: Record<string, string> = {
+  "plus extra": "plus etwas mehr",
+  "plus extra for drizzling": "plus etwas mehr zum Beträufeln",
+  "plus extra to finish": "plus etwas mehr zum Abschmecken",
+  "to finish": "zum Abschmecken",
+  garnish: "zum Garnieren",
+  optional: "optional",
+};
+
 @Injectable()
 export class RecipesService {
   constructor(
@@ -1075,7 +1134,7 @@ export class RecipesService {
     const tagList = recipeImportTags.join(", ");
     const languageInstruction =
       language === "de"
-        ? "Write the title, notes, ingredient names, ingredient notes, instructions, season, and confidenceNotes in German, even when the source image is English. Translate ingredients into normal German kitchen language, for example aubergine -> Aubergine, sweet potato -> Suesskartoffel, olive oil -> Olivenoel, boiling water -> kochendes Wasser. Only keep a source word if there is no normal German equivalent."
+        ? "Write the title, notes, ingredient names, ingredient notes, instructions, season, and confidenceNotes in German, even when the source image is English. Translate ingredients into normal German kitchen language, for example aubergine -> Aubergine, sweet potato -> Süßkartoffel, olive oil -> Olivenöl, boiling water -> kochendes Wasser. Only keep a source word if there is no normal German equivalent."
         : "Write the title, notes, ingredient names, ingredient notes, instructions, season, and confidenceNotes in English.";
 
     return [
@@ -1086,6 +1145,7 @@ export class RecipesService {
       "Keep notes short and practical; do not copy long cookbook introductions.",
       "Put ingredient preparation in the name when it identifies the ingredient, for example 'Knoblauchzehen, zerdrueckt'.",
       "Put optional usage notes, garnish notes, alternatives, or parentheticals such as 'plus extra to finish' in ingredient.note, not in ingredient.name.",
+      "Separate ingredient quantity, unit, name, and note. Example: '140 ml olive oil (plus extra to finish)' becomes quantity='140', unit='ml', name='Olivenöl', note='plus etwas mehr zum Abschmecken'.",
       "Keep water in the ingredients if the recipe uses it, but set excludeFromShopping=true for water, boiling water, tap water, ice, and other household basics that do not belong on a grocery list.",
       `Return tags only as stable keys from this list: ${tagList}. Do not invent new tag keys and do not translate tag keys.`,
     ].join(" ");
@@ -1128,20 +1188,10 @@ export class RecipesService {
     const draft = value as ImportedRecipeDraft;
     const title = this.cleanText(draft.title) || "Unbenanntes Rezept";
     const ingredients = (draft.ingredients ?? [])
-      .map((ingredient) => {
-        const splitName = this.splitIngredientUsageNote(
-          this.cleanText(ingredient.name),
-        );
-        return {
-          name: splitName.name,
-          quantity: this.cleanText(ingredient.quantity),
-          unit: this.cleanText(ingredient.unit),
-          note: this.cleanText(ingredient.note) || splitName.note,
-          excludeFromShopping:
-            ingredient.excludeFromShopping || this.isHouseholdBasic(ingredient),
-        };
+      .map((ingredient) => this.normalizeIngredient(ingredient))
+      .filter((ingredient): ingredient is RecipeIngredientDto => {
+        return ingredient != null && ingredient.name.length > 0;
       })
-      .filter((ingredient) => ingredient.name.length > 0)
       .slice(0, 40);
     const instructions = (draft.instructions ?? [])
       .map((step) => this.cleanText(step))
@@ -1175,16 +1225,143 @@ export class RecipesService {
     return typeof value === "string" ? value.trim() : "";
   }
 
-  private splitIngredientUsageNote(name: string) {
-    const match = name.match(/^(.*?)\s*\(([^)]*)\)\s*$/);
-    if (!match) return { name, note: "" };
+  private normalizeIngredient(
+    ingredient: RecipeIngredientDto,
+  ): RecipeIngredientDto | null {
+    const leadingAmount = this.splitLeadingIngredientAmount(
+      this.cleanText(ingredient.name),
+    );
+    const splitName = this.splitIngredientUsageNote(leadingAmount.name);
+    const cleanedQuantity =
+      this.cleanText(ingredient.quantity) || leadingAmount.quantity;
+    const cleanedUnit = this.normalizeIngredientUnit(
+      this.cleanText(ingredient.unit) || leadingAmount.unit,
+    );
+    const quantityAndUnit = this.splitQuantityAndUnit(
+      cleanedQuantity,
+      cleanedUnit,
+    );
+    const name = this.translateGermanIngredientName(splitName.name);
+    const note = this.cleanIngredientNote(
+      this.cleanText(ingredient.note) || splitName.note,
+    );
+    const normalized = {
+      name,
+      quantity: quantityAndUnit.quantity,
+      unit: quantityAndUnit.unit,
+      note,
+      excludeFromShopping: ingredient.excludeFromShopping,
+    };
 
-    const note = match[2].trim();
-    if (!/\b(extra|finish|serve|serving|garnish|optional|plus)\b/i.test(note)) {
-      return { name, note: "" };
+    return {
+      ...normalized,
+      excludeFromShopping:
+        normalized.excludeFromShopping || this.isHouseholdBasic(normalized),
+    };
+  }
+
+  private splitLeadingIngredientAmount(name: string) {
+    const match = name.match(
+      /^([\d.,]+(?:\s*[-–]\s*[\d.,]+)?|[¼½¾⅓⅔])\s*([a-zA-ZäöüÄÖÜß]+)?\s+(.+)$/,
+    );
+    if (!match) return { name, quantity: "", unit: "" };
+
+    const unit = this.normalizeIngredientUnit(match[2] ?? "");
+    if (!unit) return { name, quantity: "", unit: "" };
+
+    return {
+      name: match[3].trim(),
+      quantity: match[1].trim(),
+      unit,
+    };
+  }
+
+  private splitQuantityAndUnit(quantity: string, fallbackUnit: string) {
+    const match = quantity.match(
+      /^([\d.,]+(?:\s*[-–]\s*[\d.,]+)?|[¼½¾⅓⅔])\s*([a-zA-ZäöüÄÖÜß]+)\.?$/,
+    );
+    if (!match) {
+      return { quantity, unit: fallbackUnit };
     }
 
-    return { name: match[1].trim(), note };
+    const unit = this.normalizeIngredientUnit(match[2]);
+    if (!unit) return { quantity, unit: fallbackUnit };
+    return { quantity: match[1].trim(), unit };
+  }
+
+  private normalizeIngredientUnit(unit: string) {
+    const normalized = unit.trim().toLowerCase().replace(/\.$/, "");
+    const aliases: Record<string, string> = {
+      cup: "Tasse",
+      cups: "Tassen",
+      dose: "Dose",
+      dosen: "Dosen",
+      el: "EL",
+      esslöffel: "EL",
+      essloeffel: "EL",
+      g: "g",
+      gramm: "g",
+      kg: "kg",
+      l: "l",
+      liter: "l",
+      ml: "ml",
+      prise: "Prise",
+      prisen: "Prisen",
+      tablespoon: "EL",
+      tablespoons: "EL",
+      teaspoon: "TL",
+      teaspoons: "TL",
+      tl: "TL",
+      zehe: "Zehe",
+      zehen: "Zehen",
+    };
+    return aliases[normalized] ?? unit.trim();
+  }
+
+  private splitIngredientUsageNote(name: string) {
+    const parenthetical = name.match(/^(.*?)\s*\(([^)]*)\)\s*$/);
+    if (parenthetical) {
+      const note = parenthetical[2].trim();
+      if (this.isUsageNote(note)) {
+        return { name: parenthetical[1].trim(), note };
+      }
+    }
+
+    const trailing = name.match(
+      /^(.*?)(?:,\s*|\s+)(plus\s+extra(?:\s+[^,]+)?|to\s+finish|for\s+serving|for\s+garnish|optional)\s*$/i,
+    );
+    if (trailing) {
+      return { name: trailing[1].trim(), note: trailing[2].trim() };
+    }
+
+    return { name, note: "" };
+  }
+
+  private isUsageNote(note: string) {
+    return /\b(extra|finish|serve|serving|garnish|optional|plus|abschmecken|garnieren)\b/i.test(
+      note,
+    );
+  }
+
+  private translateGermanIngredientName(name: string) {
+    const cleaned = name.replace(/\s+/g, " ").trim();
+    const key = this.aliasKey(cleaned);
+    return germanIngredientAliases[key] ?? cleaned;
+  }
+
+  private cleanIngredientNote(note: string) {
+    const cleaned = note.replace(/\s+/g, " ").trim();
+    if (!cleaned) return "";
+    return germanIngredientNoteAliases[this.aliasKey(cleaned)] ?? cleaned;
+  }
+
+  private aliasKey(value: string) {
+    return value
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .trim();
   }
 
   private cleanTag(value: unknown) {
