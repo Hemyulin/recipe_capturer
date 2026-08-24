@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:cookbuk/data/meal_plan_repository.dart';
+import 'package:cookbuk/ui/widgets/backend_connection_icon.dart';
 
 class StatusPage extends StatefulWidget {
   const StatusPage({super.key, required this.mealPlanRepo});
@@ -59,7 +60,10 @@ class _StatusPageState extends State<StatusPage> {
     final diagnostics = _diagnostics;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Status')),
+      appBar: AppBar(
+        title: const Text('Status'),
+        actions: [BackendConnectionIcon(mealPlanRepo: widget.mealPlanRepo)],
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
         children: [

@@ -43,8 +43,11 @@ final router = GoRouter(
         ),
         GoRoute(
           path: '/recipes',
-          builder: (context, state) =>
-              RecipeListPage(title: 'Rezepte', repo: repo),
+          builder: (context, state) => RecipeListPage(
+            title: 'Rezepte',
+            repo: repo,
+            mealPlanRepo: mealPlanRepo,
+          ),
         ),
         GoRoute(
           path: '/shopping',
@@ -61,13 +64,20 @@ final router = GoRouter(
       path: '/details',
       builder: (context, state) {
         final recipe = state.extra as Recipe;
-        return RecipeDetailsPage(recipe: recipe, repo: repo);
+        return RecipeDetailsPage(
+          recipe: recipe,
+          repo: repo,
+          mealPlanRepo: mealPlanRepo,
+        );
       },
     ),
     GoRoute(
       path: '/new',
-      builder: (context, state) =>
-          NewRecipePage(title: 'Neues Rezept', repo: repo),
+      builder: (context, state) => NewRecipePage(
+        title: 'Neues Rezept',
+        repo: repo,
+        mealPlanRepo: mealPlanRepo,
+      ),
     ),
     GoRoute(
       path: '/edit',
@@ -76,6 +86,7 @@ final router = GoRouter(
         return NewRecipePage(
           title: 'Rezept bearbeiten',
           repo: repo,
+          mealPlanRepo: mealPlanRepo,
           initialRecipe: recipe,
         );
       },

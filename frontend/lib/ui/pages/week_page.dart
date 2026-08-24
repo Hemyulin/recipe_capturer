@@ -5,6 +5,7 @@ import 'package:cookbuk/data/meal_plan_repository.dart';
 import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/meal_plan_slot.dart';
 import 'package:cookbuk/domain/recipe.dart';
+import 'package:cookbuk/ui/widgets/backend_connection_icon.dart';
 import 'package:cookbuk/ui/widgets/meal_choice_sheet.dart';
 import 'package:cookbuk/ui/widgets/meal_extras_sheet.dart';
 import 'package:cookbuk/ui/widgets/meal_plan_sync_banner.dart';
@@ -302,6 +303,7 @@ class _WeekPageState extends State<WeekPage> {
       appBar: AppBar(
         title: const Text('Woche'),
         actions: [
+          BackendConnectionIcon(mealPlanRepo: widget.mealPlanRepo),
           IconButton(
             onPressed: _showCurrentWeek,
             icon: const Icon(Icons.today_outlined),

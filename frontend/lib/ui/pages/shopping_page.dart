@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:cookbuk/data/meal_plan_repository.dart';
 import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
+import 'package:cookbuk/ui/widgets/backend_connection_icon.dart';
 import 'package:cookbuk/ui/widgets/load_state_view.dart';
 
 class ShoppingPage extends StatefulWidget {
@@ -128,6 +129,7 @@ class _ShoppingPageState extends State<ShoppingPage> {
       appBar: AppBar(
         title: const Text('Einkauf'),
         actions: [
+          BackendConnectionIcon(mealPlanRepo: widget.mealPlanRepo),
           IconButton(
             onPressed: _items.isEmpty ? null : _copyShoppingList,
             icon: const Icon(Icons.content_copy_rounded),
