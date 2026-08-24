@@ -74,6 +74,32 @@ type ImportedRecipeDraft = {
   confidenceNotes?: string[];
 };
 
+type RecipeImportLanguage = "de" | "en";
+
+const recipeImportTags = [
+  "breakfast",
+  "lunch",
+  "dinner",
+  "main",
+  "side",
+  "dip",
+  "sauce",
+  "bread",
+  "dessert",
+  "snack",
+  "vegetarian",
+  "vegan",
+  "meat",
+  "fish",
+  "one_pot",
+  "quick",
+  "rice",
+  "pasta",
+  "soup",
+  "salad",
+  "baking",
+] as const;
+
 @Injectable()
 export class RecipesService {
   constructor(
@@ -316,6 +342,7 @@ export class RecipesService {
     const model =
       this.config.get<string>("COOKBUK_OPENAI_RECIPE_MODEL")?.trim() ||
       "gpt-5-mini";
+    const language = this.recipeImportLanguage();
     const imageUrls = images.map(
       (image) =>
         `data:${this.imageMimeType(image)};base64,${image.buffer.toString("base64")}`,
@@ -325,6 +352,7 @@ export class RecipesService {
       model,
       apiKey,
       imageUrls,
+      language,
     );
 
     if (!response.ok) {
@@ -401,6 +429,7 @@ export class RecipesService {
     model: string,
     apiKey: string,
     imageUrls: string[],
+    language: RecipeImportLanguage,
   ) {
     try {
       return await fetch("https://api.openai.com/v1/responses", {
@@ -414,15 +443,17 @@ export class RecipesService {
           input: [
             {
               role: "developer",
-              content:
-                "You extract editable household recipes from photos. Return only fields that are visible or strongly implied. Prefer German recipe text when the photo is German. Never invent precise quantities if they are unreadable; leave quantity or unit empty instead. Keep notes short and practical; do not copy long cookbook introductions. Put ingredient preparation in the name when it identifies the ingredient, for example 'garlic cloves, crushed'. Put optional usage notes, garnish notes, alternatives, or parentheticals such as 'plus extra to finish' in ingredient.note, not in ingredient.name. Keep water in the ingredients if the recipe uses it, but set excludeFromShopping=true for water, boiling water, tap water, ice, and other household basics that do not belong on a grocery list. Prefer tags from this household set: breakfast, lunch, dinner, main, side, dip, sauce, bread, dessert, snack, vegetarian, vegan, meat, fish, one_pot, quick, rice, pasta, soup, salad, baking.",
+              content: this.recipeImportPrompt(language),
             },
             {
               role: "user",
               content: [
                 {
                   type: "input_text",
-                  text: "Create one CookBuk recipe draft from these image(s). If there are multiple images, treat them as pages of the same recipe in order. Include confidenceNotes for uncertain parts.",
+                  text:
+                    language === "de"
+                      ? "Erstelle einen CookBuk-Rezeptentwurf aus diesen Bild(ern). Wenn es mehrere Bilder sind, behandle sie in dieser Reihenfolge als Seiten desselben Rezepts. Gib confidenceNotes fuer unsichere Stellen an."
+                      : "Create one CookBuk recipe draft from these image(s). If there are multiple images, treat them as pages of the same recipe in order. Include confidenceNotes for uncertain parts.",
                 },
                 ...imageUrls.map((imageUrl) => ({
                   type: "input_image",
@@ -783,6 +814,34 @@ export class RecipesService {
     return new Set([".gif", ".heic", ".jpeg", ".jpg", ".png", ".webp"]);
   }
 
+  private recipeImportLanguage(): RecipeImportLanguage {
+    const configured = this.config
+      .get<string>("COOKBUK_RECIPE_IMPORT_LANGUAGE", "de")
+      .trim()
+      .toLowerCase();
+    return configured === "en" ? "en" : "de";
+  }
+
+  private recipeImportPrompt(language: RecipeImportLanguage) {
+    const tagList = recipeImportTags.join(", ");
+    const languageInstruction =
+      language === "de"
+        ? "Write the title, notes, ingredient names, ingredient notes, instructions, season, and confidenceNotes in German, even when the source image is English. Translate ingredients into normal German kitchen language, for example aubergine -> Aubergine, sweet potato -> Suesskartoffel, olive oil -> Olivenoel, boiling water -> kochendes Wasser. Only keep a source word if there is no normal German equivalent."
+        : "Write the title, notes, ingredient names, ingredient notes, instructions, season, and confidenceNotes in English.";
+
+    return [
+      "You extract editable household recipes from photos.",
+      languageInstruction,
+      "Return only fields that are visible or strongly implied.",
+      "Never invent precise quantities if they are unreadable; leave quantity or unit empty instead.",
+      "Keep notes short and practical; do not copy long cookbook introductions.",
+      "Put ingredient preparation in the name when it identifies the ingredient, for example 'Knoblauchzehen, zerdrueckt'.",
+      "Put optional usage notes, garnish notes, alternatives, or parentheticals such as 'plus extra to finish' in ingredient.note, not in ingredient.name.",
+      "Keep water in the ingredients if the recipe uses it, but set excludeFromShopping=true for water, boiling water, tap water, ice, and other household basics that do not belong on a grocery list.",
+      `Return tags only as stable keys from this list: ${tagList}. Do not invent new tag keys and do not translate tag keys.`,
+    ].join(" ");
+  }
+
   private deletePreviousStoredImage(imageUrl: string | null) {
     if (!imageUrl?.startsWith("/images/")) return;
 
@@ -880,10 +939,45 @@ export class RecipesService {
   }
 
   private cleanTag(value: unknown) {
-    return this.cleanText(value)
+    const normalized = this.cleanText(value)
       .toLowerCase()
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
       .replace(/[^a-z0-9_-]+/g, "_")
       .replace(/^_+|_+$/g, "");
+    const aliases: Record<string, string> = {
+      abendessen: "dinner",
+      aubergine: "vegetarian",
+      backen: "baking",
+      beilagen: "side",
+      beilage: "side",
+      brot: "bread",
+      dessert: "dessert",
+      dip: "dip",
+      dips: "dip",
+      eintopf: "one_pot",
+      fisch: "fish",
+      fleisch: "meat",
+      fruehstueck: "breakfast",
+      gemuese: "vegetarian",
+      hauptgericht: "main",
+      mittagessen: "lunch",
+      nudeln: "pasta",
+      reis: "rice",
+      salat: "salad",
+      sauce: "sauce",
+      sosse: "sauce",
+      schnell: "quick",
+      snack: "snack",
+      snacks: "snack",
+      suppe: "soup",
+      vegan: "vegan",
+      vegetarisch: "vegetarian",
+      vegetables: "vegetarian",
+      veggie: "vegetarian",
+    };
+    const tag = aliases[normalized] ?? normalized;
+    return (recipeImportTags as readonly string[]).includes(tag) ? tag : "";
   }
 
   private positiveIntOrUndefined(value: unknown) {

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:cookbuk/domain/recipe.dart';
+import 'package:cookbuk/ui/formatters/tag_label_de.dart';
 
 void main() {
   test('Recipe.create trims title', () {
@@ -45,6 +46,12 @@ void main() {
     expect(decoded.cookCount, 1);
     expect(decoded.lastCookedAt, cookedAt);
     expect(decoded.cookEvents.single.mealType, 'Lunch');
+  });
+
+  test('recipe tag labels are German by default', () {
+    expect(tagLabelDe('main'), 'Hauptgericht');
+    expect(tagLabelDe('side'), 'Beilage');
+    expect(tagLabelDe('vegetables'), 'Gemüse');
   });
 
   //   test('Recipe.create contains creation timestamp', () {
