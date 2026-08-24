@@ -6,6 +6,7 @@ import 'package:cookbuk/data/meal_plan_repository.dart';
 import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/meal_plan_slot.dart';
 import 'package:cookbuk/domain/recipe.dart';
+import 'package:cookbuk/ui/widgets/backend_connection_icon.dart';
 import 'package:cookbuk/ui/widgets/meal_choice_sheet.dart';
 import 'package:cookbuk/ui/widgets/meal_extras_sheet.dart';
 import 'package:cookbuk/ui/widgets/meal_plan_sync_banner.dart';
@@ -212,28 +213,6 @@ class _TodayPageState extends State<TodayPage> {
     }
   }
 
-  Future<void> _closeToday() async {
-    try {
-      final result = await widget.mealPlanRepo.closeDay(_today);
-      await _loadRecipes();
-      if (!mounted) return;
-
-      final message = result.recordedCount == 0
-          ? 'Heute war schon abgeschlossen.'
-          : result.recordedCount == 1
-          ? '1 Mahlzeit gezählt.'
-          : '${result.recordedCount} Mahlzeiten gezählt.';
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(_mealPlanErrorMessage(error))));
-    }
-  }
-
   Map<String, String?> _slotValues(List<MealPlanSlot> slots) {
     return {
       for (final slot in slots)
@@ -288,16 +267,7 @@ class _TodayPageState extends State<TodayPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Heute'),
-        actions: [
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              if (value == 'close-day') _closeToday();
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'close-day', child: Text('Tag abschließen')),
-            ],
-          ),
-        ],
+        actions: [BackendConnectionIcon(mealPlanRepo: widget.mealPlanRepo)],
       ),
       body: _isLoading
           ? const LoadStateView.loading()

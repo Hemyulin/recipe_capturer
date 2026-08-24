@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:cookbuk/data/meal_plan_repository.dart';
 import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
+import 'package:cookbuk/ui/widgets/backend_connection_icon.dart';
 import 'package:cookbuk/ui/widgets/recipe_image.dart';
 
 class NewRecipePage extends StatefulWidget {
@@ -10,11 +12,13 @@ class NewRecipePage extends StatefulWidget {
     super.key,
     required this.title,
     required this.repo,
+    this.mealPlanRepo,
     this.initialRecipe,
   });
 
   final String title;
   final RecipeRepository repo;
+  final MealPlanRepository? mealPlanRepo;
   final Recipe? initialRecipe;
 
   @override
@@ -417,6 +421,8 @@ class _NewRecipePageState extends State<NewRecipePage> {
       appBar: AppBar(
         title: Text(widget.title),
         actions: [
+          if (widget.mealPlanRepo != null)
+            BackendConnectionIcon(mealPlanRepo: widget.mealPlanRepo!),
           IconButton(
             icon: const Icon(Icons.save_outlined),
             onPressed: _save,

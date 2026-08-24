@@ -1,15 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cookbuk/data/meal_plan_repository.dart';
 import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
+import 'package:cookbuk/ui/widgets/backend_connection_icon.dart';
 import 'package:cookbuk/ui/widgets/load_state_view.dart';
 import 'package:cookbuk/ui/widgets/recipe_card.dart';
 
 class RecipeListPage extends StatefulWidget {
-  const RecipeListPage({super.key, required this.title, required this.repo});
+  const RecipeListPage({
+    super.key,
+    required this.title,
+    required this.repo,
+    this.mealPlanRepo,
+  });
 
   final String title;
   final RecipeRepository repo;
+  final MealPlanRepository? mealPlanRepo;
 
   @override
   State<RecipeListPage> createState() => _RecipeListPageState();
@@ -137,6 +145,8 @@ class _RecipeListPageState extends State<RecipeListPage> {
       appBar: AppBar(
         title: Text(widget.title),
         actions: [
+          if (widget.mealPlanRepo != null)
+            BackendConnectionIcon(mealPlanRepo: widget.mealPlanRepo!),
           IconButton(
             onPressed: () async {
               final saved = await context.push<bool>('/new');
