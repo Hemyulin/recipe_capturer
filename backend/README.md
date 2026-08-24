@@ -52,6 +52,7 @@ pnpm rebuild better-sqlite3
 | `COOKBUK_CORS_ORIGIN` | `*` | Comma-separated origins or `*` |
 | `OPENAI_API_KEY` | empty | Enables AI recipe import from photos |
 | `COOKBUK_OPENAI_RECIPE_MODEL` | `gpt-5-mini` | Vision-capable model for recipe drafts |
+| `COOKBUK_RECIPE_IMPORT_LANGUAGE` | `de` | AI import output language: `de` or `en` |
 
 For Pi + Tailscale, run with `COOKBUK_HOST=0.0.0.0` and point the Flutter app at
 the Pi's Tailscale hostname or `100.x.y.z` address.

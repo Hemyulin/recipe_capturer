@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cookbuk/data/meal_plan_repository.dart';
 import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
+import 'package:cookbuk/ui/formatters/tag_label_de.dart';
 import 'package:cookbuk/ui/widgets/backend_connection_icon.dart';
 import 'package:cookbuk/ui/widgets/recipe_image.dart';
 
@@ -84,19 +85,6 @@ class _NewRecipePageState extends State<NewRecipePage> {
   final Set<String> _selectedTags = {};
 
   List<String> _imagePaths = [];
-
-  static const Map<String, String> _tagLabelsDe = {
-    'quick': 'Schnell',
-    'savory': 'Herzhaft',
-    'dessert': 'Dessert',
-    'sweet': 'Süß',
-    'breakfast': 'Frühstück',
-    'lunch': 'Mittagessen',
-    'dinner': 'Abendessen',
-    'one_pot': 'One pot',
-    'snack': 'Snack',
-    'vegetarian': 'Vegetarisch',
-  };
 
   @override
   void initState() {
@@ -438,7 +426,7 @@ class _NewRecipePageState extends State<NewRecipePage> {
       spacing: 8,
       runSpacing: 8,
       children: [
-        ..._tagLabelsDe.entries.map((e) {
+        ...selectableRecipeTagLabelsDe.entries.map((e) {
           final selected = _selectedTags.contains(e.key);
           return FilterChip(
             label: Text(e.value),
@@ -455,7 +443,7 @@ class _NewRecipePageState extends State<NewRecipePage> {
           );
         }),
         ..._selectedTags
-            .where((tag) => !_tagLabelsDe.containsKey(tag))
+            .where((tag) => !selectableRecipeTagLabelsDe.containsKey(tag))
             .map(
               (tag) => InputChip(
                 label: Text(tag),
