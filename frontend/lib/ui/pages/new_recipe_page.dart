@@ -32,15 +32,18 @@ class _IngredientRowData {
     String quantity = '',
     String unit = '',
     String name = '',
+    String note = '',
     this.excludeFromShopping = false,
   }) : quantityController = TextEditingController(text: quantity),
        unitController = TextEditingController(text: unit),
        nameController = TextEditingController(text: name),
+       noteController = TextEditingController(text: note),
        nameFocusNode = FocusNode();
 
   final TextEditingController quantityController;
   final TextEditingController unitController;
   final TextEditingController nameController;
+  final TextEditingController noteController;
   final FocusNode nameFocusNode;
   final bool excludeFromShopping;
 
@@ -48,6 +51,7 @@ class _IngredientRowData {
     quantityController.dispose();
     unitController.dispose();
     nameController.dispose();
+    noteController.dispose();
     nameFocusNode.dispose();
   }
 }
@@ -116,6 +120,7 @@ class _NewRecipePageState extends State<NewRecipePage> {
           quantity: ingredient.quantity,
           unit: ingredient.unit,
           name: ingredient.name,
+          note: ingredient.note,
           excludeFromShopping: ingredient.excludeFromShopping,
         );
       }
@@ -150,6 +155,7 @@ class _NewRecipePageState extends State<NewRecipePage> {
     String quantity = '',
     String unit = '',
     String name = '',
+    String note = '',
     bool excludeFromShopping = false,
   }) {
     _ingredients.add(
@@ -157,6 +163,7 @@ class _NewRecipePageState extends State<NewRecipePage> {
         quantity: quantity,
         unit: unit,
         name: name,
+        note: note,
         excludeFromShopping: excludeFromShopping,
       ),
     );
@@ -222,6 +229,7 @@ class _NewRecipePageState extends State<NewRecipePage> {
             name: row.nameController.text.trim(),
             quantity: row.quantityController.text.trim(),
             unit: row.unitController.text.trim(),
+            note: row.noteController.text.trim(),
             excludeFromShopping:
                 row.excludeFromShopping ||
                 _isHouseholdBasic(row.nameController.text),
@@ -540,43 +548,62 @@ class _NewRecipePageState extends State<NewRecipePage> {
                   final row = _ingredients[index];
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 10),
-                    child: Row(
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        SizedBox(
-                          width: 70,
-                          child: TextField(
-                            controller: row.quantityController,
-                            decoration: const InputDecoration(hintText: '2'),
-                            keyboardType: TextInputType.number,
-                          ),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                              width: 70,
+                              child: TextField(
+                                controller: row.quantityController,
+                                decoration: const InputDecoration(
+                                  hintText: '2',
+                                ),
+                                keyboardType: TextInputType.number,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 72,
+                              child: TextField(
+                                controller: row.unitController,
+                                decoration: const InputDecoration(
+                                  hintText: 'EL',
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextField(
+                                controller: row.nameController,
+                                focusNode: row.nameFocusNode,
+                                decoration: InputDecoration(
+                                  hintText: index == _ingredients.length - 1
+                                      ? 'Zutat'
+                                      : 'Name',
+                                ),
+                                textInputAction: TextInputAction.next,
+                                onSubmitted: (_) => _appendIngredientAndFocus(),
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () => _removeIngredientRow(index),
+                              icon: const Icon(Icons.delete_outline),
+                              tooltip: 'Zutat entfernen',
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        SizedBox(
-                          width: 72,
+                        Padding(
+                          padding: const EdgeInsets.only(left: 150, right: 48),
                           child: TextField(
-                            controller: row.unitController,
-                            decoration: const InputDecoration(hintText: 'EL'),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextField(
-                            controller: row.nameController,
-                            focusNode: row.nameFocusNode,
-                            decoration: InputDecoration(
-                              hintText: index == _ingredients.length - 1
-                                  ? 'Zutat'
-                                  : 'Name',
+                            controller: row.noteController,
+                            decoration: const InputDecoration(
+                              hintText: 'Notiz, z.B. extra zum Servieren',
                             ),
                             textInputAction: TextInputAction.next,
-                            onSubmitted: (_) => _appendIngredientAndFocus(),
                           ),
-                        ),
-                        IconButton(
-                          onPressed: () => _removeIngredientRow(index),
-                          icon: const Icon(Icons.delete_outline),
-                          tooltip: 'Zutat entfernen',
                         ),
                       ],
                     ),

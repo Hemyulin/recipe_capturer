@@ -5,12 +5,14 @@ class RecipeIngredient {
     required this.name,
     this.quantity = '',
     this.unit = '',
+    this.note = '',
     this.excludeFromShopping = false,
   });
 
   final String name;
   final String quantity;
   final String unit;
+  final String note;
   final bool excludeFromShopping;
 
   String get label {
@@ -19,7 +21,10 @@ class RecipeIngredient {
       unit,
     ].map((part) => part.trim()).where((part) => part.isNotEmpty).join(' ');
     if (amount.isEmpty) return name;
-    return '$amount $name';
+    final base = '$amount $name';
+    final trimmedNote = note.trim();
+    if (trimmedNote.isEmpty) return base;
+    return '$base ($trimmedNote)';
   }
 
   bool matches(String query) {
@@ -27,7 +32,8 @@ class RecipeIngredient {
     if (normalized.isEmpty) return true;
     return name.toLowerCase().contains(normalized) ||
         quantity.toLowerCase().contains(normalized) ||
-        unit.toLowerCase().contains(normalized);
+        unit.toLowerCase().contains(normalized) ||
+        note.toLowerCase().contains(normalized);
   }
 
   Map<String, dynamic> toJson() {
@@ -35,6 +41,7 @@ class RecipeIngredient {
       'name': name,
       'quantity': quantity,
       'unit': unit,
+      'note': note,
       'excludeFromShopping': excludeFromShopping,
     };
   }
@@ -49,6 +56,7 @@ class RecipeIngredient {
       name: (json['name'] as String? ?? '').trim(),
       quantity: (json['quantity'] as String? ?? '').trim(),
       unit: (json['unit'] as String? ?? '').trim(),
+      note: (json['note'] as String? ?? '').trim(),
       excludeFromShopping: json['excludeFromShopping'] as bool? ?? false,
     );
   }

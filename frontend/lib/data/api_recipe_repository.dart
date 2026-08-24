@@ -74,7 +74,7 @@ class ApiRecipeRepository
     final response = await _sendMultipart(
       'POST',
       '/recipes/$recipeId/image',
-      imagePath,
+      [imagePath],
       timeout: _imageUploadTimeout,
       useSaveErrorMessage: true,
     );
@@ -83,16 +83,21 @@ class ApiRecipeRepository
 
   @override
   Future<Recipe> importFromImage({required String imagePath}) async {
+    return importFromImages(imagePaths: [imagePath]);
+  }
+
+  @override
+  Future<Recipe> importFromImages({required List<String> imagePaths}) async {
     final response = await _sendMultipart(
       'POST',
       '/recipes/imports/photo',
-      imagePath,
+      imagePaths.take(_maxImportImages).toList(),
       timeout: _aiImportTimeout,
       useSaveErrorMessage: true,
     );
     return _recipeDraftFromJson(
       jsonDecode(response.body) as Map<String, dynamic>,
-      imagePath: imagePath,
+      imagePaths: imagePaths.take(_maxImportImages).toList(),
     );
   }
 
@@ -128,7 +133,7 @@ class ApiRecipeRepository
 
   Recipe _recipeDraftFromJson(
     Map<String, dynamic> json, {
-    required String imagePath,
+    required List<String> imagePaths,
   }) {
     return Recipe.create(
       (json['title'] as String? ?? '').trim(),
@@ -137,7 +142,7 @@ class ApiRecipeRepository
       season: (json['season'] as String? ?? '').trim(),
       prepTimeMinutes: json['prepTimeMinutes'] as int?,
       cookTimeMinutes: json['cookTimeMinutes'] as int?,
-      imagePaths: [imagePath],
+      imagePaths: imagePaths,
       ingredients: (json['ingredients'] as List<dynamic>? ?? [])
           .map(RecipeIngredient.fromJson)
           .toList(),
@@ -202,7 +207,7 @@ class ApiRecipeRepository
   Future<http.Response> _sendMultipart(
     String method,
     String path,
-    String imagePath, {
+    List<String> imagePaths, {
     required Duration timeout,
     bool useSaveErrorMessage = false,
   }) async {
@@ -216,9 +221,11 @@ class ApiRecipeRepository
       try {
         final request = http.MultipartRequest(method, _uri(baseUri, path));
         request.headers.addAll(_authHeaders());
-        request.files.add(
-          await http.MultipartFile.fromPath('image', imagePath),
-        );
+        for (final imagePath in imagePaths) {
+          request.files.add(
+            await http.MultipartFile.fromPath('image', imagePath),
+          );
+        }
 
         final streamedResponse = await request.send().timeout(timeout);
         final response = await http.Response.fromStream(streamedResponse);
@@ -368,6 +375,7 @@ class ApiRecipeRepository
   static const _requestTimeout = Duration(seconds: 2);
   static const _imageUploadTimeout = Duration(seconds: 20);
   static const _aiImportTimeout = Duration(seconds: 120);
+  static const _maxImportImages = 5;
 }
 
 class ApiRecipeRepositoryException extends RecipeSaveException {

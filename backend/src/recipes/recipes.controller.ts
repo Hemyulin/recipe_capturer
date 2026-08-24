@@ -8,9 +8,10 @@ import {
   Patch,
   Post,
   UploadedFile,
+  UploadedFiles,
   UseInterceptors,
 } from "@nestjs/common";
-import { FileInterceptor } from "@nestjs/platform-express";
+import { FileInterceptor, FilesInterceptor } from "@nestjs/platform-express";
 import { CreateRecipeDto } from "./dto/create-recipe.dto";
 import { UpdateRecipeDto } from "./dto/update-recipe.dto";
 import { RecipesService, UploadedRecipeImage } from "./recipes.service";
@@ -61,12 +62,14 @@ export class RecipesController {
 
   @Post("imports/photo")
   @UseInterceptors(
-    FileInterceptor("image", {
-      limits: { fileSize: 8 * 1024 * 1024 },
+    FilesInterceptor("image", 5, {
+      limits: { fileSize: 8 * 1024 * 1024, files: 5 },
     }),
   )
-  importFromPhoto(@UploadedFile() image?: UploadedRecipeImage) {
-    if (!image) throw new BadRequestException("Image file is required");
-    return this.recipesService.importFromPhoto(image);
+  importFromPhoto(@UploadedFiles() images?: UploadedRecipeImage[]) {
+    if (!images?.length) {
+      throw new BadRequestException("Image file is required");
+    }
+    return this.recipesService.importFromPhotos(images);
   }
 }
