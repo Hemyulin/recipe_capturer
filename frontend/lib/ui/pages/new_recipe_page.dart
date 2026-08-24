@@ -57,6 +57,133 @@ class _IngredientRowData {
   }
 }
 
+class _PhotoCountBadge extends StatelessWidget {
+  const _PhotoCountBadge({required this.count, required this.maxCount});
+
+  final int count;
+  final int maxCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.62),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.photo_library_outlined,
+              color: Colors.white,
+              size: 16,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              '$count/$maxCount',
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EditableImageThumb extends StatelessWidget {
+  const _EditableImageThumb({
+    required this.path,
+    required this.isMain,
+    required this.onMakeMain,
+    required this.onRemove,
+  });
+
+  final String path;
+  final bool isMain;
+  final VoidCallback onMakeMain;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return SizedBox(
+      width: 96,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Material(
+              color: colorScheme.surfaceContainerHigh,
+              borderRadius: BorderRadius.circular(8),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: isMain ? null : onMakeMain,
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isMain
+                          ? colorScheme.primary
+                          : colorScheme.outlineVariant,
+                      width: isMain ? 2 : 1,
+                    ),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: RecipeImage(path: path, placeholderSeed: path),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            right: 4,
+            top: 4,
+            child: IconButton.filledTonal(
+              onPressed: onRemove,
+              icon: const Icon(Icons.close_rounded),
+              tooltip: 'Foto entfernen',
+              style: IconButton.styleFrom(
+                minimumSize: const Size.square(28),
+                fixedSize: const Size.square(28),
+                padding: EdgeInsets.zero,
+                backgroundColor: colorScheme.surface.withValues(alpha: 0.9),
+              ),
+            ),
+          ),
+          if (isMain)
+            Positioned(
+              left: 5,
+              bottom: 5,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withValues(alpha: 0.92),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 3,
+                  ),
+                  child: Text(
+                    'Hauptbild',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _StepRowData {
   _StepRowData({String text = ''})
     : controller = TextEditingController(text: text),
@@ -203,12 +330,31 @@ class _NewRecipePageState extends State<NewRecipePage> {
     setState(() {});
   }
 
-  Future<void> _pickMainPhoto() async {
-    final image = await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (image == null) return;
+  Future<void> _pickImages() async {
+    final remainingSlots = 5 - _imagePaths.length;
+    if (remainingSlots <= 0) return;
+
+    final images = await ImagePicker().pickMultiImage(limit: remainingSlots);
+    if (images.isEmpty) return;
     setState(() {
-      _imagePaths = [image.path, ..._imagePaths.skip(1)];
+      _imagePaths = [
+        ..._imagePaths,
+        ...images.map((image) => image.path).take(remainingSlots),
+      ];
     });
+  }
+
+  void _makeMainPhoto(int index) {
+    if (index <= 0 || index >= _imagePaths.length) return;
+    setState(() {
+      final selected = _imagePaths.removeAt(index);
+      _imagePaths.insert(0, selected);
+    });
+  }
+
+  void _removePhoto(int index) {
+    if (index < 0 || index >= _imagePaths.length) return;
+    setState(() => _imagePaths.removeAt(index));
   }
 
   bool _isLocalUploadCandidate(String? path) {
@@ -454,13 +600,9 @@ class _NewRecipePageState extends State<NewRecipePage> {
           ? const <String>[]
           : _imagePaths.where(_isLocalUploadCandidate).take(5).toList();
       final shouldUploadImages = localUploadImages.isNotEmpty;
-      final recipeImagePaths = shouldUploadImages
-          ? widget.saveAsNew
-                ? _imagePaths
-                      .where((path) => !_isLocalUploadCandidate(path))
-                      .toList()
-                : initialRecipe?.imagePaths ?? const <String>[]
-          : _imagePaths;
+      final recipeImagePaths = _imagePaths
+          .where((path) => !_isLocalUploadCandidate(path))
+          .toList();
 
       if (initialRecipe == null || widget.saveAsNew) {
         final recipe = Recipe.create(
@@ -477,15 +619,23 @@ class _NewRecipePageState extends State<NewRecipePage> {
         );
 
         final savedRecipe = await widget.repo.add(recipe);
+        var currentRecipe = savedRecipe;
+        final uploadedPaths = <String, String>{};
         if (shouldUploadImages) {
           final uploader = imageRepository!;
           for (final imagePath in localUploadImages) {
-            await uploader.uploadImage(
+            final uploadedRecipe = await uploader.uploadImage(
               recipeId: savedRecipe.id,
               imagePath: imagePath,
             );
+            final newImagePath = uploadedRecipe.imagePaths
+                .where((path) => !currentRecipe.imagePaths.contains(path))
+                .lastOrNull;
+            if (newImagePath != null) uploadedPaths[imagePath] = newImagePath;
+            currentRecipe = uploadedRecipe;
           }
         }
+        await _saveUploadedImageOrder(currentRecipe, uploadedPaths);
       } else {
         final updatedRecipe = initialRecipe.copyWith(
           title: _titleController.text.trim(),
@@ -504,15 +654,23 @@ class _NewRecipePageState extends State<NewRecipePage> {
         );
 
         final savedRecipe = await widget.repo.update(updatedRecipe);
+        var currentRecipe = savedRecipe;
+        final uploadedPaths = <String, String>{};
         if (shouldUploadImages) {
           final uploader = imageRepository!;
           for (final imagePath in localUploadImages) {
-            await uploader.uploadImage(
+            final uploadedRecipe = await uploader.uploadImage(
               recipeId: savedRecipe.id,
               imagePath: imagePath,
             );
+            final newImagePath = uploadedRecipe.imagePaths
+                .where((path) => !currentRecipe.imagePaths.contains(path))
+                .lastOrNull;
+            if (newImagePath != null) uploadedPaths[imagePath] = newImagePath;
+            currentRecipe = uploadedRecipe;
           }
         }
+        await _saveUploadedImageOrder(currentRecipe, uploadedPaths);
       }
 
       if (!mounted) return;
@@ -523,6 +681,30 @@ class _NewRecipePageState extends State<NewRecipePage> {
         context,
       ).showSnackBar(SnackBar(content: Text(_saveErrorMessage(error))));
     }
+  }
+
+  Future<void> _saveUploadedImageOrder(
+    Recipe currentRecipe,
+    Map<String, String> uploadedPaths,
+  ) async {
+    if (uploadedPaths.isEmpty) return;
+    final finalImagePaths = _imagePaths
+        .map((path) => uploadedPaths[path] ?? path)
+        .where((path) => !_isLocalUploadCandidate(path))
+        .take(5)
+        .toList();
+    if (_sameStringList(finalImagePaths, currentRecipe.imagePaths)) return;
+    await widget.repo.update(
+      currentRecipe.copyWith(imagePaths: finalImagePaths),
+    );
+  }
+
+  bool _sameStringList(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var index = 0; index < a.length; index++) {
+      if (a[index] != b[index]) return false;
+    }
+    return true;
   }
 
   String _saveErrorMessage(Object error) {
@@ -538,51 +720,93 @@ class _NewRecipePageState extends State<NewRecipePage> {
 
   Widget _buildPhotoPicker(ColorScheme colorScheme) {
     final imagePath = _imagePaths.isEmpty ? null : _imagePaths.first;
+    final canAddImages = _imagePaths.length < 5;
 
-    return AspectRatio(
-      aspectRatio: 16 / 10,
-      child: Material(
-        color: colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(24),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: _pickMainPhoto,
-          child: imagePath == null
-              ? Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.add_photo_alternate_outlined,
-                      size: 36,
-                      color: colorScheme.primary,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AspectRatio(
+          aspectRatio: 16 / 10,
+          child: Material(
+            color: colorScheme.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(24),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: canAddImages ? _pickImages : null,
+              child: imagePath == null
+                  ? Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.add_photo_alternate_outlined,
+                          size: 36,
+                          color: colorScheme.primary,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Fotos hinzufügen',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      ],
+                    )
+                  : Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        RecipeImage(
+                          path: imagePath,
+                          placeholderSeed: widget.initialRecipe?.id,
+                        ),
+                        Positioned(
+                          left: 12,
+                          bottom: 12,
+                          child: _PhotoCountBadge(
+                            count: _imagePaths.length,
+                            maxCount: 5,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Hauptfoto hinzufügen',
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                  ],
-                )
-              : Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    RecipeImage(
-                      path: imagePath,
-                      placeholderSeed: widget.initialRecipe?.id,
-                    ),
-                    Positioned(
-                      right: 12,
-                      bottom: 12,
-                      child: FilledButton.icon(
-                        onPressed: _pickMainPhoto,
-                        icon: const Icon(Icons.photo_camera_outlined),
-                        label: const Text('Ändern'),
-                      ),
-                    ),
-                  ],
-                ),
+            ),
+          ),
         ),
-      ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                imagePath == null ? 'Keine Fotos' : 'Hauptbild zuerst',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            IconButton(
+              onPressed: canAddImages ? _pickImages : null,
+              icon: const Icon(Icons.add_photo_alternate_outlined),
+              tooltip: 'Foto hinzufügen',
+            ),
+          ],
+        ),
+        if (_imagePaths.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 82,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: _imagePaths.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                return _EditableImageThumb(
+                  path: _imagePaths[index],
+                  isMain: index == 0,
+                  onMakeMain: () => _makeMainPhoto(index),
+                  onRemove: () => _removePhoto(index),
+                );
+              },
+            ),
+          ),
+        ],
+      ],
     );
   }
 
