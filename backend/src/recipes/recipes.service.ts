@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  ServiceUnavailableException,
   NotFoundException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -51,6 +52,19 @@ export type UploadedRecipeImage = {
   mimetype: string;
   buffer: Buffer;
   size: number;
+};
+
+type ImportedRecipeDraft = {
+  title: string;
+  notes?: string;
+  servings?: number;
+  season?: string;
+  prepTimeMinutes?: number;
+  cookTimeMinutes?: number;
+  ingredients?: RecipeIngredientDto[];
+  instructions?: string[];
+  tags?: string[];
+  confidenceNotes?: string[];
 };
 
 @Injectable()
@@ -194,6 +208,151 @@ export class RecipesService {
 
     if (result.changes === 0) {
       throw new NotFoundException("Recipe not found");
+    }
+  }
+
+  async importFromPhoto(image: UploadedRecipeImage) {
+    if (!image.buffer || image.buffer.length === 0) {
+      throw new BadRequestException("Image file is empty");
+    }
+    if (!image.mimetype.startsWith("image/")) {
+      throw new BadRequestException("Only image uploads are supported");
+    }
+
+    const apiKey = this.config.get<string>("OPENAI_API_KEY")?.trim();
+    if (!apiKey) {
+      throw new ServiceUnavailableException(
+        "AI recipe import is not configured. Set OPENAI_API_KEY on the backend.",
+      );
+    }
+
+    const model =
+      this.config.get<string>("COOKBUK_OPENAI_RECIPE_MODEL")?.trim() ||
+      "gpt-5-mini";
+    const imageUrl = `data:${image.mimetype};base64,${image.buffer.toString("base64")}`;
+
+    const response = await this.createOpenAiRecipeDraft(
+      model,
+      apiKey,
+      imageUrl,
+    );
+
+    if (!response.ok) {
+      throw new ServiceUnavailableException(
+        `AI recipe import failed. HTTP ${response.status}.`,
+      );
+    }
+
+    const payload = (await response.json()) as unknown;
+    const outputText = this.extractOpenAiOutputText(payload);
+    if (!outputText) {
+      throw new ServiceUnavailableException(
+        "AI recipe import returned no text.",
+      );
+    }
+
+    try {
+      return this.normalizeImportedRecipeDraft(JSON.parse(outputText));
+    } catch {
+      throw new ServiceUnavailableException(
+        "AI recipe import returned invalid recipe data.",
+      );
+    }
+  }
+
+  private async createOpenAiRecipeDraft(
+    model: string,
+    apiKey: string,
+    imageUrl: string,
+  ) {
+    try {
+      return await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          input: [
+            {
+              role: "developer",
+              content:
+                "You extract editable household recipes from photos. Return only fields that are visible or strongly implied. Prefer German recipe text when the photo is German. Never invent precise quantities if they are unreadable; leave quantity or unit empty instead.",
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "input_text",
+                  text: "Create a CookBuk recipe draft from this image. Include confidenceNotes for uncertain parts.",
+                },
+                { type: "input_image", image_url: imageUrl, detail: "high" },
+              ],
+            },
+          ],
+          text: {
+            format: {
+              type: "json_schema",
+              name: "cookbuk_recipe_draft",
+              strict: true,
+              schema: {
+                type: "object",
+                additionalProperties: false,
+                required: [
+                  "title",
+                  "notes",
+                  "servings",
+                  "season",
+                  "prepTimeMinutes",
+                  "cookTimeMinutes",
+                  "ingredients",
+                  "instructions",
+                  "tags",
+                  "confidenceNotes",
+                ],
+                properties: {
+                  title: { type: "string" },
+                  notes: { type: "string" },
+                  servings: { type: ["integer", "null"], minimum: 1 },
+                  season: { type: "string" },
+                  prepTimeMinutes: { type: ["integer", "null"], minimum: 0 },
+                  cookTimeMinutes: { type: ["integer", "null"], minimum: 0 },
+                  ingredients: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      additionalProperties: false,
+                      required: ["name", "quantity", "unit"],
+                      properties: {
+                        name: { type: "string" },
+                        quantity: { type: "string" },
+                        unit: { type: "string" },
+                      },
+                    },
+                  },
+                  instructions: {
+                    type: "array",
+                    items: { type: "string" },
+                  },
+                  tags: {
+                    type: "array",
+                    items: { type: "string" },
+                  },
+                  confidenceNotes: {
+                    type: "array",
+                    items: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+        }),
+      });
+    } catch {
+      throw new ServiceUnavailableException(
+        "AI recipe import could not reach OpenAI.",
+      );
     }
   }
 
@@ -431,5 +590,84 @@ export class RecipesService {
     } catch {
       // Replacing the database value is more important than cleaning old files.
     }
+  }
+
+  private extractOpenAiOutputText(payload: unknown) {
+    const response = payload as {
+      output_text?: unknown;
+      output?: { content?: { text?: unknown }[] }[];
+    };
+    if (typeof response.output_text === "string") {
+      return response.output_text.trim();
+    }
+
+    return (response.output ?? [])
+      .flatMap((item) => item.content ?? [])
+      .map((content) => content.text)
+      .filter((text): text is string => typeof text === "string")
+      .join("\n")
+      .trim();
+  }
+
+  private normalizeImportedRecipeDraft(value: unknown): ImportedRecipeDraft {
+    const draft = value as ImportedRecipeDraft;
+    const title = this.cleanText(draft.title) || "Unbenanntes Rezept";
+    const ingredients = (draft.ingredients ?? [])
+      .map((ingredient) => ({
+        name: this.cleanText(ingredient.name),
+        quantity: this.cleanText(ingredient.quantity),
+        unit: this.cleanText(ingredient.unit),
+      }))
+      .filter((ingredient) => ingredient.name.length > 0)
+      .slice(0, 40);
+    const instructions = (draft.instructions ?? [])
+      .map((step) => this.cleanText(step))
+      .filter((step) => step.length > 0)
+      .slice(0, 30);
+    const tags = (draft.tags ?? [])
+      .map((tag) => this.cleanTag(tag))
+      .filter((tag) => tag.length > 0)
+      .filter((tag, index, values) => values.indexOf(tag) === index)
+      .slice(0, 8);
+    const confidenceNotes = (draft.confidenceNotes ?? [])
+      .map((note) => this.cleanText(note))
+      .filter((note) => note.length > 0)
+      .slice(0, 8);
+
+    return {
+      title,
+      notes: this.cleanText(draft.notes),
+      servings: this.positiveIntOrUndefined(draft.servings),
+      season: this.cleanText(draft.season),
+      prepTimeMinutes: this.nonNegativeIntOrUndefined(draft.prepTimeMinutes),
+      cookTimeMinutes: this.nonNegativeIntOrUndefined(draft.cookTimeMinutes),
+      ingredients,
+      instructions,
+      tags,
+      confidenceNotes,
+    };
+  }
+
+  private cleanText(value: unknown) {
+    return typeof value === "string" ? value.trim() : "";
+  }
+
+  private cleanTag(value: unknown) {
+    return this.cleanText(value)
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+  }
+
+  private positiveIntOrUndefined(value: unknown) {
+    return typeof value === "number" && Number.isInteger(value) && value > 0
+      ? value
+      : undefined;
+  }
+
+  private nonNegativeIntOrUndefined(value: unknown) {
+    return typeof value === "number" && Number.isInteger(value) && value >= 0
+      ? value
+      : undefined;
   }
 }

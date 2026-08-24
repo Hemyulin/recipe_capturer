@@ -50,6 +50,8 @@ pnpm rebuild better-sqlite3
 | `COOKBUK_HOUSEHOLD_ID` | `local-household` | MVP household scope |
 | `COOKBUK_HOUSEHOLD_NAME` | `CookBuk Household` | Display/admin label |
 | `COOKBUK_CORS_ORIGIN` | `*` | Comma-separated origins or `*` |
+| `OPENAI_API_KEY` | empty | Enables AI recipe import from photos |
+| `COOKBUK_OPENAI_RECIPE_MODEL` | `gpt-5-mini` | Vision-capable model for recipe drafts |
 
 For Pi + Tailscale, run with `COOKBUK_HOST=0.0.0.0` and point the Flutter app at
 the Pi's Tailscale hostname or `100.x.y.z` address.
@@ -99,9 +101,14 @@ Endpoints:
 - `POST /recipes`
 - `PATCH /recipes/:id`
 - `POST /recipes/:id/image` with multipart field `image`
+- `POST /recipes/imports/photo` with multipart field `image`; returns an
+  editable draft and requires `OPENAI_API_KEY`
 - `DELETE /recipes/:id`
 
 Delete currently archives recipes instead of hard-deleting them.
+
+AI import only creates a draft. The client must review and save the returned
+recipe data before it becomes part of the household recipe list.
 
 Uploaded images are stored on disk and served back from `/images/<filename>`.
 Keep `COOKBUK_IMAGE_STORAGE_PATH` on persistent storage on the Pi, ideally next

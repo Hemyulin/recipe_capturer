@@ -25,3 +25,7 @@ abstract interface class RecipeImageRepository {
     required String imagePath,
   });
 }
+
+abstract interface class RecipeAiImportRepository {
+  Future<Recipe> importFromImage({required String imagePath});
+}

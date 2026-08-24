@@ -58,4 +58,15 @@ export class RecipesController {
     this.recipesService.archive(id);
     return { ok: true };
   }
+
+  @Post("imports/photo")
+  @UseInterceptors(
+    FileInterceptor("image", {
+      limits: { fileSize: 8 * 1024 * 1024 },
+    }),
+  )
+  importFromPhoto(@UploadedFile() image?: UploadedRecipeImage) {
+    if (!image) throw new BadRequestException("Image file is required");
+    return this.recipesService.importFromPhoto(image);
+  }
 }

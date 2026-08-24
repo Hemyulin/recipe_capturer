@@ -6,7 +6,11 @@ import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
 import 'package:http/http.dart' as http;
 
-class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
+class ApiRecipeRepository
+    implements
+        RecipeRepository,
+        RecipeImageRepository,
+        RecipeAiImportRepository {
   ApiRecipeRepository({
     String? baseUrl,
     List<String>? baseUrls,
@@ -76,6 +80,20 @@ class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
     return _recipeFromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
+  @override
+  Future<Recipe> importFromImage({required String imagePath}) async {
+    final response = await _sendMultipart(
+      'POST',
+      '/recipes/imports/photo',
+      imagePath,
+      useSaveErrorMessage: true,
+    );
+    return _recipeDraftFromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+      imagePath: imagePath,
+    );
+  }
+
   Uri _uri(Uri baseUri, String path) {
     return baseUri.replace(path: '${baseUri.path}$path');
   }
@@ -104,6 +122,30 @@ class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
         .map((path) => _absoluteImagePath(path.toString()))
         .toList();
     return Recipe.fromJson(normalized);
+  }
+
+  Recipe _recipeDraftFromJson(
+    Map<String, dynamic> json, {
+    required String imagePath,
+  }) {
+    return Recipe.create(
+      (json['title'] as String? ?? '').trim(),
+      notes: (json['notes'] as String? ?? '').trim(),
+      servings: json['servings'] as int?,
+      season: (json['season'] as String? ?? '').trim(),
+      prepTimeMinutes: json['prepTimeMinutes'] as int?,
+      cookTimeMinutes: json['cookTimeMinutes'] as int?,
+      imagePaths: [imagePath],
+      ingredients: (json['ingredients'] as List<dynamic>? ?? [])
+          .map(RecipeIngredient.fromJson)
+          .toList(),
+      instructions: (json['instructions'] as List<dynamic>? ?? [])
+          .map((step) => step.toString())
+          .toList(),
+      tags: (json['tags'] as List<dynamic>? ?? [])
+          .map((tag) => tag.toString())
+          .toList(),
+    );
   }
 
   String _absoluteImagePath(String value) {
@@ -259,6 +301,9 @@ class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
   String _statusMessage(int statusCode) {
     if (statusCode == 401 || statusCode == 403) {
       return 'Pi hat die Anfrage abgelehnt. Prüfe den CookBuk Token.';
+    }
+    if (statusCode == 503) {
+      return 'KI-Import ist auf dem Pi noch nicht konfiguriert.';
     }
     if (statusCode >= 500) {
       return 'Pi Backend hat einen Serverfehler gemeldet.';
