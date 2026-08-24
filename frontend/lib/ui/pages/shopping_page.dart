@@ -167,6 +167,11 @@ class _ShoppingPageState extends State<ShoppingPage> {
   @override
   Widget build(BuildContext context) {
     final visibleItems = _visibleItems;
+    final hasShoppingItems =
+        !_isLoading && _loadError == null && _items.isNotEmpty;
+    final checkedVisibleCount = visibleItems
+        .where((item) => _checkedItemKeys.contains(item.key))
+        .length;
 
     return Scaffold(
       appBar: AppBar(
@@ -185,68 +190,65 @@ class _ShoppingPageState extends State<ShoppingPage> {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadList,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
-          children: [
-            _ShoppingWeekHeader(
-              label: _weekLabel(_weekStart, _weekEnd),
-              onPrevious: () => _moveWeek(-1),
-              onNext: () => _moveWeek(1),
+      body: Column(
+        children: [
+          _ShoppingStickyHeader(
+            weekLabel: _weekLabel(_weekStart, _weekEnd),
+            onPrevious: () => _moveWeek(-1),
+            onNext: () => _moveWeek(1),
+            showListControls: hasShoppingItems,
+            plannedRecipeCount: _plannedRecipeCount,
+            checkedCount: checkedVisibleCount,
+            totalCount: visibleItems.length,
+            viewMode: _viewMode,
+            onViewModeChanged: (value) => setState(() => _viewMode = value),
+          ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _loadList,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+                children: [
+                  if (_isLoading)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 40),
+                      child: LoadStateView.loading(),
+                    )
+                  else if (_loadError != null)
+                    SizedBox(
+                      height: 360,
+                      child: LoadStateView.error(
+                        title: 'Einkaufsliste konnte nicht geladen werden',
+                        message:
+                            'Prüfe, ob der CookBuk-Backendserver läuft und dein Gerät im Tailscale ist.',
+                        onRetry: _loadList,
+                      ),
+                    )
+                  else if (_items.isEmpty)
+                    SizedBox(
+                      height: 360,
+                      child: _EmptyShoppingList(onRefresh: _loadList),
+                    )
+                  else if (_viewMode == _ShoppingViewMode.combined)
+                    for (final item in _items)
+                      _ShoppingItemTile(
+                        item: item,
+                        isChecked: _checkedItemKeys.contains(item.key),
+                        onChanged: (value) => _toggleItem(item.key, value),
+                      )
+                  else
+                    for (final group in _visibleGroups)
+                      _ShoppingGroupSection(
+                        group: group,
+                        checkedItemKeys: _checkedItemKeys,
+                        onChanged: _toggleItem,
+                      ),
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
-            if (_isLoading)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 40),
-                child: LoadStateView.loading(),
-              )
-            else if (_loadError != null)
-              SizedBox(
-                height: 360,
-                child: LoadStateView.error(
-                  title: 'Einkaufsliste konnte nicht geladen werden',
-                  message:
-                      'Prüfe, ob der CookBuk-Backendserver läuft und dein Gerät im Tailscale ist.',
-                  onRetry: _loadList,
-                ),
-              )
-            else if (_items.isEmpty)
-              SizedBox(
-                height: 360,
-                child: _EmptyShoppingList(onRefresh: _loadList),
-              )
-            else ...[
-              _ShoppingSummary(
-                plannedRecipeCount: _plannedRecipeCount,
-                checkedCount: visibleItems
-                    .where((item) => _checkedItemKeys.contains(item.key))
-                    .length,
-                totalCount: visibleItems.length,
-              ),
-              const SizedBox(height: 12),
-              _ShoppingViewSelector(
-                value: _viewMode,
-                onChanged: (value) => setState(() => _viewMode = value),
-              ),
-              const SizedBox(height: 12),
-              if (_viewMode == _ShoppingViewMode.combined)
-                for (final item in _items)
-                  _ShoppingItemTile(
-                    item: item,
-                    isChecked: _checkedItemKeys.contains(item.key),
-                    onChanged: (value) => _toggleItem(item.key, value),
-                  )
-              else
-                for (final group in _visibleGroups)
-                  _ShoppingGroupSection(
-                    group: group,
-                    checkedItemKeys: _checkedItemKeys,
-                    onChanged: _toggleItem,
-                  ),
-            ],
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -257,11 +259,15 @@ class _ShoppingPageState extends State<ShoppingPage> {
   }
 
   static String _weekLabel(DateTime start, DateTime end) {
-    return '${_shortDate(start)} - ${_shortDate(end)}';
+    return '${_fullDate(start)} - ${_fullDate(end)}';
   }
 
   static String _shortDate(DateTime date) {
     return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.';
+  }
+
+  static String _fullDate(DateTime date) {
+    return '${_shortDate(date)}${date.year}';
   }
 
   static int _compareSlots(MealPlanSlot a, MealPlanSlot b) {
@@ -459,6 +465,76 @@ class _EmptyShoppingList extends StatelessWidget {
   }
 }
 
+class _ShoppingStickyHeader extends StatelessWidget {
+  const _ShoppingStickyHeader({
+    required this.weekLabel,
+    required this.onPrevious,
+    required this.onNext,
+    required this.showListControls,
+    required this.plannedRecipeCount,
+    required this.checkedCount,
+    required this.totalCount,
+    required this.viewMode,
+    required this.onViewModeChanged,
+  });
+
+  final String weekLabel;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+  final bool showListControls;
+  final int plannedRecipeCount;
+  final int checkedCount;
+  final int totalCount;
+  final _ShoppingViewMode viewMode;
+  final ValueChanged<_ShoppingViewMode> onViewModeChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colorScheme.surface.withValues(alpha: 0.97),
+        border: Border(
+          bottom: BorderSide(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.72),
+          ),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _ShoppingWeekHeader(
+                label: weekLabel,
+                onPrevious: onPrevious,
+                onNext: onNext,
+              ),
+              if (showListControls) ...[
+                const SizedBox(height: 6),
+                _ShoppingSummary(
+                  plannedRecipeCount: plannedRecipeCount,
+                  checkedCount: checkedCount,
+                  totalCount: totalCount,
+                ),
+                const SizedBox(height: 8),
+                _ShoppingViewSelector(
+                  value: viewMode,
+                  onChanged: onViewModeChanged,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ShoppingWeekHeader extends StatelessWidget {
   const _ShoppingWeekHeader({
     required this.label,
@@ -516,7 +592,7 @@ class _ShoppingSummary extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         child: Row(
           children: [
             Icon(Icons.shopping_basket_outlined, color: colorScheme.primary),
