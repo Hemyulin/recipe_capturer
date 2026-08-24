@@ -166,7 +166,7 @@ void main() {
     expect(requests.single.path, '/meal-plan/close-day/2026-08-23');
   });
 
-  test('falls back to demo meal plan when backend is unavailable', () async {
+  test('keeps meal plan empty when backend is unavailable', () async {
     final unavailableServer = await HttpServer.bind(
       InternetAddress.loopbackIPv4,
       0,
@@ -178,9 +178,7 @@ void main() {
     final today = DateTime.now();
     final slots = await repository.getRange(from: today, to: today);
 
-    expect(slots, hasLength(3));
-    expect(slots.where((slot) => slot.isRecipe), hasLength(3));
-    expect(slots.map((slot) => slot.recipeId), contains('demo-oatmeal'));
+    expect(slots, isEmpty);
   });
 }
 

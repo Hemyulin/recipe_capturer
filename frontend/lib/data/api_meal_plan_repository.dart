@@ -252,53 +252,12 @@ class ApiMealPlanRepository implements MealPlanRepository {
     required DateTime from,
     required DateTime to,
   }) {
-    if (_offlineSlots.isEmpty) _seedOfflineSlots();
-
     final fromKey = _dateKey(from);
     final toKey = _dateKey(to);
     return _offlineSlots.values.where((slot) {
       final key = _dateKey(slot.plannedFor);
       return key.compareTo(fromKey) >= 0 && key.compareTo(toKey) <= 0;
     }).toList();
-  }
-
-  void _seedOfflineSlots() {
-    final today = _dateOnly(DateTime.now());
-    _writeOfflineSlot(
-      date: today,
-      meal: 'breakfast',
-      slotType: 'recipe',
-      recipeId: 'demo-oatmeal',
-    );
-    _writeOfflineSlot(
-      date: today,
-      meal: 'lunch',
-      slotType: 'recipe',
-      recipeId: 'demo-chickpea-bowl',
-    );
-    _writeOfflineSlot(
-      date: today,
-      meal: 'dinner',
-      slotType: 'recipe',
-      recipeId: 'demo-chicken-curry',
-    );
-    _writeOfflineSlot(
-      date: today.add(const Duration(days: 1)),
-      meal: 'dinner',
-      slotType: 'leftovers',
-    );
-    _writeOfflineSlot(
-      date: today.add(const Duration(days: 2)),
-      meal: 'breakfast',
-      slotType: 'recipe',
-      recipeId: 'demo-oatmeal-buns',
-    );
-    _writeOfflineSlot(
-      date: today.add(const Duration(days: 2)),
-      meal: 'dinner',
-      slotType: 'recipe',
-      recipeId: 'demo-tomato-lentil-soup',
-    );
   }
 
   void _writeOfflineSlot({
