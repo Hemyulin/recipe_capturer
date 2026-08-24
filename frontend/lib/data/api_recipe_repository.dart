@@ -225,7 +225,7 @@ class ApiRecipeRepository
 
         if (response.statusCode < 200 || response.statusCode >= 300) {
           throw ApiRecipeRepositoryException(
-            _statusMessage(response.statusCode),
+            _statusMessage(response.statusCode, response.body),
           );
         }
 
@@ -275,7 +275,9 @@ class ApiRecipeRepository
     };
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ApiRecipeRepositoryException(_statusMessage(response.statusCode));
+      throw ApiRecipeRepositoryException(
+        _statusMessage(response.statusCode, response.body),
+      );
     }
 
     return response.body;
@@ -301,7 +303,10 @@ class ApiRecipeRepository
     return 'Pi nicht erreichbar. Prüfe WLAN, Tailscale oder die Backend-Adresse.';
   }
 
-  String _statusMessage(int statusCode) {
+  String _statusMessage(int statusCode, String responseBody) {
+    final backendMessage = _backendMessage(responseBody);
+    if (backendMessage != null) return backendMessage;
+
     if (statusCode == 401 || statusCode == 403) {
       return 'Pi hat die Anfrage abgelehnt. Prüfe den CookBuk Token.';
     }
@@ -312,6 +317,42 @@ class ApiRecipeRepository
       return 'Pi Backend hat einen Serverfehler gemeldet.';
     }
     return 'Pi Backend konnte das Rezept nicht speichern. HTTP $statusCode.';
+  }
+
+  String? _backendMessage(String responseBody) {
+    if (responseBody.trim().isEmpty) return null;
+    try {
+      final decoded = jsonDecode(responseBody);
+      if (decoded is! Map<String, dynamic>) return null;
+      final message = decoded['message'];
+      final normalized = switch (message) {
+        String value => value.trim(),
+        List<dynamic> values =>
+          values.map((value) => value.toString()).join('\n'),
+        _ => '',
+      };
+      if (normalized.isEmpty) return null;
+
+      if (normalized.startsWith('AI recipe import is not configured')) {
+        return 'KI-Import ist auf dem Pi noch nicht konfiguriert. Prüfe OPENAI_API_KEY.';
+      }
+      if (normalized.startsWith('AI recipe import failed.')) {
+        return 'KI-Import fehlgeschlagen. ${normalized.replaceFirst('AI recipe import failed. ', '')}';
+      }
+      if (normalized.startsWith('AI recipe import returned')) {
+        return 'KI-Import hat keine lesbaren Rezeptdaten geliefert.';
+      }
+      if (normalized.startsWith('Only image uploads')) {
+        return 'Das Bildformat wurde vom Pi nicht akzeptiert.';
+      }
+      if (normalized.startsWith('Image file is empty')) {
+        return 'Das Bild ist leer und konnte nicht hochgeladen werden.';
+      }
+
+      return normalized;
+    } catch (_) {
+      return null;
+    }
   }
 
   static List<Uri> _parseBaseUris(List<String> values) {

@@ -9,10 +9,18 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   late HttpServer server;
   late ApiRecipeRepository repository;
+  var importStatusCode = 200;
+  Object importErrorPayload = const {
+    'message': 'AI recipe import failed. HTTP 401.',
+  };
   final requests = <_RequestLog>[];
 
   setUp(() async {
     requests.clear();
+    importStatusCode = 200;
+    importErrorPayload = const {
+      'message': 'AI recipe import failed. HTTP 401.',
+    };
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     repository = ApiRecipeRepository(
       baseUrl: 'http://${server.address.host}:${server.port}',
@@ -46,6 +54,12 @@ void main() {
         );
       } else if (request.method == 'POST' &&
           request.uri.path == '/recipes/imports/photo') {
+        request.response.statusCode = importStatusCode;
+        if (importStatusCode >= 300) {
+          request.response.write(jsonEncode(importErrorPayload));
+          await request.response.close();
+          return;
+        }
         request.response.write(
           jsonEncode({
             'title': 'Foto Pasta',
@@ -210,6 +224,38 @@ void main() {
 
     await file.delete();
   });
+
+  test(
+    'shows backend AI import errors instead of generic configuration text',
+    () async {
+      importStatusCode = 503;
+      importErrorPayload = const {
+        'message': 'AI recipe import failed. HTTP 401.',
+      };
+      final file = await File(
+        '${Directory.systemTemp.path}/cookbuk_api_import_error_test.jpg',
+      ).writeAsString('fake image');
+
+      await expectLater(
+        repository.importFromImage(imagePath: file.path),
+        throwsA(
+          isA<RecipeSaveException>()
+              .having(
+                (error) => error.userMessage,
+                'userMessage',
+                contains('KI-Import fehlgeschlagen'),
+              )
+              .having(
+                (error) => error.userMessage,
+                'userMessage',
+                contains('HTTP 401'),
+              ),
+        ),
+      );
+
+      await file.delete();
+    },
+  );
 
   test(
     'does not fake successful recipe writes when backend is unavailable',
