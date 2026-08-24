@@ -10,6 +10,7 @@ import 'package:cookbuk/ui/pages/new_recipe_page.dart';
 import 'package:cookbuk/ui/pages/recipe_details_page.dart';
 import 'package:cookbuk/ui/pages/recipe_list_page.dart';
 import 'package:cookbuk/ui/pages/shopping_page.dart';
+import 'package:cookbuk/ui/pages/status_page.dart';
 import 'package:cookbuk/ui/pages/today_page.dart';
 import 'package:cookbuk/ui/pages/week_page.dart';
 
@@ -49,6 +50,10 @@ final router = GoRouter(
           path: '/shopping',
           builder: (context, state) =>
               ShoppingPage(repo: repo, mealPlanRepo: mealPlanRepo),
+        ),
+        GoRoute(
+          path: '/status',
+          builder: (context, state) => StatusPage(mealPlanRepo: mealPlanRepo),
         ),
       ],
     ),

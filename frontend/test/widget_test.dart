@@ -7,6 +7,7 @@ import 'package:cookbuk/data/in_memory_recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
 import 'package:cookbuk/ui/pages/new_recipe_page.dart';
 import 'package:cookbuk/ui/pages/shopping_page.dart';
+import 'package:cookbuk/ui/pages/status_page.dart';
 import 'package:cookbuk/ui/pages/today_page.dart';
 import 'package:cookbuk/ui/pages/week_page.dart';
 
@@ -408,6 +409,18 @@ void main() {
     final clipboardData = await Clipboard.getData('text/plain');
     expect(clipboardData?.text, '1 Banane\n120 g Haferflocken');
     expect(find.text('Einkaufsliste kopiert.'), findsOneWidget);
+  });
+
+  testWidgets('shows local mode on status page without diagnostics', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(home: StatusPage(mealPlanRepo: InMemoryMealPlanRepository())),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Status'), findsOneWidget);
+    expect(find.text('Lokaler Modus'), findsOneWidget);
   });
 }
 

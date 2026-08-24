@@ -45,6 +45,8 @@ void main() {
             },
           ]),
         );
+      } else if (request.method == 'GET' && request.uri.path == '/health') {
+        request.response.write(jsonEncode({'ok': true}));
       } else if (request.method == 'POST' &&
           request.uri.path == '/meal-plan/close-day/2026-08-23') {
         request.response.write(
@@ -157,6 +159,16 @@ void main() {
       'extras': ['Brot', 'Butter'],
       'recipeExtraIds': ['recipe-side'],
     });
+  });
+
+  test('tests backend connection', () async {
+    final result = await repository.testConnection();
+
+    expect(result.isConnected, true);
+    expect(result.activeBaseUrl, startsWith('http://127.0.0.1:'));
+    expect(repository.lastSuccessfulConnectionAt, isNotNull);
+    expect(requests.single.method, 'GET');
+    expect(requests.single.path, '/health');
   });
 
   test('queues writes when backend is unavailable', () async {
