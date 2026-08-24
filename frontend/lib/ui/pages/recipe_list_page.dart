@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cookbuk/data/meal_plan_repository.dart';
 import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
+import 'package:cookbuk/ui/formatters/tag_label_de.dart';
 import 'package:cookbuk/ui/pages/recipe_camera_import_page.dart';
 import 'package:cookbuk/ui/widgets/backend_connection_icon.dart';
 import 'package:cookbuk/ui/widgets/load_state_view.dart';
@@ -32,6 +33,10 @@ class _RecipeListPageState extends State<RecipeListPage> {
   List<Recipe> recipesSnapshot = [];
   final TextEditingController _searchController = TextEditingController();
   bool _favoritesOnly = false;
+  bool _needsReviewOnly = false;
+  String? _selectedSeason;
+  int? _maxTotalTimeMinutes;
+  String? _selectedTag;
   bool _isCreateMenuOpen = false;
   bool _isImporting = false;
   bool _isLoading = true;
@@ -160,6 +165,19 @@ class _RecipeListPageState extends State<RecipeListPage> {
 
     return recipesSnapshot.where((recipe) {
       if (_favoritesOnly && !recipe.isFavorite) return false;
+      if (_needsReviewOnly && !_needsReview(recipe)) return false;
+      if (_selectedSeason != null && recipe.season != _selectedSeason) {
+        return false;
+      }
+      if (_maxTotalTimeMinutes != null) {
+        final totalTime = recipe.totalTimeMinutes;
+        if (totalTime == null || totalTime > _maxTotalTimeMinutes!) {
+          return false;
+        }
+      }
+      if (_selectedTag != null && !recipe.tags.contains(_selectedTag)) {
+        return false;
+      }
 
       if (query.isEmpty) return true;
 
@@ -175,12 +193,80 @@ class _RecipeListPageState extends State<RecipeListPage> {
     }).toList();
   }
 
+  int get _activeFilterCount {
+    return [
+      _favoritesOnly,
+      _needsReviewOnly,
+      _selectedSeason != null,
+      _maxTotalTimeMinutes != null,
+      _selectedTag != null,
+    ].where((isActive) => isActive).length;
+  }
+
+  List<String> get _availableSeasons {
+    final seasons =
+        recipesSnapshot
+            .map((recipe) => recipe.season.trim())
+            .where((season) => season.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    return seasons;
+  }
+
+  List<String> get _availableTags {
+    final tags =
+        recipesSnapshot
+            .expand((recipe) => recipe.tags)
+            .where((tag) => tag != 'needs_review')
+            .toSet()
+            .toList()
+          ..sort((a, b) => tagLabelDe(a).compareTo(tagLabelDe(b)));
+    return tags;
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _favoritesOnly = false;
+      _needsReviewOnly = false;
+      _selectedSeason = null;
+      _maxTotalTimeMinutes = null;
+      _selectedTag = null;
+    });
+  }
+
+  Future<void> _showFilterSheet() async {
+    final result = await showModalBottomSheet<_RecipeFilterState>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => _RecipeFilterSheet(
+        initial: _RecipeFilterState(
+          favoritesOnly: _favoritesOnly,
+          needsReviewOnly: _needsReviewOnly,
+          selectedSeason: _selectedSeason,
+          maxTotalTimeMinutes: _maxTotalTimeMinutes,
+          selectedTag: _selectedTag,
+        ),
+        seasons: _availableSeasons,
+        tags: _availableTags,
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _favoritesOnly = result.favoritesOnly;
+      _needsReviewOnly = result.needsReviewOnly;
+      _selectedSeason = result.selectedSeason;
+      _maxTotalTimeMinutes = result.maxTotalTimeMinutes;
+      _selectedTag = result.selectedTag;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final filteredRecipes = _filteredRecipes();
     final hasAnyRecipe = recipesSnapshot.isNotEmpty;
-    final needsReviewCount = recipesSnapshot.where(_needsReview).length;
+    final activeFilterCount = _activeFilterCount;
 
     final Widget content = _isLoading
         ? const LoadStateView.loading()
@@ -270,44 +356,76 @@ class _RecipeListPageState extends State<RecipeListPage> {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  if (needsReviewCount > 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: colorScheme.secondaryContainer.withValues(
-                          alpha: 0.96,
-                        ),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Text(
-                        '$needsReviewCount offen',
-                        style: Theme.of(context).textTheme.labelMedium
-                            ?.copyWith(
-                              color: colorScheme.onSecondaryContainer,
-                              fontWeight: FontWeight.w700,
-                            ),
-                      ),
-                    ),
-                  FilterChip(
-                    label: const Text('Favoriten'),
-                    selected: _favoritesOnly,
-                    onSelected: (value) {
-                      setState(() => _favoritesOnly = value);
-                    },
+            child: Row(
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _showFilterSheet,
+                  icon: const Icon(Icons.tune_rounded),
+                  label: Text(
+                    activeFilterCount == 0
+                        ? 'Filter'
+                        : 'Filter ($activeFilterCount)',
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 8),
+                if (activeFilterCount > 0)
+                  IconButton(
+                    onPressed: _clearFilters,
+                    icon: const Icon(Icons.filter_alt_off_outlined),
+                    tooltip: 'Filter zurücksetzen',
+                  ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        if (_favoritesOnly)
+                          const Padding(
+                            padding: EdgeInsets.only(left: 8),
+                            child: Chip(label: Text('Favoriten')),
+                          ),
+                        if (_needsReviewOnly)
+                          const Padding(
+                            padding: EdgeInsets.only(left: 8),
+                            child: Chip(label: Text('Noch prüfen')),
+                          ),
+                        if (_selectedSeason != null)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8),
+                            child: Chip(label: Text(_selectedSeason!)),
+                          ),
+                        if (_maxTotalTimeMinutes != null)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8),
+                            child: Chip(
+                              label: Text('bis $_maxTotalTimeMinutes min'),
+                            ),
+                          ),
+                        if (_selectedTag != null)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8),
+                            child: Chip(label: Text(tagLabelDe(_selectedTag!))),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
+          if (recipesSnapshot.where(_needsReview).isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '${recipesSnapshot.where(_needsReview).length} Rezepte offen',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
           Expanded(child: content),
         ],
       ),
@@ -318,6 +436,146 @@ class _RecipeListPageState extends State<RecipeListPage> {
 enum _RecipeImportSource { camera, gallery }
 
 enum _RecipeCreateAction { camera, gallery, manual }
+
+class _RecipeFilterState {
+  const _RecipeFilterState({
+    required this.favoritesOnly,
+    required this.needsReviewOnly,
+    required this.selectedSeason,
+    required this.maxTotalTimeMinutes,
+    required this.selectedTag,
+  });
+
+  final bool favoritesOnly;
+  final bool needsReviewOnly;
+  final String? selectedSeason;
+  final int? maxTotalTimeMinutes;
+  final String? selectedTag;
+}
+
+class _RecipeFilterSheet extends StatefulWidget {
+  const _RecipeFilterSheet({
+    required this.initial,
+    required this.seasons,
+    required this.tags,
+  });
+
+  final _RecipeFilterState initial;
+  final List<String> seasons;
+  final List<String> tags;
+
+  @override
+  State<_RecipeFilterSheet> createState() => _RecipeFilterSheetState();
+}
+
+class _RecipeFilterSheetState extends State<_RecipeFilterSheet> {
+  late bool _favoritesOnly = widget.initial.favoritesOnly;
+  late bool _needsReviewOnly = widget.initial.needsReviewOnly;
+  late String? _selectedSeason = widget.initial.selectedSeason;
+  late int? _maxTotalTimeMinutes = widget.initial.maxTotalTimeMinutes;
+  late String? _selectedTag = widget.initial.selectedTag;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: ListView(
+        shrinkWrap: true,
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+        children: [
+          Text('Filter', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 12),
+          SwitchListTile(
+            value: _favoritesOnly,
+            onChanged: (value) => setState(() => _favoritesOnly = value),
+            title: const Text('Favoriten'),
+            secondary: const Icon(Icons.favorite_border_rounded),
+          ),
+          SwitchListTile(
+            value: _needsReviewOnly,
+            onChanged: (value) => setState(() => _needsReviewOnly = value),
+            title: const Text('Noch prüfen'),
+            secondary: const Icon(Icons.rate_review_outlined),
+          ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String?>(
+            initialValue: _selectedSeason,
+            decoration: const InputDecoration(labelText: 'Saison'),
+            items: [
+              const DropdownMenuItem<String?>(value: null, child: Text('Alle')),
+              for (final season in widget.seasons)
+                DropdownMenuItem<String?>(value: season, child: Text(season)),
+            ],
+            onChanged: (value) => setState(() => _selectedSeason = value),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<int?>(
+            initialValue: _maxTotalTimeMinutes,
+            decoration: const InputDecoration(labelText: 'Dauer'),
+            items: const [
+              DropdownMenuItem<int?>(value: null, child: Text('Alle')),
+              DropdownMenuItem<int?>(value: 15, child: Text('bis 15 min')),
+              DropdownMenuItem<int?>(value: 30, child: Text('bis 30 min')),
+              DropdownMenuItem<int?>(value: 45, child: Text('bis 45 min')),
+              DropdownMenuItem<int?>(value: 60, child: Text('bis 60 min')),
+            ],
+            onChanged: (value) => setState(() => _maxTotalTimeMinutes = value),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String?>(
+            initialValue: _selectedTag,
+            decoration: const InputDecoration(labelText: 'Tag'),
+            items: [
+              const DropdownMenuItem<String?>(value: null, child: Text('Alle')),
+              for (final tag in widget.tags)
+                DropdownMenuItem<String?>(
+                  value: tag,
+                  child: Text(tagLabelDe(tag)),
+                ),
+            ],
+            onChanged: (value) => setState(() => _selectedTag = value),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () {
+                    setState(() {
+                      _favoritesOnly = false;
+                      _needsReviewOnly = false;
+                      _selectedSeason = null;
+                      _maxTotalTimeMinutes = null;
+                      _selectedTag = null;
+                    });
+                  },
+                  child: const Text('Zurücksetzen'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton(
+                  onPressed: () {
+                    Navigator.of(context).pop(
+                      _RecipeFilterState(
+                        favoritesOnly: _favoritesOnly,
+                        needsReviewOnly: _needsReviewOnly,
+                        selectedSeason: _selectedSeason,
+                        maxTotalTimeMinutes: _maxTotalTimeMinutes,
+                        selectedTag: _selectedTag,
+                      ),
+                    );
+                  },
+                  child: const Text('Anwenden'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _RecipeCreateFan extends StatelessWidget {
   const _RecipeCreateFan({
@@ -552,6 +810,7 @@ class _RecipeImportProgressDialogState
 const _maxImportImages = 5;
 
 bool _needsReview(Recipe recipe) {
+  if (recipe.tags.contains('needs_review')) return true;
   final hasIngredients = recipe.ingredients.isNotEmpty;
   final hasInstructions = recipe.instructions.isNotEmpty;
   return !hasIngredients || !hasInstructions;
