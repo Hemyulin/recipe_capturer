@@ -726,8 +726,8 @@ class _WeekMealCard extends StatelessWidget {
               ClipRRect(
                 borderRadius: BorderRadius.circular(16),
                 child: SizedBox(
-                  width: 74,
-                  height: 74,
+                  width: 86,
+                  height: 86,
                   child: isPlanned
                       ? RecipeImage(
                           path: imagePath,
@@ -747,7 +747,7 @@ class _WeekMealCard extends StatelessWidget {
                         const SizedBox(width: 6),
                         Text(
                           meal.label,
-                          style: Theme.of(context).textTheme.titleSmall,
+                          style: Theme.of(context).textTheme.titleMedium,
                         ),
                       ],
                     ),

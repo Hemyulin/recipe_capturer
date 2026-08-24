@@ -89,6 +89,30 @@ void main() {
             'confidenceNotes': ['Menge war schwer lesbar.'],
           }),
         );
+      } else if (request.method == 'POST' &&
+          request.uri.path == '/recipes/imports/polish') {
+        request.response.write(
+          jsonEncode({
+            'title': 'Feine Foto Pasta',
+            'notes': 'Klarer formuliert.',
+            'servings': 2,
+            'season': 'Ganzjährig',
+            'prepTimeMinutes': 10,
+            'cookTimeMinutes': 20,
+            'ingredients': [
+              {
+                'name': 'Pasta',
+                'quantity': '200',
+                'unit': 'g',
+                'note': '',
+                'excludeFromShopping': false,
+              },
+            ],
+            'instructions': ['Pasta kochen.', 'Alles servieren.'],
+            'tags': ['dinner', 'quick'],
+            'confidenceNotes': [],
+          }),
+        );
       } else {
         request.response.write(jsonEncode({'ok': true}));
       }
@@ -264,6 +288,22 @@ void main() {
     expect(draft.mainImagePath, file.path);
 
     await file.delete();
+  });
+
+  test('polishes recipe drafts through the backend', () async {
+    final draft = await repository.polishRecipe(
+      Recipe.create(
+        'pasta',
+        ingredients: const [RecipeIngredient(name: 'Pasta', quantity: '200')],
+        instructions: const ['cook'],
+      ),
+    );
+
+    expect(requests.single.method, 'POST');
+    expect(requests.single.path, '/recipes/imports/polish');
+    expect(draft.title, 'Feine Foto Pasta');
+    expect(draft.season, 'Ganzjährig');
+    expect(draft.instructions, ['Pasta kochen.', 'Alles servieren.']);
   });
 
   test(

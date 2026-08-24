@@ -55,9 +55,10 @@ final router = GoRouter(
               ShoppingPage(repo: repo, mealPlanRepo: mealPlanRepo),
         ),
         GoRoute(
-          path: '/status',
+          path: '/settings',
           builder: (context, state) => StatusPage(mealPlanRepo: mealPlanRepo),
         ),
+        GoRoute(path: '/status', redirect: (_, _) => '/settings'),
       ],
     ),
     GoRoute(

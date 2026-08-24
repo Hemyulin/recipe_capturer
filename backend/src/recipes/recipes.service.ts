@@ -390,6 +390,50 @@ export class RecipesService {
     }
   }
 
+  async polishRecipeDraft(input: CreateRecipeDto) {
+    const apiKey = this.config.get<string>("OPENAI_API_KEY")?.trim();
+    if (!apiKey) {
+      throw new ServiceUnavailableException(
+        "AI recipe polish is not configured. Set OPENAI_API_KEY on the backend.",
+      );
+    }
+
+    const model =
+      this.config.get<string>("COOKBUK_OPENAI_RECIPE_MODEL")?.trim() ||
+      "gpt-5-mini";
+
+    const response = await this.createOpenAiPolishedRecipeDraft(
+      model,
+      apiKey,
+      input,
+    );
+
+    if (!response.ok) {
+      throw new ServiceUnavailableException(
+        (await this.openAiErrorMessage(response)).replace(
+          "AI recipe import failed.",
+          "AI recipe polish failed.",
+        ),
+      );
+    }
+
+    const payload = (await response.json()) as unknown;
+    const outputText = this.extractOpenAiOutputText(payload);
+    if (!outputText) {
+      throw new ServiceUnavailableException(
+        "AI recipe polish returned no text.",
+      );
+    }
+
+    try {
+      return this.normalizeImportedRecipeDraft(JSON.parse(outputText));
+    } catch {
+      throw new ServiceUnavailableException(
+        "AI recipe polish returned invalid recipe data.",
+      );
+    }
+  }
+
   private validateRecipeImage(image: UploadedRecipeImage) {
     if (!image.buffer || image.buffer.length === 0) {
       throw new BadRequestException("Image file is empty");
@@ -546,6 +590,120 @@ export class RecipesService {
         "AI recipe import could not reach OpenAI.",
       );
     }
+  }
+
+  private async createOpenAiPolishedRecipeDraft(
+    model: string,
+    apiKey: string,
+    recipe: CreateRecipeDto,
+  ) {
+    try {
+      return await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          input: [
+            {
+              role: "developer",
+              content: [
+                "You polish editable household recipes for CookBuk.",
+                "Write German output only.",
+                "Keep the recipe faithful: do not invent ingredients, quantities, temperatures, or times.",
+                "Improve clarity, consistency, and tone so the instructions read professionally but still naturally.",
+                "Normalize ingredient names to normal German kitchen language.",
+                "Use one season exactly from: Ganzjährig, Frühling, Sommer, Herbst, Winter.",
+                "Use stable tag IDs only, never translated tag labels.",
+              ].join(" "),
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "input_text",
+                  text: `Räume dieses Rezept auf und gib es als CookBuk-Rezeptentwurf zurück:\n${JSON.stringify(recipe)}`,
+                },
+              ],
+            },
+          ],
+          text: {
+            format: {
+              type: "json_schema",
+              name: "cookbuk_polished_recipe_draft",
+              strict: true,
+              schema: this.recipeDraftJsonSchema(),
+            },
+          },
+        }),
+      });
+    } catch {
+      throw new ServiceUnavailableException(
+        "AI recipe polish could not reach OpenAI.",
+      );
+    }
+  }
+
+  private recipeDraftJsonSchema() {
+    return {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "title",
+        "notes",
+        "servings",
+        "season",
+        "prepTimeMinutes",
+        "cookTimeMinutes",
+        "ingredients",
+        "instructions",
+        "tags",
+        "confidenceNotes",
+      ],
+      properties: {
+        title: { type: "string" },
+        notes: { type: "string" },
+        servings: { type: ["integer", "null"], minimum: 1 },
+        season: { type: "string" },
+        prepTimeMinutes: { type: ["integer", "null"], minimum: 0 },
+        cookTimeMinutes: { type: ["integer", "null"], minimum: 0 },
+        ingredients: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: [
+              "name",
+              "quantity",
+              "unit",
+              "note",
+              "excludeFromShopping",
+            ],
+            properties: {
+              name: { type: "string" },
+              quantity: { type: "string" },
+              unit: { type: "string" },
+              note: { type: "string" },
+              excludeFromShopping: { type: "boolean" },
+            },
+          },
+        },
+        instructions: {
+          type: "array",
+          items: { type: "string" },
+        },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+        },
+        confidenceNotes: {
+          type: "array",
+          items: { type: "string" },
+        },
+      },
+    };
   }
 
   setMainImage(id: string, image: UploadedRecipeImage) {

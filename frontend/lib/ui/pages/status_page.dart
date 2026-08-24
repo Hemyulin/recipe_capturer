@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:external_app_launcher/external_app_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:cookbuk/config/theme_controller.dart';
+import 'package:cookbuk/config/theme_presets.dart';
 import 'package:cookbuk/data/meal_plan_repository.dart';
 import 'package:cookbuk/ui/widgets/backend_connection_icon.dart';
 
@@ -111,12 +113,14 @@ class _StatusPageState extends State<StatusPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Status'),
+        title: const Text('Einstellungen'),
         actions: [BackendConnectionIcon(mealPlanRepo: widget.mealPlanRepo)],
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
         children: [
+          Text('Verbindung', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 10),
           if (diagnostics == null)
             const _StatusPanel(
               icon: Icons.info_outline_rounded,
@@ -157,6 +161,10 @@ class _StatusPageState extends State<StatusPage> {
               ],
             ),
           ],
+          const SizedBox(height: 20),
+          Text('Design', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 10),
+          const _ThemeSettingsCard(),
         ],
       ),
     );
@@ -408,6 +416,121 @@ class _StatusRow extends StatelessWidget {
           Expanded(
             child: Text(value, style: Theme.of(context).textTheme.bodyMedium),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ThemeSettingsCard extends StatelessWidget {
+  const _ThemeSettingsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: themeController,
+      builder: (context, _) {
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                for (final preset in CookbukThemes.presets)
+                  _ThemeChoice(
+                    preset: preset,
+                    isSelected: preset.id == themeController.themeId,
+                    onTap: () => themeController.setTheme(preset.id),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ThemeChoice extends StatelessWidget {
+  const _ThemeChoice({
+    required this.preset,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final CookbukThemePreset preset;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        constraints: const BoxConstraints(minWidth: 132),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? colorScheme.primaryContainer
+              : colorScheme.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected
+                ? colorScheme.primary
+                : colorScheme.outlineVariant,
+            width: isSelected ? 1.6 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _ThemeSwatches(colors: preset.swatches),
+            const SizedBox(width: 10),
+            Text(
+              preset.label,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: isSelected
+                    ? colorScheme.onPrimaryContainer
+                    : colorScheme.onSurface,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ThemeSwatches extends StatelessWidget {
+  const _ThemeSwatches({required this.colors});
+
+  final List<Color> colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 38,
+      height: 18,
+      child: Stack(
+        children: [
+          for (var index = 0; index < colors.length; index++)
+            Positioned(
+              left: index * 10,
+              child: Container(
+                width: 18,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: colors[index],
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 1.4),
+                ),
+              ),
+            ),
         ],
       ),
     );

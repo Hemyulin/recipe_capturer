@@ -73,7 +73,7 @@ class _BackendConnectionIconState extends State<BackendConnectionIcon> {
       child: Tooltip(
         message: 'Pi nicht verbunden',
         child: TextButton.icon(
-          onPressed: () => context.go('/status'),
+          onPressed: () => context.go('/settings'),
           style: TextButton.styleFrom(
             visualDensity: VisualDensity.compact,
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
