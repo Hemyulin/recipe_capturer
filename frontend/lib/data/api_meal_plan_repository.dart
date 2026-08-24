@@ -5,7 +5,8 @@ import 'package:cookbuk/data/meal_plan_repository.dart';
 import 'package:cookbuk/domain/meal_plan_slot.dart';
 import 'package:http/http.dart' as http;
 
-class ApiMealPlanRepository implements MealPlanRepository {
+class ApiMealPlanRepository
+    implements MealPlanRepository, MealPlanSyncNotifier {
   ApiMealPlanRepository({
     String? baseUrl,
     List<String>? baseUrls,
@@ -17,16 +18,26 @@ class ApiMealPlanRepository implements MealPlanRepository {
   final String _sharedToken;
   final Map<String, MealPlanSlot> _offlineSlots = {};
   final List<_PendingMealPlanWrite> _pendingWrites = [];
+  final StreamController<MealPlanSyncStatus> _syncStatusController =
+      StreamController<MealPlanSyncStatus>.broadcast();
   late Uri _activeBaseUri = _baseUris.first;
+  MealPlanSyncStatus _syncStatus = MealPlanSyncStatus.idle;
   Timer? _syncTimer;
   bool _isSyncing = false;
 
   void _ensureSyncTimer() {
     _syncTimer ??= Timer.periodic(
       const Duration(seconds: 10),
-      (_) => unawaited(syncPendingChanges()),
+      (_) => unawaited(syncPendingChanges().catchError((_) {})),
     );
   }
+
+  @override
+  MealPlanSyncStatus get syncStatus => _syncStatus;
+
+  @override
+  Stream<MealPlanSyncStatus> get syncStatusChanges =>
+      _syncStatusController.stream;
 
   @override
   Future<List<MealPlanSlot>> getRange({
@@ -185,20 +196,58 @@ class ApiMealPlanRepository implements MealPlanRepository {
     if (_pendingWrites.isEmpty || _isSyncing) return;
 
     _isSyncing = true;
+    _emitSyncStatus(
+      MealPlanSyncStatus(
+        phase: MealPlanSyncPhase.syncing,
+        pendingCount: _pendingWrites.length,
+        message: 'Synchronisiere ${_pendingWrites.length} Änderung(en)...',
+      ),
+    );
     try {
       while (_pendingWrites.isNotEmpty) {
         final pending = _pendingWrites.first;
         try {
           await _send(pending.method, pending.path, body: pending.body);
           _pendingWrites.removeAt(0);
+          if (_pendingWrites.isNotEmpty) {
+            _emitSyncStatus(
+              MealPlanSyncStatus(
+                phase: MealPlanSyncPhase.syncing,
+                pendingCount: _pendingWrites.length,
+                message:
+                    'Synchronisiere ${_pendingWrites.length} Änderung(en)...',
+              ),
+            );
+          }
         } on Object catch (error) {
-          if (_isOfflineError(error)) return;
-          _pendingWrites.removeAt(0);
+          if (_isOfflineError(error)) {
+            _emitSyncStatus(
+              MealPlanSyncStatus(
+                phase: MealPlanSyncPhase.queued,
+                pendingCount: _pendingWrites.length,
+                message: _queuedMessage(),
+              ),
+            );
+            return;
+          }
+          _emitSyncStatus(
+            MealPlanSyncStatus(
+              phase: MealPlanSyncPhase.blocked,
+              pendingCount: _pendingWrites.length,
+              message: _errorMessage(error),
+            ),
+          );
           rethrow;
         }
       }
       _syncTimer?.cancel();
       _syncTimer = null;
+      _emitSyncStatus(
+        const MealPlanSyncStatus(
+          phase: MealPlanSyncPhase.synced,
+          message: 'Änderungen wurden mit dem Pi synchronisiert.',
+        ),
+      );
     } finally {
       _isSyncing = false;
     }
@@ -319,7 +368,21 @@ class ApiMealPlanRepository implements MealPlanRepository {
     _pendingWrites.add(
       _PendingMealPlanWrite(method: method, path: path, body: body),
     );
+    _emitSyncStatus(
+      MealPlanSyncStatus(
+        phase: MealPlanSyncPhase.queued,
+        pendingCount: _pendingWrites.length,
+        message: _queuedMessage(),
+      ),
+    );
     _ensureSyncTimer();
+  }
+
+  void _emitSyncStatus(MealPlanSyncStatus status) {
+    _syncStatus = status;
+    if (!_syncStatusController.isClosed) {
+      _syncStatusController.add(status);
+    }
   }
 
   void _writeOfflineSlot({
@@ -365,6 +428,11 @@ class ApiMealPlanRepository implements MealPlanRepository {
 
   String _queuedMessage() {
     return 'Pi nicht erreichbar. Änderung vorgemerkt und wird automatisch synchronisiert, sobald die Verbindung zurück ist.';
+  }
+
+  String _errorMessage(Object error) {
+    if (error is MealPlanSaveException) return error.userMessage;
+    return 'Plan konnte nicht synchronisiert werden.';
   }
 
   String _statusMessage(int statusCode) {

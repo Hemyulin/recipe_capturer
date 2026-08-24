@@ -33,6 +33,30 @@ class MealPlanQueuedException extends MealPlanSaveException {
   const MealPlanQueuedException(super.userMessage);
 }
 
+enum MealPlanSyncPhase { idle, queued, syncing, synced, blocked }
+
+class MealPlanSyncStatus {
+  const MealPlanSyncStatus({
+    required this.phase,
+    this.pendingCount = 0,
+    this.message,
+  });
+
+  final MealPlanSyncPhase phase;
+  final int pendingCount;
+  final String? message;
+
+  bool get isVisible => phase != MealPlanSyncPhase.idle;
+
+  static const idle = MealPlanSyncStatus(phase: MealPlanSyncPhase.idle);
+}
+
+abstract interface class MealPlanSyncNotifier {
+  MealPlanSyncStatus get syncStatus;
+
+  Stream<MealPlanSyncStatus> get syncStatusChanges;
+}
+
 abstract class MealPlanRepository {
   Future<List<MealPlanSlot>> getRange({
     required DateTime from,

@@ -181,6 +181,8 @@ void main() {
     );
     expect(slots.single.meal, 'breakfast');
     expect(slots.single.recipeId, 'recipe-1');
+    expect(repository.syncStatus.phase, MealPlanSyncPhase.queued);
+    expect(repository.syncStatus.pendingCount, 1);
   });
 
   test('syncs queued writes when backend becomes available', () async {
@@ -230,6 +232,42 @@ void main() {
       'slotType': 'recipe',
       'recipeId': 'recipe-1',
     });
+    expect(repository.syncStatus.phase, MealPlanSyncPhase.synced);
+    expect(repository.syncStatus.pendingCount, 0);
+  });
+
+  test('reports blocked queued writes when backend rejects them', () async {
+    await server.close(force: true);
+    server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    repository = ApiMealPlanRepository(
+      baseUrl: 'http://${server.address.host}:${server.port}',
+    );
+
+    final port = server.port;
+    await server.close(force: true);
+    await expectLater(
+      repository.setRecipe(
+        date: DateTime(2026, 8, 23),
+        meal: 'breakfast',
+        recipeId: 'recipe-1',
+      ),
+      throwsA(isA<MealPlanQueuedException>()),
+    );
+
+    server = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
+    server.listen((request) async {
+      request.response.statusCode = HttpStatus.unauthorized;
+      request.response.write(jsonEncode({'message': 'nope'}));
+      await request.response.close();
+    });
+
+    await expectLater(
+      repository.syncPendingChanges(),
+      throwsA(isA<MealPlanSaveException>()),
+    );
+    expect(repository.syncStatus.phase, MealPlanSyncPhase.blocked);
+    expect(repository.syncStatus.pendingCount, 1);
+    expect(repository.syncStatus.message, contains('Token'));
   });
 
   test('closes a planned day', () async {
