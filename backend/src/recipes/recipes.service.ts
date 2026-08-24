@@ -215,7 +215,7 @@ export class RecipesService {
     if (!image.buffer || image.buffer.length === 0) {
       throw new BadRequestException("Image file is empty");
     }
-    if (!image.mimetype.startsWith("image/")) {
+    if (!this.isSupportedImage(image)) {
       throw new BadRequestException("Only image uploads are supported");
     }
 
@@ -229,7 +229,7 @@ export class RecipesService {
     const model =
       this.config.get<string>("COOKBUK_OPENAI_RECIPE_MODEL")?.trim() ||
       "gpt-5-mini";
-    const imageUrl = `data:${image.mimetype};base64,${image.buffer.toString("base64")}`;
+    const imageUrl = `data:${this.imageMimeType(image)};base64,${image.buffer.toString("base64")}`;
 
     const response = await this.createOpenAiRecipeDraft(
       model,
@@ -362,7 +362,7 @@ export class RecipesService {
     if (!image.buffer || image.buffer.length === 0) {
       throw new BadRequestException("Image file is empty");
     }
-    if (!image.mimetype.startsWith("image/")) {
+    if (!this.isSupportedImage(image)) {
       throw new BadRequestException("Only image uploads are supported");
     }
 
@@ -574,6 +574,31 @@ export class RecipesService {
 
     if (/^\.[a-z0-9]{1,8}$/.test(extension)) return extension;
     return ".jpg";
+  }
+
+  private isSupportedImage(image: UploadedRecipeImage) {
+    if (image.mimetype.startsWith("image/")) return true;
+    return this.supportedImageExtensions().has(
+      extname(image.originalname).toLowerCase(),
+    );
+  }
+
+  private imageMimeType(image: UploadedRecipeImage) {
+    if (image.mimetype.startsWith("image/")) return image.mimetype;
+    return (
+      {
+        ".gif": "image/gif",
+        ".heic": "image/heic",
+        ".jpeg": "image/jpeg",
+        ".jpg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+      }[extname(image.originalname).toLowerCase()] ?? "image/jpeg"
+    );
+  }
+
+  private supportedImageExtensions() {
+    return new Set([".gif", ".heic", ".jpeg", ".jpg", ".png", ".webp"]);
   }
 
   private deletePreviousStoredImage(imageUrl: string | null) {
