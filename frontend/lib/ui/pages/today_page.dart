@@ -112,10 +112,14 @@ class _TodayPageState extends State<TodayPage> {
           recipeId: selected,
         );
       }
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
+      if (error is MealPlanQueuedException) {
+        _showPlanMessage(error.userMessage);
+        return;
+      }
       await _loadRecipes();
-      _showPlanError();
+      _showPlanMessage(_mealPlanErrorMessage(error));
     }
   }
 
@@ -123,10 +127,14 @@ class _TodayPageState extends State<TodayPage> {
     setState(() => _mealRecipeIds[slotId] = null);
     try {
       await widget.mealPlanRepo.setEmpty(date: _today, meal: slotId);
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
+      if (error is MealPlanQueuedException) {
+        _showPlanMessage(error.userMessage);
+        return;
+      }
       await _loadRecipes();
-      _showPlanError();
+      _showPlanMessage(_mealPlanErrorMessage(error));
     }
   }
 
@@ -156,13 +164,17 @@ class _TodayPageState extends State<TodayPage> {
         extras: result.extras,
         recipeExtraIds: result.recipeExtraIds,
       );
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
+      if (error is MealPlanQueuedException) {
+        _showPlanMessage(error.userMessage);
+        return;
+      }
       setState(() {
         _mealExtras[slotId] = previous;
         _mealRecipeExtraIds[slotId] = previousRecipeIds;
       });
-      _showPlanError();
+      _showPlanMessage(_mealPlanErrorMessage(error));
     }
   }
 
@@ -180,11 +192,11 @@ class _TodayPageState extends State<TodayPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tag konnte nicht abgeschlossen werden.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_mealPlanErrorMessage(error))));
     }
   }
 
@@ -215,10 +227,15 @@ class _TodayPageState extends State<TodayPage> {
     ];
   }
 
-  void _showPlanError() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Plan konnte nicht gespeichert werden.')),
-    );
+  void _showPlanMessage(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  String _mealPlanErrorMessage(Object error) {
+    if (error is MealPlanSaveException) return error.userMessage;
+    return 'Plan konnte nicht gespeichert werden.';
   }
 
   static DateTime _dateOnly(DateTime date) {

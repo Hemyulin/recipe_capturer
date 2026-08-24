@@ -101,6 +101,9 @@ class InMemoryMealPlanRepository implements MealPlanRepository {
     );
   }
 
+  @override
+  Future<void> syncPendingChanges() async {}
+
   String _slotKey(DateTime date, String meal) => '${_dateKey(date)}:$meal';
 
   String _dateKey(DateTime date) {

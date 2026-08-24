@@ -140,10 +140,14 @@ class _WeekPageState extends State<WeekPage> {
           recipeId: selected,
         );
       }
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
+      if (error is MealPlanQueuedException) {
+        _showPlanMessage(error.userMessage);
+        return;
+      }
       setState(() => _slotValues[key] = previousValue);
-      _showPlanError('Plan konnte nicht gespeichert werden.');
+      _showPlanMessage(_mealPlanErrorMessage(error));
     }
   }
 
@@ -154,10 +158,14 @@ class _WeekPageState extends State<WeekPage> {
 
     try {
       await widget.mealPlanRepo.setEmpty(date: date, meal: meal);
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
+      if (error is MealPlanQueuedException) {
+        _showPlanMessage(error.userMessage);
+        return;
+      }
       setState(() => _slotValues[key] = previousValue);
-      _showPlanError('Plan konnte nicht gespeichert werden.');
+      _showPlanMessage(_mealPlanErrorMessage(error));
     }
   }
 
@@ -189,13 +197,17 @@ class _WeekPageState extends State<WeekPage> {
         extras: selectedExtras.extras,
         recipeExtraIds: selectedExtras.recipeExtraIds,
       );
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
+      if (error is MealPlanQueuedException) {
+        _showPlanMessage(error.userMessage);
+        return;
+      }
       setState(() {
         _slotExtras[key] = previousExtras;
         _slotRecipeExtraIds[key] = previousRecipeIds;
       });
-      _showPlanError('Extras konnten nicht gespeichert werden.');
+      _showPlanMessage(_mealPlanErrorMessage(error));
     }
   }
 
@@ -232,10 +244,15 @@ class _WeekPageState extends State<WeekPage> {
     ];
   }
 
-  void _showPlanError(String message) {
+  void _showPlanMessage(String message) {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  String _mealPlanErrorMessage(Object error) {
+    if (error is MealPlanSaveException) return error.userMessage;
+    return 'Plan konnte nicht gespeichert werden.';
   }
 
   @override

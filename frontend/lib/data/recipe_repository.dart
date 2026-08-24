@@ -1,5 +1,14 @@
 import '../domain/recipe.dart';
 
+class RecipeSaveException implements Exception {
+  const RecipeSaveException(this.userMessage);
+
+  final String userMessage;
+
+  @override
+  String toString() => userMessage;
+}
+
 abstract interface class RecipeRepository {
   Future<List<Recipe>> getAll();
 
