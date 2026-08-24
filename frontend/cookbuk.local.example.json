@@ -1,0 +1,4 @@
+{
+  "COOKBUK_API_BASE_URLS": "http://pi-server.local:3000,http://pi-server:3000",
+  "COOKBUK_SHARED_TOKEN": "token"
+}

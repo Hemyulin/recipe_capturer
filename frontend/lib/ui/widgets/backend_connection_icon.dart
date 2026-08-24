@@ -65,28 +65,29 @@ class _BackendConnectionIconState extends State<BackendConnectionIcon> {
     if (diagnostics == null) return const SizedBox.shrink();
 
     final colorScheme = Theme.of(context).colorScheme;
-    final connected = _isConnected == true;
     final knownDisconnected = _isConnected == false;
-    final icon = connected
-        ? Icons.check_circle_outline_rounded
-        : knownDisconnected
-        ? Icons.cancel_outlined
-        : Icons.circle_outlined;
-    final color = connected
-        ? colorScheme.primary.withValues(alpha: 0.72)
-        : knownDisconnected
-        ? colorScheme.secondary
-        : colorScheme.outline;
+    if (!knownDisconnected) return const SizedBox.shrink();
 
-    return IconButton(
-      visualDensity: VisualDensity.compact,
-      tooltip: connected
-          ? 'Pi verbunden'
-          : knownDisconnected
-          ? 'Pi nicht verbunden'
-          : 'Pi Status',
-      onPressed: () => context.go('/status'),
-      icon: Icon(icon, size: 18, color: color),
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(end: 6),
+      child: Tooltip(
+        message: 'Pi nicht verbunden',
+        child: TextButton.icon(
+          onPressed: () => context.go('/status'),
+          style: TextButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            minimumSize: const Size(0, 34),
+            backgroundColor: colorScheme.secondaryContainer,
+            foregroundColor: colorScheme.onSecondaryContainer,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+          icon: const Icon(Icons.warning_amber_rounded, size: 17),
+          label: const Text('Offline'),
+        ),
+      ),
     );
   }
 }

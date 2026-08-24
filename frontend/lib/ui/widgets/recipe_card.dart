@@ -24,7 +24,16 @@ class RecipeCard extends StatelessWidget {
 
     return Card(
       margin: EdgeInsets.zero,
+      elevation: 1.2,
+      shadowColor: colorScheme.onSurface.withValues(alpha: 0.12),
+      surfaceTintColor: Colors.transparent,
       clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.86),
+        ),
+      ),
       child: InkWell(
         onTap: onTap,
         child: Column(
@@ -35,7 +44,7 @@ class RecipeCard extends StatelessWidget {
               child: RecipeImage(path: imagePath, placeholderSeed: recipe.id),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+              padding: const EdgeInsets.fromLTRB(13, 11, 13, 11),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -65,10 +74,10 @@ class RecipeCard extends StatelessWidget {
                         ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 7),
                   Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                    spacing: 6,
+                    runSpacing: 6,
                     children: [
                       _InfoChip(
                         icon: Icons.local_dining_outlined,
@@ -87,7 +96,7 @@ class RecipeCard extends StatelessWidget {
                     ],
                   ),
                   if (recipe.tags.isNotEmpty) ...[
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 7),
                     Text(
                       recipe.tags.take(3).map(tagLabelDe).join(' · '),
                       maxLines: 1,
@@ -117,10 +126,13 @@ class _InfoChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(12),
+        color: colorScheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.62),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

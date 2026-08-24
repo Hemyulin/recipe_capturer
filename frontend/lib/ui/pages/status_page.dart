@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:external_app_launcher/external_app_launcher.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:cookbuk/data/meal_plan_repository.dart';
 import 'package:cookbuk/ui/widgets/backend_connection_icon.dart';
 
@@ -55,6 +58,53 @@ class _StatusPageState extends State<StatusPage> {
     });
   }
 
+  Future<void> _openTailscale() async {
+    if (Platform.isAndroid && await _openTailscaleAndroidApp()) return;
+
+    final opened = await _tryOpenExternalUrls([
+      'market://details?id=com.tailscale.ipn',
+      'https://play.google.com/store/apps/details?id=com.tailscale.ipn',
+      'https://login.tailscale.com/admin/machines',
+    ]);
+    if (opened || !mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Tailscale konnte nicht geöffnet werden.')),
+    );
+  }
+
+  Future<bool> _openTailscaleAndroidApp() async {
+    try {
+      final isInstalled = await LaunchApp.isAppInstalled(
+        androidPackageName: 'com.tailscale.ipn',
+      );
+      if (isInstalled != true) return false;
+
+      final result = await LaunchApp.openApp(
+        androidPackageName: 'com.tailscale.ipn',
+        openStore: false,
+      );
+      return result == 1;
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<bool> _tryOpenExternalUrls(List<String> values) async {
+    for (final value in values) {
+      try {
+        final opened = await launchUrl(
+          Uri.parse(value),
+          mode: LaunchMode.externalApplication,
+        );
+        if (opened) return true;
+      } catch (_) {
+        continue;
+      }
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final diagnostics = _diagnostics;
@@ -78,6 +128,7 @@ class _StatusPageState extends State<StatusPage> {
               status: _syncStatus,
               result: _lastTestResult,
               onTest: _testConnection,
+              onOpenTailscale: _openTailscale,
               isTesting: _isTesting,
             ),
             const SizedBox(height: 12),
@@ -127,12 +178,14 @@ class _ConnectionSummary extends StatelessWidget {
     required this.status,
     required this.result,
     required this.onTest,
+    required this.onOpenTailscale,
     required this.isTesting,
   });
 
   final MealPlanSyncStatus status;
   final BackendConnectionTestResult? result;
   final VoidCallback onTest;
+  final VoidCallback onOpenTailscale;
   final bool isTesting;
 
   @override
@@ -186,18 +239,31 @@ class _ConnectionSummary extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 14),
-            FilledButton.icon(
-              onPressed: isTesting ? null : onTest,
-              style: isDisconnected
-                  ? FilledButton.styleFrom(
-                      backgroundColor: warningColor,
-                      foregroundColor: colorScheme.onSecondary,
-                    )
-                  : null,
-              icon: Icon(
-                isTesting ? Icons.sync_rounded : Icons.network_check_rounded,
-              ),
-              label: Text(isTesting ? 'Teste...' : 'Verbindung testen'),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                FilledButton.icon(
+                  onPressed: isTesting ? null : onTest,
+                  style: isDisconnected
+                      ? FilledButton.styleFrom(
+                          backgroundColor: warningColor,
+                          foregroundColor: colorScheme.onSecondary,
+                        )
+                      : null,
+                  icon: Icon(
+                    isTesting
+                        ? Icons.sync_rounded
+                        : Icons.network_check_rounded,
+                  ),
+                  label: Text(isTesting ? 'Teste...' : 'Verbindung testen'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onOpenTailscale,
+                  icon: const Icon(Icons.vpn_key_outlined),
+                  label: const Text('Tailscale öffnen'),
+                ),
+              ],
             ),
           ],
         ),

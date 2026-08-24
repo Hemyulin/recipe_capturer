@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -101,17 +104,36 @@ class _RecipeListPageState extends State<RecipeListPage> {
     if (imagePaths.isEmpty || !mounted) return;
 
     setState(() => _isImporting = true);
+    var isProgressDialogVisible = true;
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const _RecipeImportProgressDialog(),
+      ).whenComplete(() => isProgressDialogVisible = false),
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    void closeProgressDialog() {
+      if (!mounted || !isProgressDialogVisible) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      isProgressDialogVisible = false;
+    }
+
     try {
       final draft = await importRepo.importFromImages(imagePaths: imagePaths);
       if (!mounted) return;
+      closeProgressDialog();
       final saved = await context.push<bool>('/new', extra: draft);
       if (saved == true) await _refresh();
     } catch (error) {
       if (!mounted) return;
+      closeProgressDialog();
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(_importErrorMessage(error))));
     } finally {
+      closeProgressDialog();
       if (mounted) setState(() => _isImporting = false);
     }
   }
@@ -194,10 +216,10 @@ class _RecipeListPageState extends State<RecipeListPage> {
                   crossAxisSpacing: 14,
                   mainAxisSpacing: 14,
                   childAspectRatio: columns == 1
-                      ? 0.9
+                      ? 1.1
                       : columns == 2
-                      ? 1.02
-                      : 0.82,
+                      ? 1.08
+                      : 0.92,
                 ),
                 itemCount: filteredRecipes.length,
                 itemBuilder: (context, index) {
@@ -327,6 +349,120 @@ class _RecipeListPageState extends State<RecipeListPage> {
 }
 
 enum _RecipeImportSource { camera, gallery }
+
+class _RecipeImportProgressDialog extends StatefulWidget {
+  const _RecipeImportProgressDialog();
+
+  @override
+  State<_RecipeImportProgressDialog> createState() =>
+      _RecipeImportProgressDialogState();
+}
+
+class _RecipeImportProgressDialogState
+    extends State<_RecipeImportProgressDialog> {
+  static const _messages = [
+    'Die KI kocht gerade vor sich hin...',
+    'Ich entziffere die Küchenhieroglyphen...',
+    'Kurz prüfen, ob das Ding koscher wirkt...',
+    'Zutaten werden liebevoll geradegerückt...',
+    'Ich suche den roten Faden im Rezeptchaos...',
+    'Noch ein bisschen Magie im Topf...',
+    'Einkaufsliste wird heimlich mitgedacht...',
+    'Der digitale Kochlöffel wird geschwungen...',
+    'Ich trenne Rezept von Randnotizen...',
+    'Einmal kurz mit Küchenintuition abschmecken...',
+    'Ich prüfe, ob aus dem Foto wirklich Essen wird...',
+    'Die KI fragt sich, ob das eine Prise oder Mut war...',
+    'Mengen werden aus dem Nebel gezogen...',
+    'Ich mache aus Foto-Chaos ein Rezept...',
+    'Der Topf simmert, die Bits arbeiten...',
+  ];
+
+  Timer? _timer;
+  final Random _random = Random();
+  late var _messageIndex = _random.nextInt(_messages.length);
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted) return;
+      setState(() {
+        var nextIndex = _random.nextInt(_messages.length);
+        if (_messages.length > 1) {
+          while (nextIndex == _messageIndex) {
+            nextIndex = _random.nextInt(_messages.length);
+          }
+        }
+        _messageIndex = nextIndex;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return PopScope(
+      canPop: false,
+      child: Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 26, 24, 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 56,
+                height: 56,
+                child: CircularProgressIndicator(
+                  strokeWidth: 4,
+                  color: colorScheme.primary,
+                ),
+              ),
+              const SizedBox(height: 22),
+              Text(
+                'KI erstellt dein Rezept',
+                textAlign: TextAlign.center,
+                style: textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 10),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 260),
+                child: Text(
+                  _messages[_messageIndex],
+                  key: ValueKey(_messageIndex),
+                  textAlign: TextAlign.center,
+                  style: textTheme.bodyLarge?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'Bitte App offen lassen.',
+                textAlign: TextAlign.center,
+                style: textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 const _maxImportImages = 5;
 
