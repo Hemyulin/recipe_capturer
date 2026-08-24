@@ -31,3 +31,7 @@ abstract interface class RecipeAiImportRepository {
 
   Future<Recipe> importFromImages({required List<String> imagePaths});
 }
+
+abstract interface class RecipeAiPolishRepository {
+  Future<Recipe> polishRecipe(Recipe recipe);
+}

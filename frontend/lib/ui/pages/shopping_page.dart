@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cookbuk/data/meal_plan_repository.dart';
+import 'package:cookbuk/domain/meal_plan_slot.dart';
 import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
 import 'package:cookbuk/ui/widgets/backend_connection_icon.dart';
 import 'package:cookbuk/ui/widgets/load_state_view.dart';
+
+enum _ShoppingViewMode { combined, byRecipe, byDay }
 
 class ShoppingPage extends StatefulWidget {
   const ShoppingPage({
@@ -25,10 +28,26 @@ class _ShoppingPageState extends State<ShoppingPage> {
   bool _isLoading = true;
   String? _loadError;
   List<_ShoppingItem> _items = [];
+  List<_ShoppingGroup> _recipeGroups = [];
+  List<_ShoppingGroup> _dayGroups = [];
   Set<String> _checkedItemKeys = {};
   int _plannedRecipeCount = 0;
+  _ShoppingViewMode _viewMode = _ShoppingViewMode.combined;
 
   DateTime get _weekEnd => _weekStart.add(const Duration(days: 6));
+  List<_ShoppingItem> get _visibleItems => switch (_viewMode) {
+    _ShoppingViewMode.combined => _items,
+    _ShoppingViewMode.byRecipe => [
+      for (final group in _recipeGroups) ...group.items,
+    ],
+    _ShoppingViewMode.byDay => [for (final group in _dayGroups) ...group.items],
+  };
+
+  List<_ShoppingGroup> get _visibleGroups => switch (_viewMode) {
+    _ShoppingViewMode.combined => const [],
+    _ShoppingViewMode.byRecipe => _recipeGroups,
+    _ShoppingViewMode.byDay => _dayGroups,
+  };
 
   @override
   void initState() {
@@ -49,29 +68,44 @@ class _ShoppingPageState extends State<ShoppingPage> {
         from: _weekStart,
         to: _weekEnd,
       );
+      final sortedSlots = [...slots]..sort(_compareSlots);
       final plannedRecipes = [
-        for (final slot in slots)
+        for (final slot in sortedSlots)
           if (slot.isRecipe && slot.recipeId != null) recipeById[slot.recipeId],
       ].whereType<Recipe>().toList();
       final sideRecipes = [
-        for (final slot in slots)
+        for (final slot in sortedSlots)
           for (final recipeId in slot.recipeExtraIds) recipeById[recipeId],
       ].whereType<Recipe>().toList();
       final extras = [
-        for (final slot in slots)
+        for (final slot in sortedSlots)
           for (final extra in slot.extras) extra,
       ];
+      final items = _ShoppingItem.fromRecipesAndExtras([
+        ...plannedRecipes,
+        ...sideRecipes,
+      ], extras);
+      final recipeGroups = _recipeGroupsFromSlots(sortedSlots, recipeById);
+      final dayGroups = _dayGroupsFromSlots(
+        _weekStart,
+        sortedSlots,
+        recipeById,
+      );
+      final visibleKeys = {
+        for (final item in items) item.key,
+        for (final group in recipeGroups)
+          for (final item in group.items) item.key,
+        for (final group in dayGroups)
+          for (final item in group.items) item.key,
+      };
 
       if (!mounted) return;
       setState(() {
         _plannedRecipeCount = plannedRecipes.length;
-        _items = _ShoppingItem.fromRecipesAndExtras([
-          ...plannedRecipes,
-          ...sideRecipes,
-        ], extras);
-        _checkedItemKeys = _checkedItemKeys.intersection(
-          _items.map((item) => item.key).toSet(),
-        );
+        _items = items;
+        _recipeGroups = recipeGroups;
+        _dayGroups = dayGroups;
+        _checkedItemKeys = _checkedItemKeys.intersection(visibleKeys);
         _isLoading = false;
       });
     } catch (_) {
@@ -110,9 +144,18 @@ class _ShoppingPageState extends State<ShoppingPage> {
   }
 
   Future<void> _copyShoppingList() async {
-    if (_items.isEmpty) return;
+    if (_visibleItems.isEmpty) return;
 
-    final text = _items.map((item) => item.title).join('\n');
+    final text = _viewMode == _ShoppingViewMode.combined
+        ? _items.map((item) => item.title).join('\n')
+        : _visibleGroups
+              .map(
+                (group) => [
+                  group.title,
+                  for (final item in group.items) '- ${item.title}',
+                ].join('\n'),
+              )
+              .join('\n\n');
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
 
@@ -123,7 +166,7 @@ class _ShoppingPageState extends State<ShoppingPage> {
 
   @override
   Widget build(BuildContext context) {
-    final checkedCount = _checkedItemKeys.length;
+    final visibleItems = _visibleItems;
 
     return Scaffold(
       appBar: AppBar(
@@ -176,16 +219,31 @@ class _ShoppingPageState extends State<ShoppingPage> {
             else ...[
               _ShoppingSummary(
                 plannedRecipeCount: _plannedRecipeCount,
-                checkedCount: checkedCount,
-                totalCount: _items.length,
+                checkedCount: visibleItems
+                    .where((item) => _checkedItemKeys.contains(item.key))
+                    .length,
+                totalCount: visibleItems.length,
               ),
               const SizedBox(height: 12),
-              for (final item in _items)
-                _ShoppingItemTile(
-                  item: item,
-                  isChecked: _checkedItemKeys.contains(item.key),
-                  onChanged: (value) => _toggleItem(item.key, value),
-                ),
+              _ShoppingViewSelector(
+                value: _viewMode,
+                onChanged: (value) => setState(() => _viewMode = value),
+              ),
+              const SizedBox(height: 12),
+              if (_viewMode == _ShoppingViewMode.combined)
+                for (final item in _items)
+                  _ShoppingItemTile(
+                    item: item,
+                    isChecked: _checkedItemKeys.contains(item.key),
+                    onChanged: (value) => _toggleItem(item.key, value),
+                  )
+              else
+                for (final group in _visibleGroups)
+                  _ShoppingGroupSection(
+                    group: group,
+                    checkedItemKeys: _checkedItemKeys,
+                    onChanged: _toggleItem,
+                  ),
             ],
           ],
         ),
@@ -204,6 +262,153 @@ class _ShoppingPageState extends State<ShoppingPage> {
 
   static String _shortDate(DateTime date) {
     return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.';
+  }
+
+  static int _compareSlots(MealPlanSlot a, MealPlanSlot b) {
+    final dateCompare = a.plannedFor.compareTo(b.plannedFor);
+    if (dateCompare != 0) return dateCompare;
+    return _mealOrder(a.meal).compareTo(_mealOrder(b.meal));
+  }
+
+  static int _mealOrder(String meal) {
+    return switch (meal) {
+      'breakfast' => 0,
+      'lunch' => 1,
+      'dinner' => 2,
+      _ => 3,
+    };
+  }
+
+  static String _mealLabel(String meal) {
+    return switch (meal) {
+      'breakfast' => 'Frühstück',
+      'lunch' => 'Mittagessen',
+      'dinner' => 'Abendessen',
+      _ => meal,
+    };
+  }
+
+  static String _dayLabel(DateTime date) {
+    final weekday = switch (date.weekday) {
+      DateTime.monday => 'Montag',
+      DateTime.tuesday => 'Dienstag',
+      DateTime.wednesday => 'Mittwoch',
+      DateTime.thursday => 'Donnerstag',
+      DateTime.friday => 'Freitag',
+      DateTime.saturday => 'Samstag',
+      DateTime.sunday => 'Sonntag',
+      _ => '',
+    };
+    return '$weekday, ${_shortDate(date)}';
+  }
+
+  static List<_ShoppingGroup> _recipeGroupsFromSlots(
+    List<MealPlanSlot> slots,
+    Map<String, Recipe> recipeById,
+  ) {
+    final groups = <_ShoppingGroup>[];
+
+    for (final slot in slots) {
+      final subtitle =
+          '${_dayLabel(slot.plannedFor)} · ${_mealLabel(slot.meal)}';
+      if (slot.isRecipe && slot.recipeId != null) {
+        final recipe = recipeById[slot.recipeId];
+        if (recipe != null) {
+          final items = _ShoppingItem.fromRecipesAndExtras(
+            [recipe],
+            const [],
+          ).scoped('recipe:${slot.plannedFor}:${slot.meal}:${recipe.id}');
+          if (items.isNotEmpty) {
+            groups.add(
+              _ShoppingGroup(
+                title: recipe.title,
+                subtitle: subtitle,
+                items: items,
+              ),
+            );
+          }
+        }
+      }
+
+      for (final recipeId in slot.recipeExtraIds) {
+        final recipe = recipeById[recipeId];
+        if (recipe == null) continue;
+        final items = _ShoppingItem.fromRecipesAndExtras(
+          [recipe],
+          const [],
+        ).scoped('side:${slot.plannedFor}:${slot.meal}:${recipe.id}');
+        if (items.isEmpty) continue;
+        groups.add(
+          _ShoppingGroup(
+            title: recipe.title,
+            subtitle: '$subtitle · Beilage',
+            items: items,
+          ),
+        );
+      }
+
+      final extraItems = _ShoppingItem.fromRecipesAndExtras(
+        const [],
+        slot.extras,
+      ).scoped('extras:${slot.plannedFor}:${slot.meal}');
+      if (extraItems.isNotEmpty) {
+        groups.add(
+          _ShoppingGroup(
+            title: 'Extras',
+            subtitle: subtitle,
+            items: extraItems,
+          ),
+        );
+      }
+    }
+
+    return groups;
+  }
+
+  static List<_ShoppingGroup> _dayGroupsFromSlots(
+    DateTime weekStart,
+    List<MealPlanSlot> slots,
+    Map<String, Recipe> recipeById,
+  ) {
+    final groups = <_ShoppingGroup>[];
+
+    for (var offset = 0; offset < 7; offset++) {
+      final date = weekStart.add(Duration(days: offset));
+      final daySlots = slots.where((slot) => _isSameDay(slot.plannedFor, date));
+      final recipes = [
+        for (final slot in daySlots)
+          if (slot.isRecipe && slot.recipeId != null) recipeById[slot.recipeId],
+        for (final slot in daySlots)
+          for (final recipeId in slot.recipeExtraIds) recipeById[recipeId],
+      ].whereType<Recipe>().toList();
+      final extras = [
+        for (final slot in daySlots)
+          for (final extra in slot.extras) extra,
+      ];
+      final items = _ShoppingItem.fromRecipesAndExtras(
+        recipes,
+        extras,
+      ).scoped('day:$date');
+      if (items.isEmpty) continue;
+      groups.add(
+        _ShoppingGroup(
+          title: _dayLabel(date),
+          subtitle: _recipeCountLabel(recipes.length),
+          items: items,
+        ),
+      );
+    }
+
+    return groups;
+  }
+
+  static bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  static String _recipeCountLabel(int count) {
+    if (count == 1) return '1 Rezept';
+    return '$count Rezepte';
   }
 }
 
@@ -335,6 +540,94 @@ class _ShoppingSummary extends StatelessWidget {
   }
 }
 
+class _ShoppingViewSelector extends StatelessWidget {
+  const _ShoppingViewSelector({required this.value, required this.onChanged});
+
+  final _ShoppingViewMode value;
+  final ValueChanged<_ShoppingViewMode> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SegmentedButton<_ShoppingViewMode>(
+      segments: const [
+        ButtonSegment(
+          value: _ShoppingViewMode.combined,
+          icon: Icon(Icons.format_list_bulleted_rounded),
+          label: Text('Alles'),
+        ),
+        ButtonSegment(
+          value: _ShoppingViewMode.byRecipe,
+          icon: Icon(Icons.menu_book_outlined),
+          label: Text('Rezept'),
+        ),
+        ButtonSegment(
+          value: _ShoppingViewMode.byDay,
+          icon: Icon(Icons.calendar_today_outlined),
+          label: Text('Tag'),
+        ),
+      ],
+      selected: {value},
+      onSelectionChanged: (selection) => onChanged(selection.single),
+      showSelectedIcon: false,
+    );
+  }
+}
+
+class _ShoppingGroupSection extends StatelessWidget {
+  const _ShoppingGroupSection({
+    required this.group,
+    required this.checkedItemKeys,
+    required this.onChanged,
+  });
+
+  final _ShoppingGroup group;
+  final Set<String> checkedItemKeys;
+  final void Function(String key, bool? value) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.65),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(group.title, style: Theme.of(context).textTheme.titleSmall),
+              if (group.subtitle != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  group.subtitle!,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 4),
+              for (final item in group.items)
+                _ShoppingItemTile(
+                  item: item,
+                  isChecked: checkedItemKeys.contains(item.key),
+                  onChanged: (value) => onChanged(item.key, value),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ShoppingItemTile extends StatelessWidget {
   const _ShoppingItemTile({
     required this.item,
@@ -452,6 +745,32 @@ class _ShoppingItem {
       'heißes wasser',
       'eis',
     }.contains(normalized);
+  }
+}
+
+class _ShoppingGroup {
+  const _ShoppingGroup({
+    required this.title,
+    required this.items,
+    this.subtitle,
+  });
+
+  final String title;
+  final String? subtitle;
+  final List<_ShoppingItem> items;
+}
+
+extension _ScopedShoppingItems on List<_ShoppingItem> {
+  List<_ShoppingItem> scoped(String scope) {
+    return [
+      for (final item in this)
+        _ShoppingItem(
+          key: '$scope::${item.key}',
+          name: item.name,
+          quantityLabel: item.quantityLabel,
+          sources: item.sources,
+        ),
+    ];
   }
 }
 

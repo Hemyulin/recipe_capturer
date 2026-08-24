@@ -11,7 +11,8 @@ class ApiRecipeRepository
     implements
         RecipeRepository,
         RecipeImageRepository,
-        RecipeAiImportRepository {
+        RecipeAiImportRepository,
+        RecipeAiPolishRepository {
   ApiRecipeRepository({
     String? baseUrl,
     List<String>? baseUrls,
@@ -115,6 +116,21 @@ class ApiRecipeRepository
     );
   }
 
+  @override
+  Future<Recipe> polishRecipe(Recipe recipe) async {
+    final response = await _send(
+      'POST',
+      '/recipes/imports/polish',
+      body: _recipePayload(recipe),
+      timeout: _aiPolishTimeout,
+      useSaveErrorMessage: true,
+    );
+    return _recipeDraftFromJson(
+      jsonDecode(response) as Map<String, dynamic>,
+      imagePaths: recipe.imagePaths,
+    );
+  }
+
   Uri _uri(Uri baseUri, String path) {
     return baseUri.replace(path: '${baseUri.path}$path');
   }
@@ -193,6 +209,7 @@ class ApiRecipeRepository
     String method,
     String path, {
     Map<String, dynamic>? body,
+    Duration timeout = _requestTimeout,
     bool useSaveErrorMessage = false,
   }) async {
     Object? lastOfflineError;
@@ -203,7 +220,13 @@ class ApiRecipeRepository
 
     for (final baseUri in orderedBaseUris) {
       try {
-        final response = await _sendToBaseUri(method, baseUri, path, body);
+        final response = await _sendToBaseUri(
+          method,
+          baseUri,
+          path,
+          body,
+          timeout,
+        );
         _activeBaseUri = baseUri;
         return response;
       } on Object catch (error) {
@@ -269,6 +292,7 @@ class ApiRecipeRepository
     Uri baseUri,
     String path,
     Map<String, dynamic>? body,
+    Duration timeout,
   ) async {
     final headers = {
       ..._authHeaders(),
@@ -276,22 +300,17 @@ class ApiRecipeRepository
     };
     final encodedBody = body == null ? null : jsonEncode(body);
     final response = await switch (method) {
-      'GET' =>
-        http
-            .get(_uri(baseUri, path), headers: headers)
-            .timeout(_requestTimeout),
+      'GET' => http.get(_uri(baseUri, path), headers: headers).timeout(timeout),
       'POST' =>
         http
             .post(_uri(baseUri, path), headers: headers, body: encodedBody)
-            .timeout(_requestTimeout),
+            .timeout(timeout),
       'PATCH' =>
         http
             .patch(_uri(baseUri, path), headers: headers, body: encodedBody)
-            .timeout(_requestTimeout),
+            .timeout(timeout),
       'DELETE' =>
-        http
-            .delete(_uri(baseUri, path), headers: headers)
-            .timeout(_requestTimeout),
+        http.delete(_uri(baseUri, path), headers: headers).timeout(timeout),
       _ => throw ApiRecipeRepositoryException('Unsupported method: $method'),
     };
 
@@ -408,6 +427,15 @@ class ApiRecipeRepository
       if (normalized.startsWith('AI recipe import returned')) {
         return 'KI-Import hat keine lesbaren Rezeptdaten geliefert.';
       }
+      if (normalized.startsWith('AI recipe polish is not configured')) {
+        return 'KI-Aufräumen ist auf dem Pi noch nicht konfiguriert. Prüfe OPENAI_API_KEY.';
+      }
+      if (normalized.startsWith('AI recipe polish failed.')) {
+        return 'KI-Aufräumen fehlgeschlagen. ${normalized.replaceFirst('AI recipe polish failed. ', '')}';
+      }
+      if (normalized.startsWith('AI recipe polish returned')) {
+        return 'KI-Aufräumen hat keine lesbaren Rezeptdaten geliefert.';
+      }
       if (normalized.startsWith('Only image uploads')) {
         return 'Das Bildformat wurde vom Pi nicht akzeptiert.';
       }
@@ -434,6 +462,7 @@ class ApiRecipeRepository
   static const _requestTimeout = Duration(seconds: 2);
   static const _imageUploadTimeout = Duration(seconds: 20);
   static const _aiImportTimeout = Duration(seconds: 120);
+  static const _aiPolishTimeout = Duration(seconds: 90);
   static const _maxImportImages = 5;
   static const _recipeCacheStorageKey = 'cookbuk.cachedRecipes.v1';
 }

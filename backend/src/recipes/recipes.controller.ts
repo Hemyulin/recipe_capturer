@@ -72,4 +72,9 @@ export class RecipesController {
     }
     return this.recipesService.importFromPhotos(images);
   }
+
+  @Post("imports/polish")
+  polishRecipe(@Body() body: CreateRecipeDto) {
+    return this.recipesService.polishRecipeDraft(body);
+  }
 }

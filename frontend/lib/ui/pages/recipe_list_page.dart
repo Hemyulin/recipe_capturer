@@ -33,6 +33,7 @@ class _RecipeListPageState extends State<RecipeListPage> {
   final TextEditingController _searchController = TextEditingController();
   bool _favoritesOnly = false;
   bool _withImagesOnly = false;
+  bool _isCreateMenuOpen = false;
   bool _isImporting = false;
   bool _isLoading = true;
   String? _loadError;
@@ -71,34 +72,29 @@ class _RecipeListPageState extends State<RecipeListPage> {
     }
   }
 
-  Future<void> _importRecipeFromPhoto() async {
+  Future<void> _handleCreateAction(_RecipeCreateAction action) async {
+    if (_isImporting) return;
+    setState(() => _isCreateMenuOpen = false);
+
+    if (action == _RecipeCreateAction.manual) {
+      final saved = await context.push<bool>('/new');
+      if (saved == true) await _refresh();
+      return;
+    }
+
+    final source = switch (action) {
+      _RecipeCreateAction.camera => _RecipeImportSource.camera,
+      _RecipeCreateAction.gallery => _RecipeImportSource.gallery,
+      _RecipeCreateAction.manual => throw StateError('Handled above'),
+    };
+    await _importRecipeFromPhoto(source);
+  }
+
+  Future<void> _importRecipeFromPhoto(_RecipeImportSource source) async {
     final importRepo = widget.repo is RecipeAiImportRepository
         ? widget.repo as RecipeAiImportRepository
         : null;
     if (importRepo == null || _isImporting) return;
-
-    final source = await showModalBottomSheet<_RecipeImportSource>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_camera_outlined),
-              title: const Text('Foto aufnehmen'),
-              onTap: () => context.pop(_RecipeImportSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Bilder auswählen'),
-              onTap: () => context.pop(_RecipeImportSource.gallery),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (source == null || !mounted) return;
 
     final imagePaths = await _pickImportImages(source);
     if (imagePaths.isEmpty || !mounted) return;
@@ -242,35 +238,15 @@ class _RecipeListPageState extends State<RecipeListPage> {
         actions: [
           if (widget.mealPlanRepo != null)
             BackendConnectionIcon(mealPlanRepo: widget.mealPlanRepo!),
-          IconButton(
-            onPressed: _isImporting ? null : _importRecipeFromPhoto,
-            tooltip: 'Aus Foto importieren',
-            icon: _isImporting
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.document_scanner_outlined),
-          ),
-          IconButton(
-            onPressed: () async {
-              final saved = await context.push<bool>('/new');
-              if (saved == true) await _refresh();
-            },
-            tooltip: 'Manuell erstellen',
-            icon: const Icon(Icons.edit_note_outlined),
-          ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          final saved = await context.push<bool>('/new');
-          if (saved == true) await _refresh();
-        },
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Rezept hinzufügen'),
+      floatingActionButton: _RecipeCreateFan(
+        isOpen: _isCreateMenuOpen,
+        isBusy: _isImporting,
+        onToggle: () => setState(() => _isCreateMenuOpen = !_isCreateMenuOpen),
+        onAction: _handleCreateAction,
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: Column(
         children: [
           Padding(
@@ -349,6 +325,124 @@ class _RecipeListPageState extends State<RecipeListPage> {
 }
 
 enum _RecipeImportSource { camera, gallery }
+
+enum _RecipeCreateAction { camera, gallery, manual }
+
+class _RecipeCreateFan extends StatelessWidget {
+  const _RecipeCreateFan({
+    required this.isOpen,
+    required this.isBusy,
+    required this.onToggle,
+    required this.onAction,
+  });
+
+  final bool isOpen;
+  final bool isBusy;
+  final VoidCallback onToggle;
+  final void Function(_RecipeCreateAction action) onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 172,
+      height: 172,
+      child: Stack(
+        alignment: Alignment.bottomRight,
+        children: [
+          _FanActionButton(
+            isVisible: isOpen,
+            right: 86,
+            bottom: 4,
+            icon: Icons.edit_note_outlined,
+            tooltip: 'Manuell',
+            onPressed: () => onAction(_RecipeCreateAction.manual),
+          ),
+          _FanActionButton(
+            isVisible: isOpen,
+            right: 64,
+            bottom: 64,
+            icon: Icons.photo_library_outlined,
+            tooltip: 'Bilder auswählen',
+            onPressed: () => onAction(_RecipeCreateAction.gallery),
+          ),
+          _FanActionButton(
+            isVisible: isOpen,
+            right: 4,
+            bottom: 86,
+            icon: Icons.photo_camera_outlined,
+            tooltip: 'Foto aufnehmen',
+            onPressed: () => onAction(_RecipeCreateAction.camera),
+          ),
+          FloatingActionButton(
+            onPressed: isBusy ? null : onToggle,
+            tooltip: 'Rezept hinzufügen',
+            child: isBusy
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2.4),
+                  )
+                : AnimatedRotation(
+                    turns: isOpen ? 0.125 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    child: const Icon(Icons.add_rounded),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FanActionButton extends StatelessWidget {
+  const _FanActionButton({
+    required this.isVisible,
+    required this.right,
+    required this.bottom,
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final bool isVisible;
+  final double right;
+  final double bottom;
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return AnimatedPositioned(
+      duration: const Duration(milliseconds: 210),
+      curve: Curves.easeOutCubic,
+      right: isVisible ? right : 0,
+      bottom: isVisible ? bottom : 0,
+      child: AnimatedScale(
+        scale: isVisible ? 1 : 0.72,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        child: IgnorePointer(
+          ignoring: !isVisible,
+          child: AnimatedOpacity(
+            opacity: isVisible ? 1 : 0,
+            duration: const Duration(milliseconds: 140),
+            child: FloatingActionButton.small(
+              heroTag: tooltip,
+              onPressed: onPressed,
+              tooltip: tooltip,
+              backgroundColor: colorScheme.surfaceContainerLow,
+              foregroundColor: colorScheme.onSurface,
+              child: Icon(icon),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _RecipeImportProgressDialog extends StatefulWidget {
   const _RecipeImportProgressDialog();

@@ -409,7 +409,7 @@ void main() {
     expect(find.text('Einkaufsliste kopiert.'), findsOneWidget);
   });
 
-  testWidgets('shows local mode on status page without diagnostics', (
+  testWidgets('shows local mode on settings page without diagnostics', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -417,37 +417,40 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Status'), findsOneWidget);
+    expect(find.text('Einstellungen'), findsOneWidget);
     expect(find.text('Lokaler Modus'), findsOneWidget);
   });
 
-  testWidgets('status page spins while testing and shows warning on failure', (
-    WidgetTester tester,
-  ) async {
-    final repo = _FakeDiagnosticMealPlanRepository();
+  testWidgets(
+    'settings page spins while testing and shows warning on failure',
+    (WidgetTester tester) async {
+      final repo = _FakeDiagnosticMealPlanRepository();
 
-    await tester.pumpWidget(MaterialApp(home: StatusPage(mealPlanRepo: repo)));
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        MaterialApp(home: StatusPage(mealPlanRepo: repo)),
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Verbindung testen'));
-    await tester.pump();
+      await tester.tap(find.text('Verbindung testen'));
+      await tester.pump();
 
-    expect(find.byIcon(Icons.sync_rounded), findsWidgets);
+      expect(find.byIcon(Icons.sync_rounded), findsWidgets);
 
-    repo.completeConnectionTest(
-      BackendConnectionTestResult(
-        isConnected: false,
-        checkedAt: DateTime(2026, 8, 24),
-        activeBaseUrl: 'http://192.168.178.54:3000',
-        message: 'Pi nicht erreichbar.',
-      ),
-    );
-    await tester.pumpAndSettle();
+      repo.completeConnectionTest(
+        BackendConnectionTestResult(
+          isConnected: false,
+          checkedAt: DateTime(2026, 8, 24),
+          activeBaseUrl: 'http://192.168.178.54:3000',
+          message: 'Pi nicht erreichbar.',
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('Nicht verbunden'), findsOneWidget);
-    expect(find.text('Pi nicht erreichbar.'), findsOneWidget);
-    expect(find.byIcon(Icons.cancel_outlined), findsWidgets);
-  });
+      expect(find.text('Nicht verbunden'), findsOneWidget);
+      expect(find.text('Pi nicht erreichbar.'), findsOneWidget);
+      expect(find.byIcon(Icons.cancel_outlined), findsWidgets);
+    },
+  );
 }
 
 class _FakeDiagnosticMealPlanRepository

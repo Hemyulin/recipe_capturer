@@ -72,6 +72,14 @@ class _StepRowData {
 }
 
 class _NewRecipePageState extends State<NewRecipePage> {
+  static const _seasonOptions = [
+    'Ganzjährig',
+    'Frühling',
+    'Sommer',
+    'Herbst',
+    'Winter',
+  ];
+
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _servingsController = TextEditingController();
   final TextEditingController _prepTimeController = TextEditingController();
@@ -85,6 +93,7 @@ class _NewRecipePageState extends State<NewRecipePage> {
   final Set<String> _selectedTags = {};
 
   List<String> _imagePaths = [];
+  bool _isPolishing = false;
 
   @override
   void initState() {
@@ -119,6 +128,9 @@ class _NewRecipePageState extends State<NewRecipePage> {
 
     if (_ingredients.isEmpty) _addIngredientRow();
     if (_steps.isEmpty) _addStepRow();
+    if (!_seasonOptions.contains(_seasonController.text.trim())) {
+      _seasonController.text = _seasonOptions.first;
+    }
   }
 
   @override
@@ -232,6 +244,164 @@ class _NewRecipePageState extends State<NewRecipePage> {
         .map((row) => row.controller.text.trim())
         .where((step) => step.isNotEmpty)
         .toList();
+  }
+
+  Recipe _currentDraftRecipe() {
+    final title = _titleController.text.trim();
+    if (title.isEmpty) {
+      throw ArgumentError('Recipe title cannot be empty');
+    }
+    return Recipe.create(
+      title,
+      ingredients: _collectIngredients(),
+      instructions: _collectSteps(),
+      tags: _selectedTags.toList(),
+      imagePaths: _imagePaths,
+      servings: _parsePositiveInt(_servingsController),
+      season: _seasonController.text,
+      prepTimeMinutes: _parsePositiveInt(_prepTimeController),
+      cookTimeMinutes: _parsePositiveInt(_cookTimeController),
+      notes: _notesController.text,
+    );
+  }
+
+  Future<void> _polishRecipe() async {
+    final polishRepo = widget.repo is RecipeAiPolishRepository
+        ? widget.repo as RecipeAiPolishRepository
+        : null;
+    if (polishRepo == null || _isPolishing) return;
+
+    late final Recipe draft;
+    try {
+      draft = _currentDraftRecipe();
+    } catch (error) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_saveErrorMessage(error))));
+      return;
+    }
+
+    setState(() => _isPolishing = true);
+    try {
+      final polished = await polishRepo.polishRecipe(draft);
+      if (!mounted) return;
+      final shouldApply = await _showPolishPreview(polished);
+      if (shouldApply == true) _replaceFormWithRecipe(polished);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_polishErrorMessage(error))));
+    } finally {
+      if (mounted) setState(() => _isPolishing = false);
+    }
+  }
+
+  Future<bool?> _showPolishPreview(Recipe recipe) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('KI-Vorschlag übernehmen?'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  recipe.title,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 10),
+                if (recipe.ingredients.isNotEmpty) ...[
+                  Text(
+                    'Zutaten',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    recipe.ingredients
+                        .take(6)
+                        .map((ingredient) => '• ${ingredient.label}')
+                        .join('\n'),
+                  ),
+                  if (recipe.ingredients.length > 6)
+                    Text('… ${recipe.ingredients.length - 6} weitere'),
+                  const SizedBox(height: 12),
+                ],
+                if (recipe.instructions.isNotEmpty) ...[
+                  Text(
+                    'Zubereitung',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    recipe.instructions
+                        .take(4)
+                        .indexed
+                        .map((entry) => '${entry.$1 + 1}. ${entry.$2}')
+                        .join('\n'),
+                  ),
+                  if (recipe.instructions.length > 4)
+                    Text('… ${recipe.instructions.length - 4} weitere'),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => context.pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => context.pop(true),
+            child: const Text('Übernehmen'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _replaceFormWithRecipe(Recipe recipe) {
+    for (final row in _ingredients) {
+      row.dispose();
+    }
+    for (final row in _steps) {
+      row.dispose();
+    }
+    _ingredients.clear();
+    _steps.clear();
+
+    setState(() {
+      _titleController.text = recipe.title;
+      _servingsController.text = recipe.servings?.toString() ?? '';
+      _prepTimeController.text = recipe.prepTimeMinutes?.toString() ?? '';
+      _cookTimeController.text = recipe.cookTimeMinutes?.toString() ?? '';
+      _seasonController.text = _seasonOptions.contains(recipe.season)
+          ? recipe.season
+          : _seasonOptions.first;
+      _notesController.text = recipe.notes;
+      _selectedTags
+        ..clear()
+        ..addAll(recipe.tags);
+
+      for (final ingredient in recipe.ingredients) {
+        _addIngredientRow(
+          quantity: ingredient.quantity,
+          unit: ingredient.unit,
+          name: ingredient.name,
+          note: ingredient.note,
+          excludeFromShopping: ingredient.excludeFromShopping,
+        );
+      }
+      for (final step in recipe.instructions) {
+        _addStepRow(text: step);
+      }
+      if (_ingredients.isEmpty) _addIngredientRow();
+      if (_steps.isEmpty) _addStepRow();
+    });
   }
 
   int? _parsePositiveInt(TextEditingController controller) {
@@ -361,6 +531,11 @@ class _NewRecipePageState extends State<NewRecipePage> {
     return 'Rezept konnte nicht gespeichert werden.';
   }
 
+  String _polishErrorMessage(Object error) {
+    if (error is RecipeSaveException) return error.userMessage;
+    return 'KI konnte das Rezept nicht aufräumen.';
+  }
+
   Widget _buildPhotoPicker(ColorScheme colorScheme) {
     final imagePath = _imagePaths.isEmpty ? null : _imagePaths.first;
 
@@ -470,6 +645,17 @@ class _NewRecipePageState extends State<NewRecipePage> {
           if (widget.mealPlanRepo != null)
             BackendConnectionIcon(mealPlanRepo: widget.mealPlanRepo!),
           IconButton(
+            icon: _isPolishing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.auto_fix_high_outlined),
+            onPressed: _isPolishing ? null : _polishRecipe,
+            tooltip: 'Mit KI aufräumen',
+          ),
+          IconButton(
             icon: const Icon(Icons.save_outlined),
             onPressed: _save,
             tooltip: 'Speichern',
@@ -504,9 +690,23 @@ class _NewRecipePageState extends State<NewRecipePage> {
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: TextField(
-                        controller: _seasonController,
+                      child: DropdownButtonFormField<String>(
+                        initialValue:
+                            _seasonOptions.contains(_seasonController.text)
+                            ? _seasonController.text
+                            : _seasonOptions.first,
                         decoration: const InputDecoration(labelText: 'Saison'),
+                        items: [
+                          for (final season in _seasonOptions)
+                            DropdownMenuItem(
+                              value: season,
+                              child: Text(season),
+                            ),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setState(() => _seasonController.text = value);
+                        },
                       ),
                     ),
                   ],
