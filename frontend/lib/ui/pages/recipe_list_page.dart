@@ -32,7 +32,6 @@ class _RecipeListPageState extends State<RecipeListPage> {
   List<Recipe> recipesSnapshot = [];
   final TextEditingController _searchController = TextEditingController();
   bool _favoritesOnly = false;
-  bool _withImagesOnly = false;
   bool _isCreateMenuOpen = false;
   bool _isImporting = false;
   bool _isLoading = true;
@@ -161,7 +160,6 @@ class _RecipeListPageState extends State<RecipeListPage> {
 
     return recipesSnapshot.where((recipe) {
       if (_favoritesOnly && !recipe.isFavorite) return false;
-      if (_withImagesOnly && recipe.imagePaths.isEmpty) return false;
 
       if (query.isEmpty) return true;
 
@@ -304,13 +302,6 @@ class _RecipeListPageState extends State<RecipeListPage> {
                     selected: _favoritesOnly,
                     onSelected: (value) {
                       setState(() => _favoritesOnly = value);
-                    },
-                  ),
-                  FilterChip(
-                    label: const Text('Mit Bildern'),
-                    selected: _withImagesOnly,
-                    onSelected: (value) {
-                      setState(() => _withImagesOnly = value);
                     },
                   ),
                 ],
