@@ -132,84 +132,24 @@ class _RecipeCameraImportPageState extends State<RecipeCameraImportPage>
             return const Center(child: CircularProgressIndicator());
           }
 
-          return Column(
+          return Stack(
+            fit: StackFit.expand,
             children: [
-              Expanded(
-                child: Center(
-                  child: AspectRatio(
-                    aspectRatio: controller.value.aspectRatio,
-                    child: CameraPreview(controller),
-                  ),
-                ),
-              ),
-              Container(
-                color: Colors.black,
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      height: 72,
-                      child: _imagePaths.isEmpty
-                          ? Center(
-                              child: Text(
-                                'Fotografiere eine oder mehrere Rezeptseiten.',
-                                style: Theme.of(context).textTheme.bodyMedium
-                                    ?.copyWith(color: Colors.white70),
-                              ),
-                            )
-                          : ListView.separated(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: _imagePaths.length,
-                              separatorBuilder: (_, _) =>
-                                  const SizedBox(width: 8),
-                              itemBuilder: (context, index) => _Thumb(
-                                path: _imagePaths[index],
-                                index: index,
-                                onRemove: () => _removeImage(index),
-                              ),
-                            ),
-                    ),
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        IconButton.filledTonal(
-                          onPressed: () => context.pop<List<String>>(),
-                          icon: const Icon(Icons.close_rounded),
-                          tooltip: 'Abbrechen',
-                        ),
-                        const Spacer(),
-                        SizedBox.square(
-                          dimension: 72,
-                          child: IconButton.filled(
-                            onPressed: canCapture ? _capture : null,
-                            style: IconButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              disabledBackgroundColor: Colors.white24,
-                              foregroundColor: Colors.black,
-                            ),
-                            icon: _isCapturing
-                                ? SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2.5,
-                                      color: colorScheme.primary,
-                                    ),
-                                  )
-                                : const Icon(Icons.camera_alt_rounded),
-                            tooltip: 'Foto aufnehmen',
-                          ),
-                        ),
-                        const Spacer(),
-                        IconButton.filledTonal(
-                          onPressed: _imagePaths.isEmpty ? null : _finish,
-                          icon: const Icon(Icons.check_rounded),
-                          tooltip: 'Verarbeiten',
-                        ),
-                      ],
-                    ),
-                  ],
+              _FullBleedCameraPreview(controller: controller),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: _ScannerControls(
+                  imagePaths: _imagePaths,
+                  maxImages: widget.maxImages,
+                  isCapturing: _isCapturing,
+                  canCapture: canCapture,
+                  onCancel: () => context.pop<List<String>>(),
+                  onCapture: _capture,
+                  onFinish: _finish,
+                  onRemoveImage: _removeImage,
+                  progressColor: colorScheme.primary,
                 ),
               ),
             ],
@@ -222,6 +162,145 @@ class _RecipeCameraImportPageState extends State<RecipeCameraImportPage>
   void _retry() {
     _initializeCamera = _startCamera();
     setState(() {});
+  }
+}
+
+class _FullBleedCameraPreview extends StatelessWidget {
+  const _FullBleedCameraPreview({required this.controller});
+
+  final CameraController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final previewSize = controller.value.previewSize;
+        if (previewSize == null) {
+          return CameraPreview(controller);
+        }
+
+        final screenRatio = constraints.maxWidth / constraints.maxHeight;
+        final previewRatio = previewSize.height / previewSize.width;
+        final scale = screenRatio > previewRatio
+            ? screenRatio / previewRatio
+            : previewRatio / screenRatio;
+
+        return ClipRect(
+          child: Transform.scale(
+            scale: scale,
+            child: Center(child: CameraPreview(controller)),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ScannerControls extends StatelessWidget {
+  const _ScannerControls({
+    required this.imagePaths,
+    required this.maxImages,
+    required this.isCapturing,
+    required this.canCapture,
+    required this.onCancel,
+    required this.onCapture,
+    required this.onFinish,
+    required this.onRemoveImage,
+    required this.progressColor,
+  });
+
+  final List<String> imagePaths;
+  final int maxImages;
+  final bool isCapturing;
+  final bool canCapture;
+  final VoidCallback onCancel;
+  final VoidCallback onCapture;
+  final VoidCallback onFinish;
+  final void Function(int index) onRemoveImage;
+  final Color progressColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Colors.transparent, Color(0xDD000000), Colors.black],
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 72, 16, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: 72,
+                child: imagePaths.isEmpty
+                    ? Center(
+                        child: Text(
+                          'Fotografiere eine oder mehrere Rezeptseiten.',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: Colors.white70),
+                        ),
+                      )
+                    : ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: imagePaths.length,
+                        separatorBuilder: (_, _) => const SizedBox(width: 8),
+                        itemBuilder: (context, index) => _Thumb(
+                          path: imagePaths[index],
+                          index: index,
+                          onRemove: () => onRemoveImage(index),
+                        ),
+                      ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  IconButton.filledTonal(
+                    onPressed: onCancel,
+                    icon: const Icon(Icons.close_rounded),
+                    tooltip: 'Abbrechen',
+                  ),
+                  const Spacer(),
+                  SizedBox.square(
+                    dimension: 72,
+                    child: IconButton.filled(
+                      onPressed: canCapture ? onCapture : null,
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        disabledBackgroundColor: Colors.white24,
+                        foregroundColor: Colors.black,
+                      ),
+                      icon: isCapturing
+                          ? SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: progressColor,
+                              ),
+                            )
+                          : const Icon(Icons.camera_alt_rounded),
+                      tooltip: 'Foto aufnehmen',
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton.filledTonal(
+                    onPressed: imagePaths.isEmpty ? null : onFinish,
+                    icon: const Icon(Icons.check_rounded),
+                    tooltip: 'Verarbeiten',
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
