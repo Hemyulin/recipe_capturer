@@ -92,6 +92,12 @@ docker compose restart cookbuk-backend
 docker compose down
 ```
 
+Inspect active recipes only:
+
+```sh
+docker compose exec cookbuk-backend node -e "const Database=require('better-sqlite3'); const db=new Database('/app/data/cookbuk.sqlite'); console.log(db.prepare('SELECT id,title,created_at FROM recipes WHERE archived_at IS NULL ORDER BY created_at DESC').all())"
+```
+
 ## Notes
 
 Keep the service on Tailscale for now. The shared token is a useful household

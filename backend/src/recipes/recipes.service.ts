@@ -49,6 +49,11 @@ type CookEventRow = {
   meal: string | null;
 };
 
+type MealPlanReferenceRow = {
+  id: string;
+  recipe_extra_ids_json: string;
+};
+
 export type UploadedRecipeImage = {
   originalname: string;
   mimetype: string;
@@ -192,25 +197,98 @@ export class RecipesService {
     return this.findOne(id);
   }
 
+  delete(id: string) {
+    const existing = this.findAnyRecipeRow(id);
+
+    const transaction = this.database.db.transaction(() => {
+      this.clearMealPlanReferences(id);
+      const result = this.database.db
+        .prepare(
+          `
+          DELETE FROM recipes
+          WHERE id = ? AND household_id = ?
+          `,
+        )
+        .run(id, this.householdId());
+
+      if (result.changes === 0) {
+        throw new NotFoundException("Recipe not found");
+      }
+    });
+
+    transaction();
+    this.deletePreviousStoredImage(existing.image_url);
+  }
+
   archive(id: string) {
-    const result = this.database.db
+    this.delete(id);
+  }
+
+  private clearMealPlanReferences(recipeId: string) {
+    this.database.db
       .prepare(
         `
-        UPDATE recipes
-        SET archived_at = ?, updated_at = ?
-        WHERE id = ? AND household_id = ? AND archived_at IS NULL
+        UPDATE meal_plan_slots
+        SET slot_type = 'empty', recipe_id = NULL
+        WHERE household_id = ? AND recipe_id = ?
         `,
       )
-      .run(
-        new Date().toISOString(),
-        new Date().toISOString(),
-        id,
-        this.householdId(),
-      );
+      .run(this.householdId(), recipeId);
 
-    if (result.changes === 0) {
+    const rows = this.database.db
+      .prepare(
+        `
+        SELECT id, recipe_extra_ids_json
+        FROM meal_plan_slots
+        WHERE household_id = ? AND recipe_extra_ids_json != '[]'
+        `,
+      )
+      .all(this.householdId()) as MealPlanReferenceRow[];
+
+    const update = this.database.db.prepare(
+      `
+      UPDATE meal_plan_slots
+      SET recipe_extra_ids_json = ?
+      WHERE id = ?
+      `,
+    );
+
+    for (const row of rows) {
+      const recipeExtraIds = this.parseRecipeExtraIds(
+        row.recipe_extra_ids_json,
+      );
+      const filteredIds = recipeExtraIds.filter((id) => id !== recipeId);
+      if (filteredIds.length === recipeExtraIds.length) continue;
+      update.run(JSON.stringify(filteredIds), row.id);
+    }
+  }
+
+  private parseRecipeExtraIds(value: string) {
+    try {
+      const parsed = JSON.parse(value);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.map((item) => String(item).trim()).filter(Boolean);
+    } catch {
+      return [];
+    }
+  }
+
+  private findAnyRecipeRow(id: string) {
+    const row = this.database.db
+      .prepare(
+        `
+        SELECT *
+        FROM recipes
+        WHERE id = ? AND household_id = ?
+        `,
+      )
+      .get(id, this.householdId()) as RecipeRow | undefined;
+
+    if (!row) {
       throw new NotFoundException("Recipe not found");
     }
+
+    return row;
   }
 
   async importFromPhoto(image: UploadedRecipeImage) {

@@ -55,8 +55,8 @@ export class RecipesController {
   }
 
   @Delete(":id")
-  archive(@Param("id") id: string) {
-    this.recipesService.archive(id);
+  delete(@Param("id") id: string) {
+    this.recipesService.delete(id);
     return { ok: true };
   }
 
