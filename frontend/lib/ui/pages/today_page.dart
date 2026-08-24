@@ -76,18 +76,11 @@ class _TodayPageState extends State<TodayPage> {
     return null;
   }
 
-  Recipe? _recipeForTag(String tag) {
-    for (final recipe in _recipes) {
-      if (recipe.tags.contains(tag)) return recipe;
-    }
-    return null;
-  }
-
-  Recipe? _recipeForSlot(String slotId, String fallbackTag) {
+  Recipe? _recipeForSlot(String slotId) {
     if (_mealRecipeIds.containsKey(slotId)) {
       return _recipeById(_mealRecipeIds[slotId]);
     }
-    return _recipeForTag(fallbackTag);
+    return null;
   }
 
   bool _isLeftoversSlot(String slotId) {
@@ -234,9 +227,9 @@ class _TodayPageState extends State<TodayPage> {
 
   @override
   Widget build(BuildContext context) {
-    final breakfast = _recipeForSlot('breakfast', 'breakfast');
-    final lunch = _recipeForSlot('lunch', 'lunch');
-    final dinner = _recipeForSlot('dinner', 'dinner');
+    final breakfast = _recipeForSlot('breakfast');
+    final lunch = _recipeForSlot('lunch');
+    final dinner = _recipeForSlot('dinner');
     final breakfastIsLeftovers = _isLeftoversSlot('breakfast');
     final lunchIsLeftovers = _isLeftoversSlot('lunch');
     final dinnerIsLeftovers = _isLeftoversSlot('dinner');
