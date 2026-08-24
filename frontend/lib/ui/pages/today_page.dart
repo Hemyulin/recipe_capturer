@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cookbuk/data/meal_plan_repository.dart';
@@ -6,6 +8,7 @@ import 'package:cookbuk/domain/meal_plan_slot.dart';
 import 'package:cookbuk/domain/recipe.dart';
 import 'package:cookbuk/ui/widgets/meal_choice_sheet.dart';
 import 'package:cookbuk/ui/widgets/meal_extras_sheet.dart';
+import 'package:cookbuk/ui/widgets/meal_plan_sync_banner.dart';
 import 'package:cookbuk/ui/widgets/load_state_view.dart';
 import 'package:cookbuk/ui/widgets/recipe_image.dart';
 
@@ -25,13 +28,44 @@ class _TodayPageState extends State<TodayPage> {
   final Map<String, List<String>> _mealExtras = {};
   final Map<String, List<String>> _mealRecipeExtraIds = {};
   late final DateTime _today = _dateOnly(DateTime.now());
+  MealPlanSyncStatus _syncStatus = MealPlanSyncStatus.idle;
+  StreamSubscription<MealPlanSyncStatus>? _syncStatusSubscription;
+  Timer? _hideSyncedStatusTimer;
   bool _isLoading = true;
   String? _loadError;
 
   @override
   void initState() {
     super.initState();
+    final syncNotifier = widget.mealPlanRepo;
+    if (syncNotifier is MealPlanSyncNotifier) {
+      final notifier = syncNotifier as MealPlanSyncNotifier;
+      _syncStatus = notifier.syncStatus;
+      _syncStatusSubscription = notifier.syncStatusChanges.listen(
+        _handleSyncStatus,
+      );
+    }
     _loadRecipes();
+  }
+
+  @override
+  void dispose() {
+    _hideSyncedStatusTimer?.cancel();
+    _syncStatusSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _handleSyncStatus(MealPlanSyncStatus status) {
+    if (!mounted) return;
+    _hideSyncedStatusTimer?.cancel();
+    setState(() => _syncStatus = status);
+
+    if (status.phase == MealPlanSyncPhase.synced) {
+      _hideSyncedStatusTimer = Timer(const Duration(seconds: 3), () {
+        if (mounted) setState(() => _syncStatus = MealPlanSyncStatus.idle);
+      });
+      unawaited(_loadRecipes());
+    }
   }
 
   Future<void> _loadRecipes() async {
@@ -277,6 +311,8 @@ class _TodayPageState extends State<TodayPage> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
               children: [
+                MealPlanSyncBanner(status: _syncStatus),
+                if (_syncStatus.isVisible) const SizedBox(height: 12),
                 _MealSlotCard(
                   title: 'Frühstück',
                   time: '07:30',
