@@ -75,6 +75,7 @@ class ApiRecipeRepository
       'POST',
       '/recipes/$recipeId/image',
       imagePath,
+      timeout: _imageUploadTimeout,
       useSaveErrorMessage: true,
     );
     return _recipeFromJson(jsonDecode(response.body) as Map<String, dynamic>);
@@ -86,6 +87,7 @@ class ApiRecipeRepository
       'POST',
       '/recipes/imports/photo',
       imagePath,
+      timeout: _aiImportTimeout,
       useSaveErrorMessage: true,
     );
     return _recipeDraftFromJson(
@@ -201,6 +203,7 @@ class ApiRecipeRepository
     String method,
     String path,
     String imagePath, {
+    required Duration timeout,
     bool useSaveErrorMessage = false,
   }) async {
     Object? lastOfflineError;
@@ -217,7 +220,7 @@ class ApiRecipeRepository
           await http.MultipartFile.fromPath('image', imagePath),
         );
 
-        final streamedResponse = await request.send().timeout(_requestTimeout);
+        final streamedResponse = await request.send().timeout(timeout);
         final response = await http.Response.fromStream(streamedResponse);
 
         if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -322,6 +325,8 @@ class ApiRecipeRepository
   }
 
   static const _requestTimeout = Duration(seconds: 2);
+  static const _imageUploadTimeout = Duration(seconds: 20);
+  static const _aiImportTimeout = Duration(seconds: 120);
 }
 
 class ApiRecipeRepositoryException extends RecipeSaveException {

@@ -96,7 +96,10 @@ class _RecipeListPageState extends State<RecipeListPage> {
     );
     if (source == null || !mounted) return;
 
-    final image = await ImagePicker().pickImage(source: source);
+    final image = await ImagePicker().pickImage(
+      source: source,
+      preferredCameraDevice: CameraDevice.front,
+    );
     if (image == null || !mounted) return;
 
     setState(() => _isImporting = true);
