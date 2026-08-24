@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:cookbuk/data/meal_plan_repository.dart';
 import 'package:cookbuk/domain/meal_plan_slot.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiMealPlanRepository
     implements MealPlanRepository, MealPlanSyncNotifier {
@@ -22,6 +23,7 @@ class ApiMealPlanRepository
       StreamController<MealPlanSyncStatus>.broadcast();
   late Uri _activeBaseUri = _baseUris.first;
   MealPlanSyncStatus _syncStatus = MealPlanSyncStatus.idle;
+  Future<void>? _pendingWritesLoad;
   Timer? _syncTimer;
   bool _isSyncing = false;
 
@@ -44,6 +46,7 @@ class ApiMealPlanRepository
     required DateTime from,
     required DateTime to,
   }) async {
+    await _ensurePendingWritesLoaded();
     await syncPendingChanges();
     try {
       final response = await _send(
@@ -67,12 +70,13 @@ class ApiMealPlanRepository
     required String meal,
     required String recipeId,
   }) async {
+    await _ensurePendingWritesLoaded();
     final body = {'slotType': 'recipe', 'recipeId': recipeId};
     try {
       await _upsert(date: date, meal: meal, body: body);
     } on Object catch (error) {
       if (!_isOfflineError(error)) rethrow;
-      _queueWrite(
+      await _queueWrite(
         method: 'PUT',
         path: '/meal-plan/${_dateKey(date)}/$meal',
         body: body,
@@ -97,12 +101,13 @@ class ApiMealPlanRepository
     required DateTime date,
     required String meal,
   }) async {
+    await _ensurePendingWritesLoaded();
     const body = {'slotType': 'leftovers'};
     try {
       await _upsert(date: date, meal: meal, body: body);
     } on Object catch (error) {
       if (!_isOfflineError(error)) rethrow;
-      _queueWrite(
+      await _queueWrite(
         method: 'PUT',
         path: '/meal-plan/${_dateKey(date)}/$meal',
         body: body,
@@ -123,12 +128,13 @@ class ApiMealPlanRepository
 
   @override
   Future<void> setEmpty({required DateTime date, required String meal}) async {
+    await _ensurePendingWritesLoaded();
     const body = {'slotType': 'empty'};
     try {
       await _upsert(date: date, meal: meal, body: body);
     } on Object catch (error) {
       if (!_isOfflineError(error)) rethrow;
-      _queueWrite(
+      await _queueWrite(
         method: 'PUT',
         path: '/meal-plan/${_dateKey(date)}/$meal',
         body: body,
@@ -146,6 +152,7 @@ class ApiMealPlanRepository
     required List<String> extras,
     List<String> recipeExtraIds = const [],
   }) async {
+    await _ensurePendingWritesLoaded();
     final normalized = _normalizeExtras(extras);
     final normalizedRecipeExtraIds = _normalizeRecipeExtraIds(recipeExtraIds);
     final body = {
@@ -160,7 +167,7 @@ class ApiMealPlanRepository
       );
     } on Object catch (error) {
       if (!_isOfflineError(error)) rethrow;
-      _queueWrite(
+      await _queueWrite(
         method: 'PUT',
         path: '/meal-plan/${_dateKey(date)}/$meal/extras',
         body: body,
@@ -182,6 +189,7 @@ class ApiMealPlanRepository
 
   @override
   Future<CloseDayResult> closeDay(DateTime date) async {
+    await _ensurePendingWritesLoaded();
     final response = await _send(
       'POST',
       '/meal-plan/close-day/${_dateKey(date)}',
@@ -193,6 +201,7 @@ class ApiMealPlanRepository
 
   @override
   Future<void> syncPendingChanges() async {
+    await _ensurePendingWritesLoaded();
     if (_pendingWrites.isEmpty || _isSyncing) return;
 
     _isSyncing = true;
@@ -209,6 +218,7 @@ class ApiMealPlanRepository
         try {
           await _send(pending.method, pending.path, body: pending.body);
           _pendingWrites.removeAt(0);
+          await _savePendingWrites();
           if (_pendingWrites.isNotEmpty) {
             _emitSyncStatus(
               MealPlanSyncStatus(
@@ -358,16 +368,17 @@ class ApiMealPlanRepository
     }).toList();
   }
 
-  void _queueWrite({
+  Future<void> _queueWrite({
     required String method,
     required String path,
     required Map<String, dynamic> body,
     required void Function() applyLocal,
-  }) {
+  }) async {
     applyLocal();
     _pendingWrites.add(
       _PendingMealPlanWrite(method: method, path: path, body: body),
     );
+    await _savePendingWrites();
     _emitSyncStatus(
       MealPlanSyncStatus(
         phase: MealPlanSyncPhase.queued,
@@ -376,6 +387,42 @@ class ApiMealPlanRepository
       ),
     );
     _ensureSyncTimer();
+  }
+
+  Future<void> _ensurePendingWritesLoaded() {
+    return _pendingWritesLoad ??= _loadPendingWrites();
+  }
+
+  Future<void> _loadPendingWrites() async {
+    final preferences = await SharedPreferences.getInstance();
+    final encodedWrites =
+        preferences.getStringList(_pendingWritesStorageKey) ?? const [];
+
+    _pendingWrites
+      ..clear()
+      ..addAll(
+        encodedWrites
+            .map(_PendingMealPlanWrite.tryDecode)
+            .whereType<_PendingMealPlanWrite>(),
+      );
+
+    if (_pendingWrites.isEmpty) return;
+    _emitSyncStatus(
+      MealPlanSyncStatus(
+        phase: MealPlanSyncPhase.queued,
+        pendingCount: _pendingWrites.length,
+        message: _queuedMessage(),
+      ),
+    );
+    _ensureSyncTimer();
+  }
+
+  Future<void> _savePendingWrites() async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setStringList(
+      _pendingWritesStorageKey,
+      _pendingWrites.map((write) => write.encode()).toList(),
+    );
   }
 
   void _emitSyncStatus(MealPlanSyncStatus status) {
@@ -456,6 +503,7 @@ class ApiMealPlanRepository
   }
 
   static const _requestTimeout = Duration(seconds: 2);
+  static const _pendingWritesStorageKey = 'cookbuk.pendingMealPlanWrites';
 }
 
 class ApiMealPlanRepositoryException extends MealPlanSaveException {
@@ -472,4 +520,21 @@ class _PendingMealPlanWrite {
   final String method;
   final String path;
   final Map<String, dynamic> body;
+
+  String encode() {
+    return jsonEncode({'method': method, 'path': path, 'body': body});
+  }
+
+  static _PendingMealPlanWrite? tryDecode(String value) {
+    try {
+      final decoded = jsonDecode(value) as Map<String, dynamic>;
+      final method = decoded['method'] as String?;
+      final path = decoded['path'] as String?;
+      final body = decoded['body'] as Map<String, dynamic>?;
+      if (method == null || path == null || body == null) return null;
+      return _PendingMealPlanWrite(method: method, path: path, body: body);
+    } catch (_) {
+      return null;
+    }
+  }
 }

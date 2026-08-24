@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:cookbuk/data/api_meal_plan_repository.dart';
 import 'package:cookbuk/data/meal_plan_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   late HttpServer server;
@@ -11,6 +12,7 @@ void main() {
   final requests = <_RequestLog>[];
 
   setUp(() async {
+    SharedPreferences.setMockInitialValues({});
     requests.clear();
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     repository = ApiMealPlanRepository(
@@ -234,6 +236,50 @@ void main() {
     });
     expect(repository.syncStatus.phase, MealPlanSyncPhase.synced);
     expect(repository.syncStatus.pendingCount, 0);
+  });
+
+  test('keeps queued writes after repository restart', () async {
+    final unavailableServer = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      0,
+    );
+    final port = unavailableServer.port;
+    await unavailableServer.close(force: true);
+    repository = ApiMealPlanRepository(baseUrl: 'http://127.0.0.1:$port');
+
+    await expectLater(
+      repository.setEmpty(date: DateTime(2026, 8, 23), meal: 'dinner'),
+      throwsA(isA<MealPlanQueuedException>()),
+    );
+
+    repository = ApiMealPlanRepository(baseUrl: 'http://127.0.0.1:$port');
+    final retryServer = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      port,
+    );
+    addTearDown(() => retryServer.close(force: true));
+    retryServer.listen((request) async {
+      final body = await utf8.decoder.bind(request).join();
+      requests.add(
+        _RequestLog(
+          method: request.method,
+          path: request.uri.path,
+          query: request.uri.query,
+          body: body,
+          token: request.headers.value('x-cookbuk-token'),
+        ),
+      );
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode({'ok': true}));
+      await request.response.close();
+    });
+
+    await repository.syncPendingChanges();
+
+    expect(requests.single.method, 'PUT');
+    expect(requests.single.path, '/meal-plan/2026-08-23/dinner');
+    expect(jsonDecode(requests.single.body), {'slotType': 'empty'});
+    expect(repository.syncStatus.phase, MealPlanSyncPhase.synced);
   });
 
   test('reports blocked queued writes when backend rejects them', () async {
