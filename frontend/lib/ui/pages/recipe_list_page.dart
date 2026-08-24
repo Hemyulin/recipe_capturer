@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cookbuk/data/meal_plan_repository.dart';
 import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
+import 'package:cookbuk/ui/pages/recipe_camera_import_page.dart';
 import 'package:cookbuk/ui/widgets/backend_connection_icon.dart';
 import 'package:cookbuk/ui/widgets/load_state_view.dart';
 import 'package:cookbuk/ui/widgets/recipe_card.dart';
@@ -121,45 +122,20 @@ class _RecipeListPageState extends State<RecipeListPage> {
   }
 
   Future<List<String>> _pickImportImages(_RecipeImportSource source) async {
-    final picker = ImagePicker();
     if (source == _RecipeImportSource.gallery) {
+      final picker = ImagePicker();
       final images = await picker.pickMultiImage(limit: _maxImportImages);
       return images.map((image) => image.path).take(_maxImportImages).toList();
     }
 
-    final imagePaths = <String>[];
-    while (imagePaths.length < _maxImportImages) {
-      final image = await picker.pickImage(
-        source: ImageSource.camera,
-        preferredCameraDevice: CameraDevice.rear,
-      );
-      if (image == null) break;
-      imagePaths.add(image.path);
-      if (imagePaths.length >= _maxImportImages || !mounted) break;
-
-      final takeAnother = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Weitere Seite?'),
-          content: Text(
-            '${imagePaths.length}/$_maxImportImages Bilder gewählt',
+    return await Navigator.of(context).push<List<String>>(
+          MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (_) =>
+                const RecipeCameraImportPage(maxImages: _maxImportImages),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => context.pop(false),
-              child: const Text('Fertig'),
-            ),
-            FilledButton(
-              onPressed: () => context.pop(true),
-              child: const Text('Weiteres Foto'),
-            ),
-          ],
-        ),
-      );
-      if (takeAnother != true) break;
-    }
-
-    return imagePaths;
+        ) ??
+        const [];
   }
 
   List<Recipe> _filteredRecipes() {
