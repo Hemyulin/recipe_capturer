@@ -402,6 +402,9 @@ class _ShoppingItem {
       for (final ingredient in recipe.ingredients) {
         final name = ingredient.name.trim();
         if (name.isEmpty) continue;
+        if (ingredient.excludeFromShopping || _isHouseholdBasic(name)) {
+          continue;
+        }
         final unit = ingredient.unit.trim();
         final key = '${name.toLowerCase()}|${unit.toLowerCase()}';
         final builder = builders.putIfAbsent(
@@ -427,6 +430,28 @@ class _ShoppingItem {
         .toList();
     items.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     return items;
+  }
+
+  static bool _isHouseholdBasic(String name) {
+    final normalized = name
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^\p{L}\p{N}]+', unicode: true), ' ')
+        .trim();
+    return const {
+      'water',
+      'boiling water',
+      'tap water',
+      'cold water',
+      'hot water',
+      'ice',
+      'wasser',
+      'kochendes wasser',
+      'leitungswasser',
+      'kaltes wasser',
+      'heisses wasser',
+      'heißes wasser',
+      'eis',
+    }.contains(normalized);
   }
 }
 

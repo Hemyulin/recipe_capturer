@@ -28,16 +28,21 @@ class NewRecipePage extends StatefulWidget {
 }
 
 class _IngredientRowData {
-  _IngredientRowData({String quantity = '', String unit = '', String name = ''})
-    : quantityController = TextEditingController(text: quantity),
-      unitController = TextEditingController(text: unit),
-      nameController = TextEditingController(text: name),
-      nameFocusNode = FocusNode();
+  _IngredientRowData({
+    String quantity = '',
+    String unit = '',
+    String name = '',
+    this.excludeFromShopping = false,
+  }) : quantityController = TextEditingController(text: quantity),
+       unitController = TextEditingController(text: unit),
+       nameController = TextEditingController(text: name),
+       nameFocusNode = FocusNode();
 
   final TextEditingController quantityController;
   final TextEditingController unitController;
   final TextEditingController nameController;
   final FocusNode nameFocusNode;
+  final bool excludeFromShopping;
 
   void dispose() {
     quantityController.dispose();
@@ -111,6 +116,7 @@ class _NewRecipePageState extends State<NewRecipePage> {
           quantity: ingredient.quantity,
           unit: ingredient.unit,
           name: ingredient.name,
+          excludeFromShopping: ingredient.excludeFromShopping,
         );
       }
       for (final step in initialRecipe.instructions) {
@@ -144,9 +150,15 @@ class _NewRecipePageState extends State<NewRecipePage> {
     String quantity = '',
     String unit = '',
     String name = '',
+    bool excludeFromShopping = false,
   }) {
     _ingredients.add(
-      _IngredientRowData(quantity: quantity, unit: unit, name: name),
+      _IngredientRowData(
+        quantity: quantity,
+        unit: unit,
+        name: name,
+        excludeFromShopping: excludeFromShopping,
+      ),
     );
   }
 
@@ -210,6 +222,9 @@ class _NewRecipePageState extends State<NewRecipePage> {
             name: row.nameController.text.trim(),
             quantity: row.quantityController.text.trim(),
             unit: row.unitController.text.trim(),
+            excludeFromShopping:
+                row.excludeFromShopping ||
+                _isHouseholdBasic(row.nameController.text),
           ),
         )
         .where((ingredient) => ingredient.name.isNotEmpty)
@@ -227,6 +242,28 @@ class _NewRecipePageState extends State<NewRecipePage> {
     final value = int.tryParse(controller.text.trim());
     if (value == null || value <= 0) return null;
     return value;
+  }
+
+  bool _isHouseholdBasic(String name) {
+    final normalized = name
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^\p{L}\p{N}]+', unicode: true), ' ')
+        .trim();
+    return const {
+      'water',
+      'boiling water',
+      'tap water',
+      'cold water',
+      'hot water',
+      'ice',
+      'wasser',
+      'kochendes wasser',
+      'leitungswasser',
+      'kaltes wasser',
+      'heisses wasser',
+      'heißes wasser',
+      'eis',
+    }.contains(normalized);
   }
 
   void _addCustomTag() {

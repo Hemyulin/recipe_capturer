@@ -330,6 +330,12 @@ void main() {
       ingredients: const [
         RecipeIngredient(name: 'Haferflocken', quantity: '80', unit: 'g'),
         RecipeIngredient(name: 'Magerquark', quantity: '250', unit: 'g'),
+        RecipeIngredient(
+          name: 'Backpapier',
+          quantity: '1',
+          excludeFromShopping: true,
+        ),
+        RecipeIngredient(name: 'boiling water', quantity: '560', unit: 'ml'),
       ],
       instructions: const ['Mischen und backen.'],
       tags: const ['breakfast'],
@@ -364,6 +370,8 @@ void main() {
     expect(find.text('200 g Haferflocken'), findsOneWidget);
     expect(find.text('250 g Magerquark'), findsOneWidget);
     expect(find.text('1 Banane'), findsOneWidget);
+    expect(find.text('1 Backpapier'), findsNothing);
+    expect(find.text('560 ml boiling water'), findsNothing);
 
     await tester.tap(find.text('200 g Haferflocken'));
     await tester.pumpAndSettle();

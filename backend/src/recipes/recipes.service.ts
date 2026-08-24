@@ -34,6 +34,7 @@ type IngredientRow = {
   amount: number | null;
   unit: string | null;
   note: string | null;
+  exclude_from_shopping: number;
   sort_order: number;
 };
 
@@ -316,7 +317,7 @@ export class RecipesService {
             {
               role: "developer",
               content:
-                "You extract editable household recipes from photos. Return only fields that are visible or strongly implied. Prefer German recipe text when the photo is German. Never invent precise quantities if they are unreadable; leave quantity or unit empty instead.",
+                "You extract editable household recipes from photos. Return only fields that are visible or strongly implied. Prefer German recipe text when the photo is German. Never invent precise quantities if they are unreadable; leave quantity or unit empty instead. Keep notes short and practical; do not copy long cookbook introductions. Keep water in the ingredients if the recipe uses it, but set excludeFromShopping=true for water, boiling water, tap water, ice, and other household basics that do not belong on a grocery list. Prefer tags from this household set: breakfast, lunch, dinner, main, side, dip, sauce, bread, dessert, snack, vegetarian, vegan, meat, fish, one_pot, quick, rice, pasta, soup, salad, baking.",
             },
             {
               role: "user",
@@ -361,11 +362,17 @@ export class RecipesService {
                     items: {
                       type: "object",
                       additionalProperties: false,
-                      required: ["name", "quantity", "unit"],
+                      required: [
+                        "name",
+                        "quantity",
+                        "unit",
+                        "excludeFromShopping",
+                      ],
                       properties: {
                         name: { type: "string" },
                         quantity: { type: "string" },
                         unit: { type: "string" },
+                        excludeFromShopping: { type: "boolean" },
                       },
                     },
                   },
@@ -446,18 +453,23 @@ export class RecipesService {
         .run(id);
       const insert = this.database.db.prepare(
         `
-        INSERT INTO recipe_ingredients (id, recipe_id, name, amount, unit, note, sort_order)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO recipe_ingredients (id, recipe_id, name, amount, unit, note, exclude_from_shopping, sort_order)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `,
       );
       input.ingredients.forEach((ingredient, index) => {
+        const quantity = ingredient.quantity?.trim() || "";
+        const amount = this.parseAmount(ingredient);
         insert.run(
           randomUUID(),
           id,
           ingredient.name.trim(),
-          this.parseAmount(ingredient),
+          amount,
           ingredient.unit?.trim() || null,
-          ingredient.quantity?.trim() || null,
+          this.rawQuantityNote(quantity, amount),
+          ingredient.excludeFromShopping || this.isHouseholdBasic(ingredient)
+            ? 1
+            : 0,
           index,
         );
       });
@@ -518,7 +530,7 @@ export class RecipesService {
     const rows = this.database.db
       .prepare(
         `
-        SELECT name, amount, unit, note, sort_order
+        SELECT name, amount, unit, note, exclude_from_shopping, sort_order
         FROM recipe_ingredients
         WHERE recipe_id = ?
         ORDER BY sort_order ASC
@@ -530,6 +542,7 @@ export class RecipesService {
       name: row.name,
       quantity: row.note ?? (row.amount == null ? "" : String(row.amount)),
       unit: row.unit ?? "",
+      excludeFromShopping: row.exclude_from_shopping === 1,
     }));
   }
 
@@ -585,6 +598,32 @@ export class RecipesService {
     if (!ingredient.quantity) return null;
     const parsed = Number(ingredient.quantity.replace(",", "."));
     return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private rawQuantityNote(quantity: string, amount: number | null) {
+    if (!quantity) return null;
+    if (amount == null) return quantity;
+    return quantity.replace(",", ".") === String(amount) ? null : quantity;
+  }
+
+  private isHouseholdBasic(ingredient: RecipeIngredientDto) {
+    const name = ingredient.name.trim().toLowerCase();
+    const normalizedName = name.replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+    return [
+      "water",
+      "boiling water",
+      "tap water",
+      "cold water",
+      "hot water",
+      "ice",
+      "wasser",
+      "kochendes wasser",
+      "leitungswasser",
+      "kaltes wasser",
+      "heisses wasser",
+      "heißes wasser",
+      "eis",
+    ].includes(normalizedName);
   }
 
   private householdId() {
@@ -680,6 +719,8 @@ export class RecipesService {
         name: this.cleanText(ingredient.name),
         quantity: this.cleanText(ingredient.quantity),
         unit: this.cleanText(ingredient.unit),
+        excludeFromShopping:
+          ingredient.excludeFromShopping || this.isHouseholdBasic(ingredient),
       }))
       .filter((ingredient) => ingredient.name.length > 0)
       .slice(0, 40);
