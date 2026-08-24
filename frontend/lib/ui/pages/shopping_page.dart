@@ -6,6 +6,7 @@ import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
 import 'package:cookbuk/ui/widgets/backend_connection_icon.dart';
 import 'package:cookbuk/ui/widgets/load_state_view.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 enum _ShoppingViewMode { combined, byRecipe, byDay }
 
@@ -31,28 +32,46 @@ class _ShoppingPageState extends State<ShoppingPage> {
   List<_ShoppingGroup> _recipeGroups = [];
   List<_ShoppingGroup> _dayGroups = [];
   Set<String> _checkedItemKeys = {};
+  Set<String> _pantryItemNames = {};
   int _plannedRecipeCount = 0;
   _ShoppingViewMode _viewMode = _ShoppingViewMode.combined;
 
   DateTime get _weekEnd => _weekStart.add(const Duration(days: 6));
   List<_ShoppingItem> get _visibleItems => switch (_viewMode) {
-    _ShoppingViewMode.combined => _items,
+    _ShoppingViewMode.combined =>
+      _items.where((item) => !_isPantryItem(item)).toList(),
     _ShoppingViewMode.byRecipe => [
-      for (final group in _recipeGroups) ...group.items,
+      for (final group in _visibleGroups) ...group.items,
     ],
-    _ShoppingViewMode.byDay => [for (final group in _dayGroups) ...group.items],
+    _ShoppingViewMode.byDay => [
+      for (final group in _visibleGroups) ...group.items,
+    ],
   };
 
   List<_ShoppingGroup> get _visibleGroups => switch (_viewMode) {
     _ShoppingViewMode.combined => const [],
-    _ShoppingViewMode.byRecipe => _recipeGroups,
-    _ShoppingViewMode.byDay => _dayGroups,
+    _ShoppingViewMode.byRecipe => _filteredGroups(_recipeGroups),
+    _ShoppingViewMode.byDay => _filteredGroups(_dayGroups),
   };
 
   @override
   void initState() {
     super.initState();
+    _loadPantryItems();
     _loadList();
+  }
+
+  Future<void> _loadPantryItems() async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      setState(() {
+        _pantryItemNames =
+            preferences.getStringList(_pantryPreferenceKey)?.toSet() ?? {};
+      });
+    } catch (_) {
+      // Local pantry storage is a convenience; the shopping list still works.
+    }
   }
 
   Future<void> _loadList() async {
@@ -143,11 +162,61 @@ class _ShoppingPageState extends State<ShoppingPage> {
     });
   }
 
+  Future<void> _addToPantry(_ShoppingItem item) async {
+    final normalizedName = _normalizePantryName(item.name);
+    if (normalizedName.isEmpty) return;
+    setState(() {
+      _pantryItemNames = {..._pantryItemNames, normalizedName};
+      _checkedItemKeys.removeWhere((key) => key.endsWith('|$normalizedName'));
+    });
+    await _savePantryItems();
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('${item.name} ist im Vorrat.')));
+  }
+
+  Future<void> _removePantryItem(String name) async {
+    setState(() {
+      _pantryItemNames = {..._pantryItemNames}..remove(name);
+    });
+    await _savePantryItems();
+  }
+
+  Future<void> _clearPantryItems() async {
+    setState(() => _pantryItemNames = {});
+    await _savePantryItems();
+  }
+
+  Future<void> _savePantryItems() async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setStringList(
+        _pantryPreferenceKey,
+        _pantryItemNames.toList()..sort(),
+      );
+    } catch (_) {
+      // Keep the in-memory change for this session if persistence is unavailable.
+    }
+  }
+
+  Future<void> _showPantrySheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => _PantrySheet(
+        itemNames: _pantryItemNames.toList()..sort(),
+        onRemove: _removePantryItem,
+        onClear: _clearPantryItems,
+      ),
+    );
+  }
+
   Future<void> _copyShoppingList() async {
     if (_visibleItems.isEmpty) return;
 
     final text = _viewMode == _ShoppingViewMode.combined
-        ? _items.map((item) => item.title).join('\n')
+        ? _visibleItems.map((item) => item.title).join('\n')
         : _visibleGroups
               .map(
                 (group) => [
@@ -178,6 +247,11 @@ class _ShoppingPageState extends State<ShoppingPage> {
         title: const Text('Einkauf'),
         actions: [
           BackendConnectionIcon(mealPlanRepo: widget.mealPlanRepo),
+          IconButton(
+            onPressed: _showPantrySheet,
+            icon: const Icon(Icons.kitchen_outlined),
+            tooltip: 'Vorrat',
+          ),
           IconButton(
             onPressed: _items.isEmpty ? null : _copyShoppingList,
             icon: const Icon(Icons.content_copy_rounded),
@@ -230,12 +304,15 @@ class _ShoppingPageState extends State<ShoppingPage> {
                       height: 360,
                       child: _EmptyShoppingList(onRefresh: _loadList),
                     )
+                  else if (visibleItems.isEmpty)
+                    _PantryEmptyList(onShowPantry: _showPantrySheet)
                   else if (_viewMode == _ShoppingViewMode.combined)
-                    for (final item in _items)
+                    for (final item in visibleItems)
                       _ShoppingItemTile(
                         item: item,
                         isChecked: _checkedItemKeys.contains(item.key),
                         onChanged: (value) => _toggleItem(item.key, value),
+                        onAddToPantry: () => _addToPantry(item),
                       )
                   else
                     for (final group in _visibleGroups)
@@ -243,6 +320,7 @@ class _ShoppingPageState extends State<ShoppingPage> {
                         group: group,
                         checkedItemKeys: _checkedItemKeys,
                         onChanged: _toggleItem,
+                        onAddToPantry: _addToPantry,
                       ),
                 ],
               ),
@@ -415,6 +493,138 @@ class _ShoppingPageState extends State<ShoppingPage> {
   static String _recipeCountLabel(int count) {
     if (count == 1) return '1 Rezept';
     return '$count Rezepte';
+  }
+
+  List<_ShoppingGroup> _filteredGroups(List<_ShoppingGroup> groups) {
+    return [
+      for (final group in groups)
+        _ShoppingGroup(
+          title: group.title,
+          subtitle: group.subtitle,
+          items: group.items.where((item) => !_isPantryItem(item)).toList(),
+        ),
+    ].where((group) => group.items.isNotEmpty).toList();
+  }
+
+  bool _isPantryItem(_ShoppingItem item) {
+    return _pantryItemNames.contains(_normalizePantryName(item.name));
+  }
+
+  static String _normalizePantryName(String value) {
+    return value
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^\p{L}\p{N}]+', unicode: true), ' ')
+        .trim();
+  }
+
+  static String _displayPantryName(String value) {
+    if (value.isEmpty) return value;
+    return value[0].toUpperCase() + value.substring(1);
+  }
+}
+
+const _pantryPreferenceKey = 'cookbuk_pantry_item_names';
+
+class _PantrySheet extends StatelessWidget {
+  const _PantrySheet({
+    required this.itemNames,
+    required this.onRemove,
+    required this.onClear,
+  });
+
+  final List<String> itemNames;
+  final ValueChanged<String> onRemove;
+  final Future<void> Function() onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: ListView(
+        shrinkWrap: true,
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Vorrat',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              if (itemNames.isNotEmpty)
+                TextButton(
+                  onPressed: () async {
+                    await onClear();
+                    if (context.mounted) Navigator.of(context).pop();
+                  },
+                  child: const Text('Leeren'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (itemNames.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Text('Noch nichts im Vorrat.'),
+            )
+          else
+            for (final itemName in itemNames)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.kitchen_outlined),
+                title: Text(_ShoppingPageState._displayPantryName(itemName)),
+                trailing: IconButton(
+                  onPressed: () => onRemove(itemName),
+                  icon: const Icon(Icons.close_rounded),
+                  tooltip: 'Aus Vorrat entfernen',
+                ),
+              ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PantryEmptyList extends StatelessWidget {
+  const _PantryEmptyList({required this.onShowPantry});
+
+  final VoidCallback onShowPantry;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 64, horizontal: 24),
+      child: Column(
+        children: [
+          Icon(
+            Icons.kitchen_outlined,
+            size: 38,
+            color: colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Alles ist im Vorrat',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Die Zutaten dieser Ansicht sind ausgeblendet.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: onShowPantry,
+            icon: const Icon(Icons.kitchen_outlined),
+            label: const Text('Vorrat öffnen'),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -654,11 +864,13 @@ class _ShoppingGroupSection extends StatelessWidget {
     required this.group,
     required this.checkedItemKeys,
     required this.onChanged,
+    required this.onAddToPantry,
   });
 
   final _ShoppingGroup group;
   final Set<String> checkedItemKeys;
   final void Function(String key, bool? value) onChanged;
+  final ValueChanged<_ShoppingItem> onAddToPantry;
 
   @override
   Widget build(BuildContext context) {
@@ -695,6 +907,7 @@ class _ShoppingGroupSection extends StatelessWidget {
                   item: item,
                   isChecked: checkedItemKeys.contains(item.key),
                   onChanged: (value) => onChanged(item.key, value),
+                  onAddToPantry: () => onAddToPantry(item),
                 ),
             ],
           ),
@@ -709,11 +922,13 @@ class _ShoppingItemTile extends StatelessWidget {
     required this.item,
     required this.isChecked,
     required this.onChanged,
+    required this.onAddToPantry,
   });
 
   final _ShoppingItem item;
   final bool isChecked;
   final ValueChanged<bool?> onChanged;
+  final VoidCallback onAddToPantry;
 
   @override
   Widget build(BuildContext context) {
@@ -739,6 +954,11 @@ class _ShoppingItemTile extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
+      secondary: IconButton(
+        onPressed: onAddToPantry,
+        icon: const Icon(Icons.kitchen_outlined),
+        tooltip: 'In Vorrat',
+      ),
     );
   }
 }

@@ -47,6 +47,14 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
     await widget.repo.update(next);
   }
 
+  Future<void> _markReviewed() async {
+    final next = recipe.copyWith(
+      tags: recipe.tags.where((tag) => tag != 'needs_review').toList(),
+    );
+    setState(() => recipe = next);
+    await widget.repo.update(next);
+  }
+
   Future<Recipe?> _setMainImage(int index) async {
     if (index <= 0 || index >= recipe.imagePaths.length) return recipe;
 
@@ -250,12 +258,18 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
           ),
           PopupMenuButton<String>(
             onSelected: (value) {
+              if (value == 'reviewed') _markReviewed();
               if (value == 'stats') _showStats();
               if (value == 'delete') _confirmAndDelete();
             },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'stats', child: Text('Statistiken')),
-              PopupMenuItem(value: 'delete', child: Text('Löschen')),
+            itemBuilder: (context) => [
+              if (recipe.tags.contains('needs_review'))
+                const PopupMenuItem(
+                  value: 'reviewed',
+                  child: Text('Als geprüft markieren'),
+                ),
+              const PopupMenuItem(value: 'stats', child: Text('Statistiken')),
+              const PopupMenuItem(value: 'delete', child: Text('Löschen')),
             ],
           ),
         ],

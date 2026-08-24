@@ -25,6 +25,7 @@ const recipeTagLabelsDe = {
   'middle_eastern': 'Nahost',
   'saffron': 'Safran',
   'vegetables': 'Gemüse',
+  'needs_review': 'Noch prüfen',
 };
 
 const selectableRecipeTagLabelsDe = {

@@ -181,6 +181,8 @@ class ApiRecipeRepository
           .toList(),
       tags: (json['tags'] as List<dynamic>? ?? [])
           .map((tag) => tag.toString())
+          .followedBy(const ['needs_review'])
+          .toSet()
           .toList(),
     );
   }
