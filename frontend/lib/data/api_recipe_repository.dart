@@ -37,50 +37,29 @@ class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
 
   @override
   Future<Recipe> add(Recipe recipe) async {
-    try {
-      final response = await _send(
-        'POST',
-        '/recipes',
-        body: _recipePayload(recipe),
-      );
-      return _recipeFromJson(jsonDecode(response) as Map<String, dynamic>);
-    } on Object catch (error) {
-      if (!_isOfflineError(error)) rethrow;
-      _offlineRecipeList().insert(0, recipe);
-      return recipe;
-    }
+    final response = await _send(
+      'POST',
+      '/recipes',
+      body: _recipePayload(recipe),
+      useSaveErrorMessage: true,
+    );
+    return _recipeFromJson(jsonDecode(response) as Map<String, dynamic>);
   }
 
   @override
   Future<void> deleteById(String id) async {
-    try {
-      await _send('DELETE', '/recipes/$id');
-    } on Object catch (error) {
-      if (!_isOfflineError(error)) rethrow;
-      _offlineRecipeList().removeWhere((recipe) => recipe.id == id);
-    }
+    await _send('DELETE', '/recipes/$id', useSaveErrorMessage: true);
   }
 
   @override
   Future<Recipe> update(Recipe recipe) async {
-    try {
-      final response = await _send(
-        'PATCH',
-        '/recipes/${recipe.id}',
-        body: _recipePayload(recipe),
-      );
-      return _recipeFromJson(jsonDecode(response) as Map<String, dynamic>);
-    } on Object catch (error) {
-      if (!_isOfflineError(error)) rethrow;
-      final recipes = _offlineRecipeList();
-      final index = recipes.indexWhere((item) => item.id == recipe.id);
-      if (index == -1) {
-        recipes.insert(0, recipe);
-      } else {
-        recipes[index] = recipe;
-      }
-      return recipe;
-    }
+    final response = await _send(
+      'PATCH',
+      '/recipes/${recipe.id}',
+      body: _recipePayload(recipe),
+      useSaveErrorMessage: true,
+    );
+    return _recipeFromJson(jsonDecode(response) as Map<String, dynamic>);
   }
 
   @override
@@ -88,29 +67,13 @@ class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
     required String recipeId,
     required String imagePath,
   }) async {
-    try {
-      final response = await _sendMultipart(
-        'POST',
-        '/recipes/$recipeId/image',
-        imagePath,
-      );
-      return _recipeFromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    } on Object catch (error) {
-      if (!_isOfflineError(error)) rethrow;
-      final recipes = _offlineRecipeList();
-      final index = recipes.indexWhere((recipe) => recipe.id == recipeId);
-      if (index == -1) {
-        throw ApiRecipeRepositoryException(
-          'Offline recipe not found: $recipeId',
-        );
-      }
-
-      final updatedRecipe = recipes[index].copyWith(
-        imagePaths: [imagePath, ...recipes[index].imagePaths.skip(1)],
-      );
-      recipes[index] = updatedRecipe;
-      return updatedRecipe;
-    }
+    final response = await _sendMultipart(
+      'POST',
+      '/recipes/$recipeId/image',
+      imagePath,
+      useSaveErrorMessage: true,
+    );
+    return _recipeFromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Uri _uri(Uri baseUri, String path) {
@@ -167,6 +130,7 @@ class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
     String method,
     String path, {
     Map<String, dynamic>? body,
+    bool useSaveErrorMessage = false,
   }) async {
     Object? lastOfflineError;
     final orderedBaseUris = [
@@ -185,14 +149,18 @@ class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
       }
     }
 
+    if (useSaveErrorMessage) {
+      throw ApiRecipeRepositoryException(_offlineMessage(lastOfflineError));
+    }
     throw lastOfflineError ?? TimeoutException('Backend unavailable');
   }
 
   Future<http.Response> _sendMultipart(
     String method,
     String path,
-    String imagePath,
-  ) async {
+    String imagePath, {
+    bool useSaveErrorMessage = false,
+  }) async {
     Object? lastOfflineError;
     final orderedBaseUris = [
       _activeBaseUri,
@@ -212,7 +180,7 @@ class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
 
         if (response.statusCode < 200 || response.statusCode >= 300) {
           throw ApiRecipeRepositoryException(
-            'Backend request failed: $method $path ${response.statusCode} ${response.body}',
+            _statusMessage(response.statusCode),
           );
         }
 
@@ -224,6 +192,9 @@ class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
       }
     }
 
+    if (useSaveErrorMessage) {
+      throw ApiRecipeRepositoryException(_offlineMessage(lastOfflineError));
+    }
     throw lastOfflineError ?? TimeoutException('Backend unavailable');
   }
 
@@ -259,9 +230,7 @@ class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
     };
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ApiRecipeRepositoryException(
-        'Backend request failed: $method $path ${response.statusCode} ${response.body}',
-      );
+      throw ApiRecipeRepositoryException(_statusMessage(response.statusCode));
     }
 
     return response.body;
@@ -280,6 +249,23 @@ class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
     return error is TimeoutException || error is http.ClientException;
   }
 
+  String _offlineMessage(Object? error) {
+    if (error is TimeoutException) {
+      return 'Pi antwortet nicht rechtzeitig. Prüfe WLAN, Tailscale oder die Backend-Adresse.';
+    }
+    return 'Pi nicht erreichbar. Prüfe WLAN, Tailscale oder die Backend-Adresse.';
+  }
+
+  String _statusMessage(int statusCode) {
+    if (statusCode == 401 || statusCode == 403) {
+      return 'Pi hat die Anfrage abgelehnt. Prüfe den CookBuk Token.';
+    }
+    if (statusCode >= 500) {
+      return 'Pi Backend hat einen Serverfehler gemeldet.';
+    }
+    return 'Pi Backend konnte das Rezept nicht speichern. HTTP $statusCode.';
+  }
+
   static List<Uri> _parseBaseUris(List<String> values) {
     final uris = values
         .map((value) => value.trim())
@@ -293,11 +279,6 @@ class ApiRecipeRepository implements RecipeRepository, RecipeImageRepository {
   static const _requestTimeout = Duration(seconds: 2);
 }
 
-class ApiRecipeRepositoryException implements Exception {
-  const ApiRecipeRepositoryException(this.message);
-
-  final String message;
-
-  @override
-  String toString() => message;
+class ApiRecipeRepositoryException extends RecipeSaveException {
+  const ApiRecipeRepositoryException(super.userMessage);
 }

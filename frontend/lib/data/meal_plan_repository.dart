@@ -20,6 +20,19 @@ class CloseDayResult {
   }
 }
 
+class MealPlanSaveException implements Exception {
+  const MealPlanSaveException(this.userMessage);
+
+  final String userMessage;
+
+  @override
+  String toString() => userMessage;
+}
+
+class MealPlanQueuedException extends MealPlanSaveException {
+  const MealPlanQueuedException(super.userMessage);
+}
+
 abstract class MealPlanRepository {
   Future<List<MealPlanSlot>> getRange({
     required DateTime from,
@@ -44,4 +57,6 @@ abstract class MealPlanRepository {
   });
 
   Future<CloseDayResult> closeDay(DateTime date);
+
+  Future<void> syncPendingChanges() async {}
 }

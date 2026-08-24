@@ -16,13 +16,24 @@ class ApiMealPlanRepository implements MealPlanRepository {
   final List<Uri> _baseUris;
   final String _sharedToken;
   final Map<String, MealPlanSlot> _offlineSlots = {};
+  final List<_PendingMealPlanWrite> _pendingWrites = [];
   late Uri _activeBaseUri = _baseUris.first;
+  Timer? _syncTimer;
+  bool _isSyncing = false;
+
+  void _ensureSyncTimer() {
+    _syncTimer ??= Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => unawaited(syncPendingChanges()),
+    );
+  }
 
   @override
   Future<List<MealPlanSlot>> getRange({
     required DateTime from,
     required DateTime to,
   }) async {
+    await syncPendingChanges();
     try {
       final response = await _send(
         'GET',
@@ -45,11 +56,29 @@ class ApiMealPlanRepository implements MealPlanRepository {
     required String meal,
     required String recipeId,
   }) async {
-    await _upsert(
-      date: date,
-      meal: meal,
-      body: {'slotType': 'recipe', 'recipeId': recipeId},
-    );
+    final body = {'slotType': 'recipe', 'recipeId': recipeId};
+    try {
+      await _upsert(date: date, meal: meal, body: body);
+    } on Object catch (error) {
+      if (!_isOfflineError(error)) rethrow;
+      _queueWrite(
+        method: 'PUT',
+        path: '/meal-plan/${_dateKey(date)}/$meal',
+        body: body,
+        applyLocal: () {
+          final existing = _offlineSlots[_slotKey(date, meal)];
+          _writeOfflineSlot(
+            date: date,
+            meal: meal,
+            slotType: 'recipe',
+            recipeId: recipeId,
+            extras: existing?.extras ?? const [],
+            recipeExtraIds: existing?.recipeExtraIds ?? const [],
+          );
+        },
+      );
+      throw MealPlanQueuedException(_queuedMessage());
+    }
   }
 
   @override
@@ -57,12 +86,46 @@ class ApiMealPlanRepository implements MealPlanRepository {
     required DateTime date,
     required String meal,
   }) async {
-    await _upsert(date: date, meal: meal, body: {'slotType': 'leftovers'});
+    const body = {'slotType': 'leftovers'};
+    try {
+      await _upsert(date: date, meal: meal, body: body);
+    } on Object catch (error) {
+      if (!_isOfflineError(error)) rethrow;
+      _queueWrite(
+        method: 'PUT',
+        path: '/meal-plan/${_dateKey(date)}/$meal',
+        body: body,
+        applyLocal: () {
+          final existing = _offlineSlots[_slotKey(date, meal)];
+          _writeOfflineSlot(
+            date: date,
+            meal: meal,
+            slotType: 'leftovers',
+            extras: existing?.extras ?? const [],
+            recipeExtraIds: existing?.recipeExtraIds ?? const [],
+          );
+        },
+      );
+      throw MealPlanQueuedException(_queuedMessage());
+    }
   }
 
   @override
   Future<void> setEmpty({required DateTime date, required String meal}) async {
-    await _upsert(date: date, meal: meal, body: {'slotType': 'empty'});
+    const body = {'slotType': 'empty'};
+    try {
+      await _upsert(date: date, meal: meal, body: body);
+    } on Object catch (error) {
+      if (!_isOfflineError(error)) rethrow;
+      _queueWrite(
+        method: 'PUT',
+        path: '/meal-plan/${_dateKey(date)}/$meal',
+        body: body,
+        applyLocal: () =>
+            _writeOfflineSlot(date: date, meal: meal, slotType: 'empty'),
+      );
+      throw MealPlanQueuedException(_queuedMessage());
+    }
   }
 
   @override
@@ -74,11 +137,36 @@ class ApiMealPlanRepository implements MealPlanRepository {
   }) async {
     final normalized = _normalizeExtras(extras);
     final normalizedRecipeExtraIds = _normalizeRecipeExtraIds(recipeExtraIds);
-    await _send(
-      'PUT',
-      '/meal-plan/${_dateKey(date)}/$meal/extras',
-      body: {'extras': normalized, 'recipeExtraIds': normalizedRecipeExtraIds},
-    );
+    final body = {
+      'extras': normalized,
+      'recipeExtraIds': normalizedRecipeExtraIds,
+    };
+    try {
+      await _send(
+        'PUT',
+        '/meal-plan/${_dateKey(date)}/$meal/extras',
+        body: body,
+      );
+    } on Object catch (error) {
+      if (!_isOfflineError(error)) rethrow;
+      _queueWrite(
+        method: 'PUT',
+        path: '/meal-plan/${_dateKey(date)}/$meal/extras',
+        body: body,
+        applyLocal: () {
+          final existing = _offlineSlots[_slotKey(date, meal)];
+          _writeOfflineSlot(
+            date: date,
+            meal: meal,
+            slotType: existing?.slotType ?? 'empty',
+            recipeId: existing?.recipeId,
+            extras: normalized,
+            recipeExtraIds: normalizedRecipeExtraIds,
+          );
+        },
+      );
+      throw MealPlanQueuedException(_queuedMessage());
+    }
   }
 
   @override
@@ -90,6 +178,30 @@ class ApiMealPlanRepository implements MealPlanRepository {
     return CloseDayResult.fromJson(
       jsonDecode(response) as Map<String, dynamic>,
     );
+  }
+
+  @override
+  Future<void> syncPendingChanges() async {
+    if (_pendingWrites.isEmpty || _isSyncing) return;
+
+    _isSyncing = true;
+    try {
+      while (_pendingWrites.isNotEmpty) {
+        final pending = _pendingWrites.first;
+        try {
+          await _send(pending.method, pending.path, body: pending.body);
+          _pendingWrites.removeAt(0);
+        } on Object catch (error) {
+          if (_isOfflineError(error)) return;
+          _pendingWrites.removeAt(0);
+          rethrow;
+        }
+      }
+      _syncTimer?.cancel();
+      _syncTimer = null;
+    } finally {
+      _isSyncing = false;
+    }
   }
 
   Future<void> _upsert({
@@ -166,9 +278,7 @@ class ApiMealPlanRepository implements MealPlanRepository {
     };
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ApiMealPlanRepositoryException(
-        'Backend request failed: $method $path ${response.statusCode} ${response.body}',
-      );
+      throw ApiMealPlanRepositoryException(_statusMessage(response.statusCode));
     }
 
     return response.body;
@@ -199,6 +309,39 @@ class ApiMealPlanRepository implements MealPlanRepository {
     }).toList();
   }
 
+  void _queueWrite({
+    required String method,
+    required String path,
+    required Map<String, dynamic> body,
+    required void Function() applyLocal,
+  }) {
+    applyLocal();
+    _pendingWrites.add(
+      _PendingMealPlanWrite(method: method, path: path, body: body),
+    );
+    _ensureSyncTimer();
+  }
+
+  void _writeOfflineSlot({
+    required DateTime date,
+    required String meal,
+    required String slotType,
+    String? recipeId,
+    List<String> extras = const [],
+    List<String> recipeExtraIds = const [],
+  }) {
+    _offlineSlots[_slotKey(date, meal)] = MealPlanSlot(
+      plannedFor: DateTime(date.year, date.month, date.day),
+      meal: meal,
+      slotType: slotType,
+      recipeId: recipeId,
+      extras: extras,
+      recipeExtraIds: recipeExtraIds,
+    );
+  }
+
+  String _slotKey(DateTime date, String meal) => '${_dateKey(date)}:$meal';
+
   List<String> _normalizeExtras(List<String> values) {
     return values
         .map((value) => value.trim())
@@ -220,6 +363,20 @@ class ApiMealPlanRepository implements MealPlanRepository {
     return error is TimeoutException || error is http.ClientException;
   }
 
+  String _queuedMessage() {
+    return 'Pi nicht erreichbar. Änderung vorgemerkt und wird automatisch synchronisiert, sobald die Verbindung zurück ist.';
+  }
+
+  String _statusMessage(int statusCode) {
+    if (statusCode == 401 || statusCode == 403) {
+      return 'Pi hat die Anfrage abgelehnt. Prüfe den CookBuk Token.';
+    }
+    if (statusCode >= 500) {
+      return 'Pi Backend hat einen Serverfehler gemeldet.';
+    }
+    return 'Pi Backend konnte die Änderung nicht speichern. HTTP $statusCode.';
+  }
+
   static List<Uri> _parseBaseUris(List<String> values) {
     final uris = values
         .map((value) => value.trim())
@@ -233,11 +390,18 @@ class ApiMealPlanRepository implements MealPlanRepository {
   static const _requestTimeout = Duration(seconds: 2);
 }
 
-class ApiMealPlanRepositoryException implements Exception {
-  const ApiMealPlanRepositoryException(this.message);
+class ApiMealPlanRepositoryException extends MealPlanSaveException {
+  const ApiMealPlanRepositoryException(super.userMessage);
+}
 
-  final String message;
+class _PendingMealPlanWrite {
+  const _PendingMealPlanWrite({
+    required this.method,
+    required this.path,
+    required this.body,
+  });
 
-  @override
-  String toString() => message;
+  final String method;
+  final String path;
+  final Map<String, dynamic> body;
 }

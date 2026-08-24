@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cookbuk/data/api_meal_plan_repository.dart';
+import 'package:cookbuk/data/meal_plan_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -156,7 +157,7 @@ void main() {
     });
   });
 
-  test('does not fake successful writes when backend is unavailable', () async {
+  test('queues writes when backend is unavailable', () async {
     final unavailableServer = await HttpServer.bind(
       InternetAddress.loopbackIPv4,
       0,
@@ -171,14 +172,64 @@ void main() {
         meal: 'breakfast',
         recipeId: 'recipe-1',
       ),
-      throwsA(isA<Object>()),
+      throwsA(isA<MealPlanQueuedException>()),
     );
 
     final slots = await repository.getRange(
       from: DateTime(2026, 8, 23),
       to: DateTime(2026, 8, 23),
     );
-    expect(slots, isEmpty);
+    expect(slots.single.meal, 'breakfast');
+    expect(slots.single.recipeId, 'recipe-1');
+  });
+
+  test('syncs queued writes when backend becomes available', () async {
+    final unavailableServer = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      0,
+    );
+    final port = unavailableServer.port;
+    await unavailableServer.close(force: true);
+    repository = ApiMealPlanRepository(baseUrl: 'http://127.0.0.1:$port');
+
+    await expectLater(
+      repository.setRecipe(
+        date: DateTime(2026, 8, 23),
+        meal: 'breakfast',
+        recipeId: 'recipe-1',
+      ),
+      throwsA(isA<MealPlanQueuedException>()),
+    );
+
+    final retryServer = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      port,
+    );
+    addTearDown(() => retryServer.close(force: true));
+    retryServer.listen((request) async {
+      final body = await utf8.decoder.bind(request).join();
+      requests.add(
+        _RequestLog(
+          method: request.method,
+          path: request.uri.path,
+          query: request.uri.query,
+          body: body,
+          token: request.headers.value('x-cookbuk-token'),
+        ),
+      );
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode({'ok': true}));
+      await request.response.close();
+    });
+
+    await repository.syncPendingChanges();
+
+    expect(requests.single.method, 'PUT');
+    expect(requests.single.path, '/meal-plan/2026-08-23/breakfast');
+    expect(jsonDecode(requests.single.body), {
+      'slotType': 'recipe',
+      'recipeId': 'recipe-1',
+    });
   });
 
   test('closes a planned day', () async {

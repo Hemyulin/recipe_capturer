@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cookbuk/data/api_recipe_repository.dart';
+import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -172,6 +173,30 @@ void main() {
 
     await file.delete();
   });
+
+  test(
+    'does not fake successful recipe writes when backend is unavailable',
+    () async {
+      final unavailableServer = await HttpServer.bind(
+        InternetAddress.loopbackIPv4,
+        0,
+      );
+      final port = unavailableServer.port;
+      await unavailableServer.close(force: true);
+      repository = ApiRecipeRepository(baseUrl: 'http://127.0.0.1:$port');
+
+      await expectLater(
+        repository.add(Recipe.create('Offline Pasta')),
+        throwsA(
+          isA<RecipeSaveException>().having(
+            (error) => error.userMessage,
+            'userMessage',
+            contains('Pi nicht erreichbar'),
+          ),
+        ),
+      );
+    },
+  );
 
   test('falls back to demo recipes when backend is unavailable', () async {
     final unavailableServer = await HttpServer.bind(

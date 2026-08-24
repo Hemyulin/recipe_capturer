@@ -297,12 +297,18 @@ class _NewRecipePageState extends State<NewRecipePage> {
 
       if (!mounted) return;
       context.pop(true);
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Rezepttitel kann nicht leer sein!')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_saveErrorMessage(error))));
     }
+  }
+
+  String _saveErrorMessage(Object error) {
+    if (error is RecipeSaveException) return error.userMessage;
+    if (error is ArgumentError) return 'Rezepttitel kann nicht leer sein!';
+    return 'Rezept konnte nicht gespeichert werden.';
   }
 
   Widget _buildPhotoPicker(ColorScheme colorScheme) {
