@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:cookbuk/data/meal_plan_repository.dart';
 import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
@@ -54,25 +53,6 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
     if (saved == true) await _refreshRecipe();
   }
 
-  Future<void> _addMainImage() async {
-    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (picked == null) return;
-
-    if (widget.repo is RecipeImageRepository) {
-      final updatedRecipe = await (widget.repo as RecipeImageRepository)
-          .uploadImage(recipeId: recipe.id, imagePath: picked.path);
-      if (!mounted) return;
-      setState(() => recipe = updatedRecipe);
-      return;
-    }
-
-    final updatedRecipe = recipe.copyWith(
-      imagePaths: [picked.path, ...recipe.imagePaths.skip(1)],
-    );
-    await widget.repo.update(updatedRecipe);
-    await _refreshRecipe();
-  }
-
   Future<void> _confirmAndDelete() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -113,65 +93,92 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
     );
   }
 
-  Widget _buildMainImage(ColorScheme colorScheme) {
+  Widget _buildImageGallery(ColorScheme colorScheme) {
+    final imagePaths = recipe.imagePaths;
     final imagePath = recipe.mainImagePath;
 
-    return AspectRatio(
-      aspectRatio: 16 / 10,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Material(
-            color: colorScheme.surfaceContainerHigh,
-            borderRadius: BorderRadius.circular(24),
-            clipBehavior: Clip.antiAlias,
-            child: RecipeImage(path: imagePath, placeholderSeed: recipe.id),
-          ),
-          if (imagePath == null)
-            Positioned.fill(
-              child: Material(
-                color: Colors.transparent,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AspectRatio(
+          aspectRatio: 16 / 10,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Material(
+                color: colorScheme.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(24),
+                clipBehavior: Clip.antiAlias,
                 child: InkWell(
-                  onTap: _addMainImage,
-                  child: Center(
-                    child: FilledButton.icon(
-                      onPressed: _addMainImage,
-                      icon: const Icon(Icons.add_photo_alternate_outlined),
-                      label: const Text('Foto hinzufügen'),
-                    ),
+                  onTap: imagePaths.isEmpty
+                      ? null
+                      : () => _openImageViewer(initialIndex: 0),
+                  child: RecipeImage(
+                    path: imagePath,
+                    placeholderSeed: recipe.id,
                   ),
                 ),
               ),
-            ),
-          if (imagePath != null)
-            Positioned(
-              left: 12,
-              bottom: 12,
-              child: FilledButton.icon(
-                onPressed: _addMainImage,
-                icon: const Icon(Icons.photo_camera_outlined),
-                label: const Text('Ändern'),
-              ),
-            ),
-          Positioned(
-            top: 12,
-            right: 12,
-            child: Material(
-              color: colorScheme.surface.withValues(alpha: 0.92),
-              borderRadius: BorderRadius.circular(14),
-              child: IconButton(
-                onPressed: _toggleFavorite,
-                icon: Icon(
-                  recipe.isFavorite ? Icons.favorite : Icons.favorite_border,
+              if (imagePaths.length > 1)
+                Positioned(
+                  left: 12,
+                  bottom: 12,
+                  child: _ImageCountBadge(count: imagePaths.length),
                 ),
-                color: colorScheme.secondary,
-                tooltip: recipe.isFavorite
-                    ? 'Favorit entfernen'
-                    : 'Als Favorit markieren',
+              Positioned(
+                top: 12,
+                right: 12,
+                child: Material(
+                  color: colorScheme.surface.withValues(alpha: 0.92),
+                  borderRadius: BorderRadius.circular(14),
+                  child: IconButton(
+                    onPressed: _toggleFavorite,
+                    icon: Icon(
+                      recipe.isFavorite
+                          ? Icons.favorite
+                          : Icons.favorite_border,
+                    ),
+                    color: colorScheme.secondary,
+                    tooltip: recipe.isFavorite
+                        ? 'Favorit entfernen'
+                        : 'Als Favorit markieren',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (imagePaths.length > 1) ...[
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 64,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: imagePaths.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
+              itemBuilder: (context, index) => _ImageThumb(
+                path: imagePaths[index],
+                isMain: index == 0,
+                onTap: () => _openImageViewer(initialIndex: index),
               ),
             ),
           ),
         ],
+      ],
+    );
+  }
+
+  Future<void> _openImageViewer({required int initialIndex}) async {
+    if (recipe.imagePaths.isEmpty) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => _RecipeImageViewer(
+          title: recipe.title,
+          imagePaths: recipe.imagePaths,
+          initialIndex: initialIndex,
+          placeholderSeed: recipe.id,
+        ),
       ),
     );
   }
@@ -212,12 +219,10 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
           PopupMenuButton<String>(
             onSelected: (value) {
               if (value == 'stats') _showStats();
-              if (value == 'photo') _addMainImage();
               if (value == 'delete') _confirmAndDelete();
             },
             itemBuilder: (context) => const [
               PopupMenuItem(value: 'stats', child: Text('Statistiken')),
-              PopupMenuItem(value: 'photo', child: Text('Foto ändern')),
               PopupMenuItem(value: 'delete', child: Text('Löschen')),
             ],
           ),
@@ -226,7 +231,7 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
         children: [
-          _buildMainImage(colorScheme),
+          _buildImageGallery(colorScheme),
           const SizedBox(height: 16),
           Text(recipe.title, style: textTheme.headlineSmall),
           const SizedBox(height: 10),
@@ -354,6 +359,201 @@ String _formatDate(DateTime value) {
   final day = value.day.toString().padLeft(2, '0');
   final month = value.month.toString().padLeft(2, '0');
   return '$day.$month.${value.year}';
+}
+
+class _ImageCountBadge extends StatelessWidget {
+  const _ImageCountBadge({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.62),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.photo_library_outlined,
+              color: Colors.white,
+              size: 16,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              '$count',
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ImageThumb extends StatelessWidget {
+  const _ImageThumb({
+    required this.path,
+    required this.isMain,
+    required this.onTap,
+  });
+
+  final String path;
+  final bool isMain;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        width: 86,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isMain ? colorScheme.primary : colorScheme.outlineVariant,
+            width: isMain ? 2 : 1,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            RecipeImage(path: path, placeholderSeed: path),
+            if (isMain)
+              Positioned(
+                left: 4,
+                bottom: 4,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withValues(alpha: 0.9),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 3,
+                    ),
+                    child: Text(
+                      'Hauptbild',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: colorScheme.onPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RecipeImageViewer extends StatefulWidget {
+  const _RecipeImageViewer({
+    required this.title,
+    required this.imagePaths,
+    required this.initialIndex,
+    required this.placeholderSeed,
+  });
+
+  final String title;
+  final List<String> imagePaths;
+  final int initialIndex;
+  final String placeholderSeed;
+
+  @override
+  State<_RecipeImageViewer> createState() => _RecipeImageViewerState();
+}
+
+class _RecipeImageViewerState extends State<_RecipeImageViewer> {
+  late final PageController _pageController;
+  late int _index;
+
+  @override
+  void initState() {
+    super.initState();
+    _index = widget.initialIndex.clamp(0, widget.imagePaths.length - 1);
+    _pageController = PageController(initialPage: _index);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+      ),
+      body: Stack(
+        children: [
+          PageView.builder(
+            controller: _pageController,
+            itemCount: widget.imagePaths.length,
+            onPageChanged: (index) => setState(() => _index = index),
+            itemBuilder: (context, index) => InteractiveViewer(
+              minScale: 1,
+              maxScale: 4,
+              child: Center(
+                child: RecipeImage(
+                  path: widget.imagePaths[index],
+                  fit: BoxFit.contain,
+                  placeholderSeed: widget.placeholderSeed,
+                ),
+              ),
+            ),
+          ),
+          if (widget.imagePaths.length > 1)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 20,
+              child: SafeArea(
+                top: false,
+                child: Center(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.58),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 7,
+                      ),
+                      child: Text(
+                        '${_index + 1}/${widget.imagePaths.length}',
+                        style: Theme.of(
+                          context,
+                        ).textTheme.labelLarge?.copyWith(color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 class _RecipeStatsContent extends StatelessWidget {

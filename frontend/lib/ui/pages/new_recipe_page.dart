@@ -280,12 +280,15 @@ class _NewRecipePageState extends State<NewRecipePage> {
       final imageRepository = widget.repo is RecipeImageRepository
           ? widget.repo as RecipeImageRepository
           : null;
-      final selectedMainImage = _imagePaths.isEmpty ? null : _imagePaths.first;
-      final shouldUploadImage =
-          imageRepository != null && _isLocalUploadCandidate(selectedMainImage);
-      final recipeImagePaths = shouldUploadImage
+      final localUploadImages = imageRepository == null
+          ? const <String>[]
+          : _imagePaths.where(_isLocalUploadCandidate).take(5).toList();
+      final shouldUploadImages = localUploadImages.isNotEmpty;
+      final recipeImagePaths = shouldUploadImages
           ? widget.saveAsNew
-                ? const <String>[]
+                ? _imagePaths
+                      .where((path) => !_isLocalUploadCandidate(path))
+                      .toList()
                 : initialRecipe?.imagePaths ?? const <String>[]
           : _imagePaths;
 
@@ -304,11 +307,14 @@ class _NewRecipePageState extends State<NewRecipePage> {
         );
 
         final savedRecipe = await widget.repo.add(recipe);
-        if (shouldUploadImage && selectedMainImage != null) {
-          await imageRepository.uploadImage(
-            recipeId: savedRecipe.id,
-            imagePath: selectedMainImage,
-          );
+        if (shouldUploadImages) {
+          final uploader = imageRepository!;
+          for (final imagePath in localUploadImages) {
+            await uploader.uploadImage(
+              recipeId: savedRecipe.id,
+              imagePath: imagePath,
+            );
+          }
         }
       } else {
         final updatedRecipe = initialRecipe.copyWith(
@@ -328,11 +334,14 @@ class _NewRecipePageState extends State<NewRecipePage> {
         );
 
         final savedRecipe = await widget.repo.update(updatedRecipe);
-        if (shouldUploadImage && selectedMainImage != null) {
-          await imageRepository.uploadImage(
-            recipeId: savedRecipe.id,
-            imagePath: selectedMainImage,
-          );
+        if (shouldUploadImages) {
+          final uploader = imageRepository!;
+          for (final imagePath in localUploadImages) {
+            await uploader.uploadImage(
+              recipeId: savedRecipe.id,
+              imagePath: imagePath,
+            );
+          }
         }
       }
 
