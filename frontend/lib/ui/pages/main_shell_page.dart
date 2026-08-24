@@ -11,6 +11,7 @@ class MainShellPage extends StatelessWidget {
     if (location.startsWith('/week')) return 1;
     if (location.startsWith('/recipes')) return 2;
     if (location.startsWith('/shopping')) return 3;
+    if (location.startsWith('/status')) return 4;
     return 0;
   }
 
@@ -19,7 +20,8 @@ class MainShellPage extends StatelessWidget {
       0 => '/today',
       1 => '/week',
       2 => '/recipes',
-      _ => '/shopping',
+      3 => '/shopping',
+      _ => '/status',
     };
     if (location != path) context.go(path);
   }
@@ -51,6 +53,11 @@ class MainShellPage extends StatelessWidget {
             icon: Icon(Icons.shopping_basket_outlined),
             selectedIcon: Icon(Icons.shopping_basket),
             label: 'Einkauf',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'Status',
           ),
         ],
       ),

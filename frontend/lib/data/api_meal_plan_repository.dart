@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiMealPlanRepository
-    implements MealPlanRepository, MealPlanSyncNotifier {
+    implements MealPlanRepository, MealPlanConnectionDiagnostics {
   ApiMealPlanRepository({
     String? baseUrl,
     List<String>? baseUrls,
@@ -23,6 +23,7 @@ class ApiMealPlanRepository
       StreamController<MealPlanSyncStatus>.broadcast();
   late Uri _activeBaseUri = _baseUris.first;
   MealPlanSyncStatus _syncStatus = MealPlanSyncStatus.idle;
+  DateTime? _lastSuccessfulConnectionAt;
   Future<void>? _pendingWritesLoad;
   Timer? _syncTimer;
   bool _isSyncing = false;
@@ -40,6 +41,43 @@ class ApiMealPlanRepository
   @override
   Stream<MealPlanSyncStatus> get syncStatusChanges =>
       _syncStatusController.stream;
+
+  @override
+  List<String> get configuredBaseUrls =>
+      _baseUris.map((uri) => uri.toString()).toList(growable: false);
+
+  @override
+  String get activeBaseUrl => _activeBaseUri.toString();
+
+  @override
+  int get pendingWriteCount => _pendingWrites.length;
+
+  @override
+  DateTime? get lastSuccessfulConnectionAt => _lastSuccessfulConnectionAt;
+
+  @override
+  Future<BackendConnectionTestResult> testConnection() async {
+    await _ensurePendingWritesLoaded();
+    try {
+      await _send('GET', '/health');
+      await syncPendingChanges();
+      return BackendConnectionTestResult(
+        isConnected: true,
+        checkedAt: DateTime.now(),
+        activeBaseUrl: activeBaseUrl,
+        message: pendingWriteCount == 0
+            ? 'Pi erreichbar. Keine offenen Änderungen.'
+            : 'Pi erreichbar. $pendingWriteCount Änderung(en) warten noch.',
+      );
+    } on Object catch (error) {
+      return BackendConnectionTestResult(
+        isConnected: false,
+        checkedAt: DateTime.now(),
+        activeBaseUrl: activeBaseUrl,
+        message: _errorMessage(error),
+      );
+    }
+  }
 
   @override
   Future<List<MealPlanSlot>> getRange({
@@ -300,6 +338,7 @@ class ApiMealPlanRepository
           body: body,
         );
         _activeBaseUri = baseUri;
+        _lastSuccessfulConnectionAt = DateTime.now();
         return response;
       } on Object catch (error) {
         if (!_isOfflineError(error)) rethrow;

@@ -57,6 +57,33 @@ abstract interface class MealPlanSyncNotifier {
   Stream<MealPlanSyncStatus> get syncStatusChanges;
 }
 
+class BackendConnectionTestResult {
+  const BackendConnectionTestResult({
+    required this.isConnected,
+    required this.checkedAt,
+    required this.message,
+    this.activeBaseUrl,
+  });
+
+  final bool isConnected;
+  final DateTime checkedAt;
+  final String message;
+  final String? activeBaseUrl;
+}
+
+abstract interface class MealPlanConnectionDiagnostics
+    implements MealPlanSyncNotifier {
+  List<String> get configuredBaseUrls;
+
+  String get activeBaseUrl;
+
+  int get pendingWriteCount;
+
+  DateTime? get lastSuccessfulConnectionAt;
+
+  Future<BackendConnectionTestResult> testConnection();
+}
+
 abstract class MealPlanRepository {
   Future<List<MealPlanSlot>> getRange({
     required DateTime from,
