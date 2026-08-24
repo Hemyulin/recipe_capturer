@@ -40,6 +40,13 @@ CREATE TABLE IF NOT EXISTS recipe_tags (
   PRIMARY KEY (recipe_id, tag)
 );
 
+CREATE TABLE IF NOT EXISTS recipe_images (
+  id TEXT PRIMARY KEY,
+  recipe_id TEXT NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+  url TEXT NOT NULL,
+  sort_order INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS recipe_ingredients (
   id TEXT PRIMARY KEY,
   recipe_id TEXT NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,

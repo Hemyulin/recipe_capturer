@@ -39,6 +39,11 @@ type IngredientRow = {
   sort_order: number;
 };
 
+type ImageRow = {
+  url: string;
+  sort_order: number;
+};
+
 type StepRow = {
   body: string;
   sort_order: number;
@@ -170,6 +175,7 @@ export class RecipesService {
         );
 
       this.replaceRecipeChildren(id, input);
+      this.replaceRecipeImages(id, input.imagePaths ?? []);
     });
 
     transaction();
@@ -217,6 +223,9 @@ export class RecipesService {
         );
 
       this.replaceRecipeChildren(id, input);
+      if (input.imagePaths != null) {
+        this.replaceRecipeImages(id, input.imagePaths);
+      }
     });
 
     transaction();
@@ -225,6 +234,7 @@ export class RecipesService {
 
   delete(id: string) {
     const existing = this.findAnyRecipeRow(id);
+    const imageUrls = this.storedImageUrlsForRow(existing);
 
     const transaction = this.database.db.transaction(() => {
       this.clearMealPlanReferences(id);
@@ -243,7 +253,9 @@ export class RecipesService {
     });
 
     transaction();
-    this.deletePreviousStoredImage(existing.image_url);
+    for (const imageUrl of imageUrls) {
+      this.deletePreviousStoredImage(imageUrl);
+    }
   }
 
   archive(id: string) {
@@ -554,17 +566,35 @@ export class RecipesService {
     writeFileSync(targetPath, image.buffer);
 
     const imageUrl = `/images/${filename}`;
-    this.database.db
-      .prepare(
-        `
-        UPDATE recipes
-        SET image_url = ?, updated_at = ?
-        WHERE id = ? AND household_id = ? AND archived_at IS NULL
-        `,
-      )
-      .run(imageUrl, new Date().toISOString(), id, this.householdId());
+    const imageCount = this.recipeImagesFor(id).length;
+    const sortOrder = imageCount;
+    this.database.db.transaction(() => {
+      this.database.db
+        .prepare(
+          `
+          INSERT INTO recipe_images (id, recipe_id, url, sort_order)
+          VALUES (?, ?, ?, ?)
+          `,
+        )
+        .run(randomUUID(), id, imageUrl, sortOrder);
+      this.database.db
+        .prepare(
+          `
+          UPDATE recipes
+          SET image_url = COALESCE(image_url, ?), updated_at = ?
+          WHERE id = ? AND household_id = ? AND archived_at IS NULL
+          `,
+        )
+        .run(imageUrl, new Date().toISOString(), id, this.householdId());
+    })();
 
-    this.deletePreviousStoredImage(existing.image_url);
+    if (
+      existing.image_url &&
+      existing.image_url !== imageUrl &&
+      imageCount === 0
+    ) {
+      this.replaceRecipeImages(id, [existing.image_url, imageUrl]);
+    }
 
     return this.findOne(id);
   }
@@ -640,7 +670,40 @@ export class RecipesService {
     }
   }
 
+  private replaceRecipeImages(id: string, imagePaths: string[]) {
+    const normalized = imagePaths
+      .map((path) => path.trim())
+      .filter((path) => path.length > 0)
+      .filter((path, index, values) => values.indexOf(path) === index)
+      .slice(0, 5);
+
+    this.database.db
+      .prepare("DELETE FROM recipe_images WHERE recipe_id = ?")
+      .run(id);
+
+    const insert = this.database.db.prepare(
+      `
+      INSERT INTO recipe_images (id, recipe_id, url, sort_order)
+      VALUES (?, ?, ?, ?)
+      `,
+    );
+    normalized.forEach((path, index) => {
+      insert.run(randomUUID(), id, path, index);
+    });
+
+    this.database.db
+      .prepare(
+        `
+        UPDATE recipes
+        SET image_url = ?
+        WHERE id = ?
+        `,
+      )
+      .run(normalized[0] ?? null, id);
+  }
+
   private toApiRecipe(row: RecipeRow) {
+    const imagePaths = this.recipeImagesFor(row.id);
     return {
       id: row.id,
       title: row.title,
@@ -650,7 +713,12 @@ export class RecipesService {
       prepTimeMinutes: row.prep_minutes,
       cookTimeMinutes: row.cook_minutes,
       isFavorite: row.is_favorite === 1,
-      imagePaths: row.image_url ? [row.image_url] : [],
+      imagePaths:
+        imagePaths.length > 0
+          ? imagePaths
+          : row.image_url
+            ? [row.image_url]
+            : [],
       ingredients: this.ingredientsFor(row.id),
       instructions: this.instructionsFor(row.id),
       tags: this.tagsFor(row.id),
@@ -660,6 +728,29 @@ export class RecipesService {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
+  }
+
+  private recipeImagesFor(recipeId: string) {
+    const rows = this.database.db
+      .prepare(
+        `
+        SELECT url, sort_order
+        FROM recipe_images
+        WHERE recipe_id = ?
+        ORDER BY sort_order ASC
+        `,
+      )
+      .all(recipeId) as ImageRow[];
+
+    return rows.map((row) => row.url);
+  }
+
+  private storedImageUrlsForRow(row: RecipeRow) {
+    return [row.image_url, ...this.recipeImagesFor(row.id)].filter(
+      (url, index, values): url is string => {
+        return url != null && values.indexOf(url) === index;
+      },
+    );
   }
 
   private ingredientsFor(recipeId: string) {
