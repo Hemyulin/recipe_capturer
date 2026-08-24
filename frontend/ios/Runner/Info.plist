@@ -45,6 +45,10 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>CookBuk uses the camera to import recipes from photos.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>CookBuk uses selected photos to import recipes.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

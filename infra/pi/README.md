@@ -28,6 +28,7 @@ cp .env.example .env
 ```
 
 Set a real `COOKBUK_SHARED_TOKEN` in `infra/pi/.env`.
+Set `OPENAI_API_KEY` too if you want AI recipe import from photos.
 
 6. Build and start the backend:
 

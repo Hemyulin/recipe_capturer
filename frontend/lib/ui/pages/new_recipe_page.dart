@@ -14,12 +14,14 @@ class NewRecipePage extends StatefulWidget {
     required this.repo,
     this.mealPlanRepo,
     this.initialRecipe,
+    this.saveAsNew = false,
   });
 
   final String title;
   final RecipeRepository repo;
   final MealPlanRepository? mealPlanRepo;
   final Recipe? initialRecipe;
+  final bool saveAsNew;
 
   @override
   State<NewRecipePage> createState() => _NewRecipePageState();
@@ -249,10 +251,12 @@ class _NewRecipePageState extends State<NewRecipePage> {
       final shouldUploadImage =
           imageRepository != null && _isLocalUploadCandidate(selectedMainImage);
       final recipeImagePaths = shouldUploadImage
-          ? initialRecipe?.imagePaths ?? const <String>[]
+          ? widget.saveAsNew
+                ? const <String>[]
+                : initialRecipe?.imagePaths ?? const <String>[]
           : _imagePaths;
 
-      if (initialRecipe == null) {
+      if (initialRecipe == null || widget.saveAsNew) {
         final recipe = Recipe.create(
           _titleController.text,
           ingredients: _collectIngredients(),

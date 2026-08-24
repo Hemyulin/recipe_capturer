@@ -73,11 +73,16 @@ final router = GoRouter(
     ),
     GoRoute(
       path: '/new',
-      builder: (context, state) => NewRecipePage(
-        title: 'Neues Rezept',
-        repo: repo,
-        mealPlanRepo: mealPlanRepo,
-      ),
+      builder: (context, state) {
+        final draft = state.extra is Recipe ? state.extra as Recipe : null;
+        return NewRecipePage(
+          title: draft == null ? 'Neues Rezept' : 'Rezeptentwurf',
+          repo: repo,
+          mealPlanRepo: mealPlanRepo,
+          initialRecipe: draft,
+          saveAsNew: draft != null,
+        );
+      },
     ),
     GoRoute(
       path: '/edit',

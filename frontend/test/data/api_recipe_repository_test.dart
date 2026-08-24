@@ -44,6 +44,24 @@ void main() {
             _recipeJson(imagePaths: const ['/images/oatmeal-buns.jpg']),
           ),
         );
+      } else if (request.method == 'POST' &&
+          request.uri.path == '/recipes/imports/photo') {
+        request.response.write(
+          jsonEncode({
+            'title': 'Foto Pasta',
+            'notes': 'Aus Foto erkannt.',
+            'servings': 2,
+            'season': '',
+            'prepTimeMinutes': 10,
+            'cookTimeMinutes': 20,
+            'ingredients': [
+              {'name': 'Pasta', 'quantity': '200', 'unit': 'g'},
+            ],
+            'instructions': ['Kochen.', 'Servieren.'],
+            'tags': ['dinner', 'quick'],
+            'confidenceNotes': ['Menge war schwer lesbar.'],
+          }),
+        );
       } else {
         request.response.write(jsonEncode({'ok': true}));
       }
@@ -170,6 +188,25 @@ void main() {
       recipe.mainImagePath,
       'http://${server.address.host}:${server.port}/images/oatmeal-buns.jpg',
     );
+
+    await file.delete();
+  });
+
+  test('imports recipe drafts from photos', () async {
+    final file = await File(
+      '${Directory.systemTemp.path}/cookbuk_api_import_test.jpg',
+    ).writeAsString('fake image');
+
+    final draft = await repository.importFromImage(imagePath: file.path);
+
+    expect(requests.single.method, 'POST');
+    expect(requests.single.path, '/recipes/imports/photo');
+    expect(requests.single.body, contains('form-data'));
+    expect(draft.title, 'Foto Pasta');
+    expect(draft.ingredients.single.name, 'Pasta');
+    expect(draft.instructions, ['Kochen.', 'Servieren.']);
+    expect(draft.tags, contains('quick'));
+    expect(draft.mainImagePath, file.path);
 
     await file.delete();
   });

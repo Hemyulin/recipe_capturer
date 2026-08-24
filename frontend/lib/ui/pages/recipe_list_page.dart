@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:cookbuk/data/meal_plan_repository.dart';
 import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
@@ -28,6 +29,7 @@ class _RecipeListPageState extends State<RecipeListPage> {
   final TextEditingController _searchController = TextEditingController();
   bool _favoritesOnly = false;
   bool _withImagesOnly = false;
+  bool _isImporting = false;
   bool _isLoading = true;
   String? _loadError;
 
@@ -63,6 +65,59 @@ class _RecipeListPageState extends State<RecipeListPage> {
         _loadError = 'Backend nicht erreichbar.';
       });
     }
+  }
+
+  Future<void> _importRecipeFromPhoto() async {
+    final importRepo = widget.repo is RecipeAiImportRepository
+        ? widget.repo as RecipeAiImportRepository
+        : null;
+    if (importRepo == null || _isImporting) return;
+
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Foto aufnehmen'),
+              onTap: () => context.pop(ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Bild auswählen'),
+              onTap: () => context.pop(ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null || !mounted) return;
+
+    final image = await ImagePicker().pickImage(source: source);
+    if (image == null || !mounted) return;
+
+    setState(() => _isImporting = true);
+    try {
+      final draft = await importRepo.importFromImage(imagePath: image.path);
+      if (!mounted) return;
+      final saved = await context.push<bool>('/new', extra: draft);
+      if (saved == true) await _refresh();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_importErrorMessage(error))));
+    } finally {
+      if (mounted) setState(() => _isImporting = false);
+    }
+  }
+
+  String _importErrorMessage(Object error) {
+    if (error is RecipeSaveException) return error.userMessage;
+    return 'Rezept konnte nicht aus dem Bild erstellt werden.';
   }
 
   List<Recipe> _filteredRecipes() {
@@ -147,6 +202,17 @@ class _RecipeListPageState extends State<RecipeListPage> {
         actions: [
           if (widget.mealPlanRepo != null)
             BackendConnectionIcon(mealPlanRepo: widget.mealPlanRepo!),
+          IconButton(
+            onPressed: _isImporting ? null : _importRecipeFromPhoto,
+            tooltip: 'Aus Foto importieren',
+            icon: _isImporting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.document_scanner_outlined),
+          ),
           IconButton(
             onPressed: () async {
               final saved = await context.push<bool>('/new');
