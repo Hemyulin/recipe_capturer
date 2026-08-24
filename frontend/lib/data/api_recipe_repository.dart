@@ -149,7 +149,7 @@ class ApiRecipeRepository
           .toList(),
       'instructions': recipe.instructions,
       'tags': recipe.tags,
-      'imagePaths': recipe.imagePaths,
+      'imagePaths': recipe.imagePaths.map(_imagePathForPayload).toList(),
     };
   }
 
@@ -203,6 +203,21 @@ class ApiRecipeRepository
     }
 
     return value;
+  }
+
+  String _imagePathForPayload(String value) {
+    final trimmed = value.trim();
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null || !uri.hasScheme) return trimmed;
+    if (uri.host != _activeBaseUri.host ||
+        uri.scheme != _activeBaseUri.scheme) {
+      return trimmed;
+    }
+    if (_activeBaseUri.hasPort && uri.port != _activeBaseUri.port) {
+      return trimmed;
+    }
+    if (!uri.path.startsWith('/images/')) return trimmed;
+    return uri.path;
   }
 
   Future<String> _send(
