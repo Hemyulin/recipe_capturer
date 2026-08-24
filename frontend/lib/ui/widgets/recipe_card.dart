@@ -35,7 +35,7 @@ class RecipeCard extends StatelessWidget {
               child: RecipeImage(path: imagePath, placeholderSeed: recipe.id),
             ),
             Padding(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -65,7 +65,7 @@ class RecipeCard extends StatelessWidget {
                         ),
                     ],
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
@@ -87,7 +87,7 @@ class RecipeCard extends StatelessWidget {
                     ],
                   ),
                   if (recipe.tags.isNotEmpty) ...[
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
                     Text(
                       recipe.tags.take(3).map(tagLabelDe).join(' · '),
                       maxLines: 1,

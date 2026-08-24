@@ -34,6 +34,7 @@ type IngredientRow = {
   amount: number | null;
   unit: string | null;
   note: string | null;
+  usage_note: string | null;
   exclude_from_shopping: number;
   sort_order: number;
 };
@@ -213,11 +214,18 @@ export class RecipesService {
   }
 
   async importFromPhoto(image: UploadedRecipeImage) {
-    if (!image.buffer || image.buffer.length === 0) {
-      throw new BadRequestException("Image file is empty");
+    return this.importFromPhotos([image]);
+  }
+
+  async importFromPhotos(images: UploadedRecipeImage[]) {
+    if (images.length === 0) {
+      throw new BadRequestException("Image file is required");
     }
-    if (!this.isSupportedImage(image)) {
-      throw new BadRequestException("Only image uploads are supported");
+    if (images.length > 5) {
+      throw new BadRequestException("A maximum of 5 images is supported");
+    }
+    for (const image of images) {
+      this.validateRecipeImage(image);
     }
 
     const apiKey = this.config.get<string>("OPENAI_API_KEY")?.trim();
@@ -230,12 +238,15 @@ export class RecipesService {
     const model =
       this.config.get<string>("COOKBUK_OPENAI_RECIPE_MODEL")?.trim() ||
       "gpt-5-mini";
-    const imageUrl = `data:${this.imageMimeType(image)};base64,${image.buffer.toString("base64")}`;
+    const imageUrls = images.map(
+      (image) =>
+        `data:${this.imageMimeType(image)};base64,${image.buffer.toString("base64")}`,
+    );
 
     const response = await this.createOpenAiRecipeDraft(
       model,
       apiKey,
-      imageUrl,
+      imageUrls,
     );
 
     if (!response.ok) {
@@ -258,6 +269,15 @@ export class RecipesService {
       throw new ServiceUnavailableException(
         "AI recipe import returned invalid recipe data.",
       );
+    }
+  }
+
+  private validateRecipeImage(image: UploadedRecipeImage) {
+    if (!image.buffer || image.buffer.length === 0) {
+      throw new BadRequestException("Image file is empty");
+    }
+    if (!this.isSupportedImage(image)) {
+      throw new BadRequestException("Only image uploads are supported");
     }
   }
 
@@ -302,7 +322,7 @@ export class RecipesService {
   private async createOpenAiRecipeDraft(
     model: string,
     apiKey: string,
-    imageUrl: string,
+    imageUrls: string[],
   ) {
     try {
       return await fetch("https://api.openai.com/v1/responses", {
@@ -317,16 +337,20 @@ export class RecipesService {
             {
               role: "developer",
               content:
-                "You extract editable household recipes from photos. Return only fields that are visible or strongly implied. Prefer German recipe text when the photo is German. Never invent precise quantities if they are unreadable; leave quantity or unit empty instead. Keep notes short and practical; do not copy long cookbook introductions. Keep water in the ingredients if the recipe uses it, but set excludeFromShopping=true for water, boiling water, tap water, ice, and other household basics that do not belong on a grocery list. Prefer tags from this household set: breakfast, lunch, dinner, main, side, dip, sauce, bread, dessert, snack, vegetarian, vegan, meat, fish, one_pot, quick, rice, pasta, soup, salad, baking.",
+                "You extract editable household recipes from photos. Return only fields that are visible or strongly implied. Prefer German recipe text when the photo is German. Never invent precise quantities if they are unreadable; leave quantity or unit empty instead. Keep notes short and practical; do not copy long cookbook introductions. Put ingredient preparation in the name when it identifies the ingredient, for example 'garlic cloves, crushed'. Put optional usage notes, garnish notes, alternatives, or parentheticals such as 'plus extra to finish' in ingredient.note, not in ingredient.name. Keep water in the ingredients if the recipe uses it, but set excludeFromShopping=true for water, boiling water, tap water, ice, and other household basics that do not belong on a grocery list. Prefer tags from this household set: breakfast, lunch, dinner, main, side, dip, sauce, bread, dessert, snack, vegetarian, vegan, meat, fish, one_pot, quick, rice, pasta, soup, salad, baking.",
             },
             {
               role: "user",
               content: [
                 {
                   type: "input_text",
-                  text: "Create a CookBuk recipe draft from this image. Include confidenceNotes for uncertain parts.",
+                  text: "Create one CookBuk recipe draft from these image(s). If there are multiple images, treat them as pages of the same recipe in order. Include confidenceNotes for uncertain parts.",
                 },
-                { type: "input_image", image_url: imageUrl, detail: "high" },
+                ...imageUrls.map((imageUrl) => ({
+                  type: "input_image",
+                  image_url: imageUrl,
+                  detail: "high",
+                })),
               ],
             },
           ],
@@ -366,12 +390,14 @@ export class RecipesService {
                         "name",
                         "quantity",
                         "unit",
+                        "note",
                         "excludeFromShopping",
                       ],
                       properties: {
                         name: { type: "string" },
                         quantity: { type: "string" },
                         unit: { type: "string" },
+                        note: { type: "string" },
                         excludeFromShopping: { type: "boolean" },
                       },
                     },
@@ -453,8 +479,8 @@ export class RecipesService {
         .run(id);
       const insert = this.database.db.prepare(
         `
-        INSERT INTO recipe_ingredients (id, recipe_id, name, amount, unit, note, exclude_from_shopping, sort_order)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO recipe_ingredients (id, recipe_id, name, amount, unit, note, usage_note, exclude_from_shopping, sort_order)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
       );
       input.ingredients.forEach((ingredient, index) => {
@@ -467,6 +493,7 @@ export class RecipesService {
           amount,
           ingredient.unit?.trim() || null,
           this.rawQuantityNote(quantity, amount),
+          ingredient.note?.trim() || null,
           ingredient.excludeFromShopping || this.isHouseholdBasic(ingredient)
             ? 1
             : 0,
@@ -530,7 +557,7 @@ export class RecipesService {
     const rows = this.database.db
       .prepare(
         `
-        SELECT name, amount, unit, note, exclude_from_shopping, sort_order
+        SELECT name, amount, unit, note, usage_note, exclude_from_shopping, sort_order
         FROM recipe_ingredients
         WHERE recipe_id = ?
         ORDER BY sort_order ASC
@@ -542,6 +569,7 @@ export class RecipesService {
       name: row.name,
       quantity: row.note ?? (row.amount == null ? "" : String(row.amount)),
       unit: row.unit ?? "",
+      note: row.usage_note ?? "",
       excludeFromShopping: row.exclude_from_shopping === 1,
     }));
   }
@@ -601,8 +629,7 @@ export class RecipesService {
   }
 
   private rawQuantityNote(quantity: string, amount: number | null) {
-    if (!quantity) return null;
-    if (amount == null) return quantity;
+    if (!quantity || amount == null) return quantity || null;
     return quantity.replace(",", ".") === String(amount) ? null : quantity;
   }
 
@@ -715,13 +742,19 @@ export class RecipesService {
     const draft = value as ImportedRecipeDraft;
     const title = this.cleanText(draft.title) || "Unbenanntes Rezept";
     const ingredients = (draft.ingredients ?? [])
-      .map((ingredient) => ({
-        name: this.cleanText(ingredient.name),
-        quantity: this.cleanText(ingredient.quantity),
-        unit: this.cleanText(ingredient.unit),
-        excludeFromShopping:
-          ingredient.excludeFromShopping || this.isHouseholdBasic(ingredient),
-      }))
+      .map((ingredient) => {
+        const splitName = this.splitIngredientUsageNote(
+          this.cleanText(ingredient.name),
+        );
+        return {
+          name: splitName.name,
+          quantity: this.cleanText(ingredient.quantity),
+          unit: this.cleanText(ingredient.unit),
+          note: this.cleanText(ingredient.note) || splitName.note,
+          excludeFromShopping:
+            ingredient.excludeFromShopping || this.isHouseholdBasic(ingredient),
+        };
+      })
       .filter((ingredient) => ingredient.name.length > 0)
       .slice(0, 40);
     const instructions = (draft.instructions ?? [])
@@ -754,6 +787,18 @@ export class RecipesService {
 
   private cleanText(value: unknown) {
     return typeof value === "string" ? value.trim() : "";
+  }
+
+  private splitIngredientUsageNote(name: string) {
+    const match = name.match(/^(.*?)\s*\(([^)]*)\)\s*$/);
+    if (!match) return { name, note: "" };
+
+    const note = match[2].trim();
+    if (!/\b(extra|finish|serve|serving|garnish|optional|plus)\b/i.test(note)) {
+      return { name, note: "" };
+    }
+
+    return { name: match[1].trim(), note };
   }
 
   private cleanTag(value: unknown) {

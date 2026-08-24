@@ -24,6 +24,10 @@ export class RecipeIngredientDto {
   unit?: string;
 
   @IsOptional()
+  @IsString()
+  note?: string;
+
+  @IsOptional()
   @IsBoolean()
   excludeFromShopping?: boolean;
 }

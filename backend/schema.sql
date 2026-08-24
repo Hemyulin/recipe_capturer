@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS recipe_ingredients (
   amount REAL,
   unit TEXT,
   note TEXT,
+  usage_note TEXT,
   exclude_from_shopping INTEGER NOT NULL DEFAULT 0,
   sort_order INTEGER NOT NULL
 );

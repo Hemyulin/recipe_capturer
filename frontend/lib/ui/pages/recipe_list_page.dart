@@ -73,7 +73,7 @@ class _RecipeListPageState extends State<RecipeListPage> {
         : null;
     if (importRepo == null || _isImporting) return;
 
-    final source = await showModalBottomSheet<ImageSource>(
+    final source = await showModalBottomSheet<_RecipeImportSource>(
       context: context,
       showDragHandle: true,
       builder: (context) => SafeArea(
@@ -83,12 +83,12 @@ class _RecipeListPageState extends State<RecipeListPage> {
             ListTile(
               leading: const Icon(Icons.photo_camera_outlined),
               title: const Text('Foto aufnehmen'),
-              onTap: () => context.pop(ImageSource.camera),
+              onTap: () => context.pop(_RecipeImportSource.camera),
             ),
             ListTile(
               leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Bild auswählen'),
-              onTap: () => context.pop(ImageSource.gallery),
+              title: const Text('Bilder auswählen'),
+              onTap: () => context.pop(_RecipeImportSource.gallery),
             ),
           ],
         ),
@@ -96,15 +96,12 @@ class _RecipeListPageState extends State<RecipeListPage> {
     );
     if (source == null || !mounted) return;
 
-    final image = await ImagePicker().pickImage(
-      source: source,
-      preferredCameraDevice: CameraDevice.front,
-    );
-    if (image == null || !mounted) return;
+    final imagePaths = await _pickImportImages(source);
+    if (imagePaths.isEmpty || !mounted) return;
 
     setState(() => _isImporting = true);
     try {
-      final draft = await importRepo.importFromImage(imagePath: image.path);
+      final draft = await importRepo.importFromImages(imagePaths: imagePaths);
       if (!mounted) return;
       final saved = await context.push<bool>('/new', extra: draft);
       if (saved == true) await _refresh();
@@ -121,6 +118,48 @@ class _RecipeListPageState extends State<RecipeListPage> {
   String _importErrorMessage(Object error) {
     if (error is RecipeSaveException) return error.userMessage;
     return 'Rezept konnte nicht aus dem Bild erstellt werden.';
+  }
+
+  Future<List<String>> _pickImportImages(_RecipeImportSource source) async {
+    final picker = ImagePicker();
+    if (source == _RecipeImportSource.gallery) {
+      final images = await picker.pickMultiImage(limit: _maxImportImages);
+      return images.map((image) => image.path).take(_maxImportImages).toList();
+    }
+
+    final imagePaths = <String>[];
+    while (imagePaths.length < _maxImportImages) {
+      final image = await picker.pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.rear,
+      );
+      if (image == null) break;
+      imagePaths.add(image.path);
+      if (imagePaths.length >= _maxImportImages || !mounted) break;
+
+      final takeAnother = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Weitere Seite?'),
+          content: Text(
+            '${imagePaths.length}/$_maxImportImages Bilder gewählt',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => context.pop(false),
+              child: const Text('Fertig'),
+            ),
+            FilledButton(
+              onPressed: () => context.pop(true),
+              child: const Text('Weiteres Foto'),
+            ),
+          ],
+        ),
+      );
+      if (takeAnother != true) break;
+    }
+
+    return imagePaths;
   }
 
   List<Recipe> _filteredRecipes() {
@@ -179,7 +218,7 @@ class _RecipeListPageState extends State<RecipeListPage> {
                   crossAxisSpacing: 14,
                   mainAxisSpacing: 14,
                   childAspectRatio: columns == 1
-                      ? 1
+                      ? 0.9
                       : columns == 2
                       ? 1.02
                       : 0.82,
@@ -310,6 +349,10 @@ class _RecipeListPageState extends State<RecipeListPage> {
     );
   }
 }
+
+enum _RecipeImportSource { camera, gallery }
+
+const _maxImportImages = 5;
 
 bool _needsReview(Recipe recipe) {
   final hasIngredients = recipe.ingredients.isNotEmpty;
