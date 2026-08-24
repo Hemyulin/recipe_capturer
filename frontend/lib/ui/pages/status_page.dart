@@ -135,6 +135,8 @@ class _ConnectionSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final isConnected = result?.isConnected == true;
+    final isDisconnected = result?.isConnected == false;
+    final warningColor = colorScheme.secondary;
     final title = result == null
         ? _statusTitle(status.phase)
         : isConnected
@@ -145,7 +147,10 @@ class _ConnectionSummary extends StatelessWidget {
         ? Icons.sync_rounded
         : isConnected
         ? Icons.cloud_done_outlined
+        : isDisconnected
+        ? Icons.cancel_outlined
         : _statusIcon(status.phase);
+    final iconColor = isDisconnected ? warningColor : colorScheme.primary;
 
     return Card(
       child: Padding(
@@ -155,7 +160,11 @@ class _ConnectionSummary extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(icon, color: colorScheme.primary),
+                _StatusIcon(
+                  icon: icon,
+                  color: iconColor,
+                  isSpinning: isTesting,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -175,6 +184,12 @@ class _ConnectionSummary extends StatelessWidget {
             const SizedBox(height: 14),
             FilledButton.icon(
               onPressed: isTesting ? null : onTest,
+              style: isDisconnected
+                  ? FilledButton.styleFrom(
+                      backgroundColor: warningColor,
+                      foregroundColor: colorScheme.onSecondary,
+                    )
+                  : null,
               icon: Icon(
                 isTesting ? Icons.sync_rounded : Icons.network_check_rounded,
               ),
@@ -215,6 +230,61 @@ class _ConnectionSummary extends StatelessWidget {
       MealPlanSyncPhase.blocked => Icons.error_outline_rounded,
       MealPlanSyncPhase.idle => Icons.check_circle_outline_rounded,
     };
+  }
+}
+
+class _StatusIcon extends StatefulWidget {
+  const _StatusIcon({
+    required this.icon,
+    required this.color,
+    required this.isSpinning,
+  });
+
+  final IconData icon;
+  final Color color;
+  final bool isSpinning;
+
+  @override
+  State<_StatusIcon> createState() => _StatusIconState();
+}
+
+class _StatusIconState extends State<_StatusIcon>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    if (widget.isSpinning) _controller.repeat();
+  }
+
+  @override
+  void didUpdateWidget(_StatusIcon oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isSpinning && !_controller.isAnimating) {
+      _controller.repeat();
+    } else if (!widget.isSpinning && _controller.isAnimating) {
+      _controller.stop();
+      _controller.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = Icon(widget.icon, color: widget.color);
+    if (!widget.isSpinning) return icon;
+
+    return RotationTransition(turns: _controller, child: icon);
   }
 }
 

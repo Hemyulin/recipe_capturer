@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:cookbuk/data/in_memory_meal_plan_repository.dart';
 import 'package:cookbuk/data/in_memory_recipe_repository.dart';
+import 'package:cookbuk/data/meal_plan_repository.dart';
+import 'package:cookbuk/domain/meal_plan_slot.dart';
 import 'package:cookbuk/domain/recipe.dart';
 import 'package:cookbuk/ui/pages/new_recipe_page.dart';
 import 'package:cookbuk/ui/pages/shopping_page.dart';
@@ -422,6 +426,112 @@ void main() {
     expect(find.text('Status'), findsOneWidget);
     expect(find.text('Lokaler Modus'), findsOneWidget);
   });
+
+  testWidgets('status page spins while testing and shows warning on failure', (
+    WidgetTester tester,
+  ) async {
+    final repo = _FakeDiagnosticMealPlanRepository();
+
+    await tester.pumpWidget(MaterialApp(home: StatusPage(mealPlanRepo: repo)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Verbindung testen'));
+    await tester.pump();
+
+    expect(find.byIcon(Icons.sync_rounded), findsWidgets);
+
+    repo.completeConnectionTest(
+      BackendConnectionTestResult(
+        isConnected: false,
+        checkedAt: DateTime(2026, 8, 24),
+        activeBaseUrl: 'http://192.168.178.54:3000',
+        message: 'Pi nicht erreichbar.',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nicht verbunden'), findsOneWidget);
+    expect(find.text('Pi nicht erreichbar.'), findsOneWidget);
+    expect(find.byIcon(Icons.cancel_outlined), findsOneWidget);
+  });
+}
+
+class _FakeDiagnosticMealPlanRepository
+    implements MealPlanRepository, MealPlanConnectionDiagnostics {
+  final StreamController<MealPlanSyncStatus> _statusController =
+      StreamController<MealPlanSyncStatus>.broadcast();
+  Completer<BackendConnectionTestResult>? _connectionTest;
+
+  void completeConnectionTest(BackendConnectionTestResult result) {
+    _connectionTest?.complete(result);
+  }
+
+  @override
+  String get activeBaseUrl => 'http://192.168.178.54:3000';
+
+  @override
+  List<String> get configuredBaseUrls => const [
+    'http://192.168.178.54:3000',
+    'http://100.125.110.4:3000',
+  ];
+
+  @override
+  DateTime? get lastSuccessfulConnectionAt => null;
+
+  @override
+  int get pendingWriteCount => 0;
+
+  @override
+  MealPlanSyncStatus get syncStatus => MealPlanSyncStatus.idle;
+
+  @override
+  Stream<MealPlanSyncStatus> get syncStatusChanges => _statusController.stream;
+
+  @override
+  Future<BackendConnectionTestResult> testConnection() {
+    _connectionTest = Completer<BackendConnectionTestResult>();
+    return _connectionTest!.future;
+  }
+
+  @override
+  Future<CloseDayResult> closeDay(DateTime date) async {
+    return CloseDayResult(plannedFor: date, recordedCount: 0, skippedCount: 0);
+  }
+
+  @override
+  Future<List<MealPlanSlot>> getRange({
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    return const [];
+  }
+
+  @override
+  Future<void> setEmpty({required DateTime date, required String meal}) async {}
+
+  @override
+  Future<void> setExtras({
+    required DateTime date,
+    required String meal,
+    required List<String> extras,
+    List<String> recipeExtraIds = const [],
+  }) async {}
+
+  @override
+  Future<void> setLeftovers({
+    required DateTime date,
+    required String meal,
+  }) async {}
+
+  @override
+  Future<void> setRecipe({
+    required DateTime date,
+    required String meal,
+    required String recipeId,
+  }) async {}
+
+  @override
+  Future<void> syncPendingChanges() async {}
 }
 
 final testRecipes = [
