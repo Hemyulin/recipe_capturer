@@ -78,6 +78,13 @@ void main() {
     }
 
     final mealPlanRepo = InMemoryMealPlanRepository();
+    final today = DateTime.now();
+    final selectedDate = DateTime(today.year, today.month, today.day);
+    await mealPlanRepo.setRecipe(
+      date: selectedDate,
+      meal: 'breakfast',
+      recipeId: testRecipes.first.id,
+    );
 
     await tester.pumpWidget(
       MaterialApp(
@@ -91,12 +98,31 @@ void main() {
     await tester.tap(find.byIcon(Icons.delete_outline).first);
     await tester.pumpAndSettle();
 
-    expect(find.text('Nichts geplant'), findsOneWidget);
+    expect(find.text('Nichts geplant'), findsNWidgets(3));
     final slots = await mealPlanRepo.getRange(
       from: DateTime.now(),
       to: DateTime.now(),
     );
     expect(slots.singleWhere((slot) => slot.meal == 'breakfast').isEmpty, true);
+  });
+
+  testWidgets('does not auto-fill Today meals from recipe tags', (
+    WidgetTester tester,
+  ) async {
+    final repo = InMemoryRecipeRepository();
+    for (final recipe in testRecipes) {
+      await repo.add(recipe);
+    }
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TodayPage(repo: repo, mealPlanRepo: InMemoryMealPlanRepository()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nichts geplant'), findsNWidgets(3));
+    expect(find.text(testRecipes.first.title), findsNothing);
   });
 
   testWidgets('sets leftovers for a Today meal', (WidgetTester tester) async {
@@ -141,7 +167,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.drag(find.text('Mittagessen'), const Offset(180, 0));
+    await tester.tap(find.text('Nichts geplant').at(1));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Oatmeal mit Banane und Blaubeeren').last);
     await tester.pumpAndSettle();
@@ -245,7 +271,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.drag(find.text('Mittagessen'), const Offset(180, 0));
+    await tester.tap(find.text('Nichts geplant').at(1));
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextField), 'oatmeal');
