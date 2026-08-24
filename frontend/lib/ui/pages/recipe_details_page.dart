@@ -47,6 +47,35 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
     await widget.repo.update(next);
   }
 
+  Future<Recipe?> _setMainImage(int index) async {
+    if (index <= 0 || index >= recipe.imagePaths.length) return recipe;
+
+    final reorderedImages = [
+      recipe.imagePaths[index],
+      for (var i = 0; i < recipe.imagePaths.length; i++)
+        if (i != index) recipe.imagePaths[i],
+    ];
+    final previous = recipe;
+    final next = recipe.copyWith(imagePaths: reorderedImages);
+
+    setState(() => recipe = next);
+    try {
+      final updated = await widget.repo.update(next);
+      if (!mounted) return updated;
+      setState(() => recipe = updated);
+      return updated;
+    } catch (_) {
+      if (!mounted) return null;
+      setState(() => recipe = previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Hauptbild konnte nicht geändert werden.'),
+        ),
+      );
+      return null;
+    }
+  }
+
   Future<void> _editRecipe() async {
     final saved = await context.push<bool>('/edit', extra: recipe);
     if (!mounted) return;
@@ -170,7 +199,7 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
 
   Future<void> _openImageViewer({required int initialIndex}) async {
     if (recipe.imagePaths.isEmpty) return;
-    await Navigator.of(context).push<void>(
+    final updatedRecipe = await Navigator.of(context).push<Recipe>(
       MaterialPageRoute(
         fullscreenDialog: true,
         builder: (_) => _RecipeImageViewer(
@@ -178,9 +207,12 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
           imagePaths: recipe.imagePaths,
           initialIndex: initialIndex,
           placeholderSeed: recipe.id,
+          onSetMainImage: _setMainImage,
         ),
       ),
     );
+    if (!mounted || updatedRecipe == null) return;
+    setState(() => recipe = updatedRecipe);
   }
 
   Widget _buildSection({required String title, required Widget child}) {
@@ -466,12 +498,14 @@ class _RecipeImageViewer extends StatefulWidget {
     required this.imagePaths,
     required this.initialIndex,
     required this.placeholderSeed,
+    required this.onSetMainImage,
   });
 
   final String title;
   final List<String> imagePaths;
   final int initialIndex;
   final String placeholderSeed;
+  final Future<Recipe?> Function(int index) onSetMainImage;
 
   @override
   State<_RecipeImageViewer> createState() => _RecipeImageViewerState();
@@ -480,6 +514,7 @@ class _RecipeImageViewer extends StatefulWidget {
 class _RecipeImageViewerState extends State<_RecipeImageViewer> {
   late final PageController _pageController;
   late int _index;
+  bool _isSavingMainImage = false;
 
   @override
   void initState() {
@@ -496,12 +531,32 @@ class _RecipeImageViewerState extends State<_RecipeImageViewer> {
 
   @override
   Widget build(BuildContext context) {
+    final canSetMain =
+        widget.imagePaths.length > 1 && _index != 0 && !_isSavingMainImage;
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
+        actions: [
+          if (widget.imagePaths.length > 1)
+            TextButton.icon(
+              onPressed: canSetMain ? _setCurrentAsMain : null,
+              icon: _isSavingMainImage
+                  ? const SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.star_outline_rounded),
+              label: const Text('Hauptbild'),
+              style: TextButton.styleFrom(foregroundColor: Colors.white),
+            ),
+        ],
       ),
       body: Stack(
         children: [
@@ -525,33 +580,78 @@ class _RecipeImageViewerState extends State<_RecipeImageViewer> {
             Positioned(
               left: 0,
               right: 0,
-              bottom: 20,
+              bottom: 18,
               child: SafeArea(
                 top: false,
-                child: Center(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.58),
-                      borderRadius: BorderRadius.circular(999),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _ImageViewerDots(
+                      count: widget.imagePaths.length,
+                      activeIndex: _index,
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 7,
+                    const SizedBox(height: 10),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.58),
+                        borderRadius: BorderRadius.circular(999),
                       ),
-                      child: Text(
-                        '${_index + 1}/${widget.imagePaths.length}',
-                        style: Theme.of(
-                          context,
-                        ).textTheme.labelLarge?.copyWith(color: Colors.white),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 7,
+                        ),
+                        child: Text(
+                          '${_index + 1}/${widget.imagePaths.length}',
+                          style: Theme.of(
+                            context,
+                          ).textTheme.labelLarge?.copyWith(color: Colors.white),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
               ),
             ),
         ],
       ),
+    );
+  }
+
+  Future<void> _setCurrentAsMain() async {
+    setState(() => _isSavingMainImage = true);
+    final updatedRecipe = await widget.onSetMainImage(_index);
+    if (!mounted) return;
+    setState(() => _isSavingMainImage = false);
+    if (updatedRecipe == null) return;
+    Navigator.of(context).pop(updatedRecipe);
+  }
+}
+
+class _ImageViewerDots extends StatelessWidget {
+  const _ImageViewerDots({required this.count, required this.activeIndex});
+
+  final int count;
+  final int activeIndex;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 6,
+      children: [
+        for (var index = 0; index < count; index++)
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: index == activeIndex ? 18 : 7,
+            height: 7,
+            decoration: BoxDecoration(
+              color: index == activeIndex
+                  ? Colors.white
+                  : Colors.white.withValues(alpha: 0.44),
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+      ],
     );
   }
 }
