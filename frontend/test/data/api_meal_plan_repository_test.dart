@@ -156,6 +156,31 @@ void main() {
     });
   });
 
+  test('does not fake successful writes when backend is unavailable', () async {
+    final unavailableServer = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      0,
+    );
+    final port = unavailableServer.port;
+    await unavailableServer.close(force: true);
+    repository = ApiMealPlanRepository(baseUrl: 'http://127.0.0.1:$port');
+
+    await expectLater(
+      repository.setRecipe(
+        date: DateTime(2026, 8, 23),
+        meal: 'breakfast',
+        recipeId: 'recipe-1',
+      ),
+      throwsA(isA<Object>()),
+    );
+
+    final slots = await repository.getRange(
+      from: DateTime(2026, 8, 23),
+      to: DateTime(2026, 8, 23),
+    );
+    expect(slots, isEmpty);
+  });
+
   test('closes a planned day', () async {
     final result = await repository.closeDay(DateTime(2026, 8, 23));
 

@@ -45,24 +45,11 @@ class ApiMealPlanRepository implements MealPlanRepository {
     required String meal,
     required String recipeId,
   }) async {
-    try {
-      await _upsert(
-        date: date,
-        meal: meal,
-        body: {'slotType': 'recipe', 'recipeId': recipeId},
-      );
-    } on Object catch (error) {
-      if (!_isOfflineError(error)) rethrow;
-      final existing = _offlineSlots[_slotKey(date, meal)];
-      _writeOfflineSlot(
-        date: date,
-        meal: meal,
-        slotType: 'recipe',
-        recipeId: recipeId,
-        extras: existing?.extras ?? const [],
-        recipeExtraIds: existing?.recipeExtraIds ?? const [],
-      );
-    }
+    await _upsert(
+      date: date,
+      meal: meal,
+      body: {'slotType': 'recipe', 'recipeId': recipeId},
+    );
   }
 
   @override
@@ -70,29 +57,12 @@ class ApiMealPlanRepository implements MealPlanRepository {
     required DateTime date,
     required String meal,
   }) async {
-    try {
-      await _upsert(date: date, meal: meal, body: {'slotType': 'leftovers'});
-    } on Object catch (error) {
-      if (!_isOfflineError(error)) rethrow;
-      final existing = _offlineSlots[_slotKey(date, meal)];
-      _writeOfflineSlot(
-        date: date,
-        meal: meal,
-        slotType: 'leftovers',
-        extras: existing?.extras ?? const [],
-        recipeExtraIds: existing?.recipeExtraIds ?? const [],
-      );
-    }
+    await _upsert(date: date, meal: meal, body: {'slotType': 'leftovers'});
   }
 
   @override
   Future<void> setEmpty({required DateTime date, required String meal}) async {
-    try {
-      await _upsert(date: date, meal: meal, body: {'slotType': 'empty'});
-    } on Object catch (error) {
-      if (!_isOfflineError(error)) rethrow;
-      _writeOfflineSlot(date: date, meal: meal, slotType: 'empty');
-    }
+    await _upsert(date: date, meal: meal, body: {'slotType': 'empty'});
   }
 
   @override
@@ -104,53 +74,22 @@ class ApiMealPlanRepository implements MealPlanRepository {
   }) async {
     final normalized = _normalizeExtras(extras);
     final normalizedRecipeExtraIds = _normalizeRecipeExtraIds(recipeExtraIds);
-    try {
-      await _send(
-        'PUT',
-        '/meal-plan/${_dateKey(date)}/$meal/extras',
-        body: {
-          'extras': normalized,
-          'recipeExtraIds': normalizedRecipeExtraIds,
-        },
-      );
-    } on Object catch (error) {
-      if (!_isOfflineError(error)) rethrow;
-      final existing = _offlineSlots[_slotKey(date, meal)];
-      _writeOfflineSlot(
-        date: date,
-        meal: meal,
-        slotType: existing?.slotType ?? 'empty',
-        recipeId: existing?.recipeId,
-        extras: normalized,
-        recipeExtraIds: normalizedRecipeExtraIds,
-      );
-    }
+    await _send(
+      'PUT',
+      '/meal-plan/${_dateKey(date)}/$meal/extras',
+      body: {'extras': normalized, 'recipeExtraIds': normalizedRecipeExtraIds},
+    );
   }
 
   @override
   Future<CloseDayResult> closeDay(DateTime date) async {
-    try {
-      final response = await _send(
-        'POST',
-        '/meal-plan/close-day/${_dateKey(date)}',
-      );
-      return CloseDayResult.fromJson(
-        jsonDecode(response) as Map<String, dynamic>,
-      );
-    } on Object catch (error) {
-      if (!_isOfflineError(error)) rethrow;
-      final recordedCount = _offlineSlots.values
-          .where(
-            (slot) =>
-                _dateKey(slot.plannedFor) == _dateKey(date) && slot.isRecipe,
-          )
-          .length;
-      return CloseDayResult(
-        plannedFor: _dateOnly(date),
-        recordedCount: recordedCount,
-        skippedCount: 0,
-      );
-    }
+    final response = await _send(
+      'POST',
+      '/meal-plan/close-day/${_dateKey(date)}',
+    );
+    return CloseDayResult.fromJson(
+      jsonDecode(response) as Map<String, dynamic>,
+    );
   }
 
   Future<void> _upsert({
@@ -260,26 +199,6 @@ class ApiMealPlanRepository implements MealPlanRepository {
     }).toList();
   }
 
-  void _writeOfflineSlot({
-    required DateTime date,
-    required String meal,
-    required String slotType,
-    String? recipeId,
-    List<String> extras = const [],
-    List<String> recipeExtraIds = const [],
-  }) {
-    _offlineSlots['${_dateKey(date)}:$meal'] = MealPlanSlot(
-      plannedFor: _dateOnly(date),
-      meal: meal,
-      slotType: slotType,
-      recipeId: recipeId,
-      extras: extras,
-      recipeExtraIds: recipeExtraIds,
-    );
-  }
-
-  String _slotKey(DateTime date, String meal) => '${_dateKey(date)}:$meal';
-
   List<String> _normalizeExtras(List<String> values) {
     return values
         .map((value) => value.trim())
@@ -295,10 +214,6 @@ class ApiMealPlanRepository implements MealPlanRepository {
         .toSet()
         .take(8)
         .toList();
-  }
-
-  DateTime _dateOnly(DateTime date) {
-    return DateTime(date.year, date.month, date.day);
   }
 
   bool _isOfflineError(Object error) {
