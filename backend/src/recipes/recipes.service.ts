@@ -239,7 +239,7 @@ export class RecipesService {
 
     if (!response.ok) {
       throw new ServiceUnavailableException(
-        `AI recipe import failed. HTTP ${response.status}.`,
+        await this.openAiErrorMessage(response),
       );
     }
 
@@ -258,6 +258,44 @@ export class RecipesService {
         "AI recipe import returned invalid recipe data.",
       );
     }
+  }
+
+  private async openAiErrorMessage(response: Response) {
+    const fallback = `AI recipe import failed. HTTP ${response.status}.`;
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      return fallback;
+    }
+
+    const error = (payload as { error?: unknown }).error as
+      | {
+          code?: unknown;
+          message?: unknown;
+          type?: unknown;
+        }
+      | undefined;
+    const code = typeof error?.code === "string" ? error.code : "";
+    const type = typeof error?.type === "string" ? error.type : "";
+    const message = typeof error?.message === "string" ? error.message : "";
+
+    if (response.status === 429) {
+      if (code === "insufficient_quota" || type === "insufficient_quota") {
+        return "AI recipe import failed. OpenAI quota is exhausted or billing is not active for this project.";
+      }
+      return "AI recipe import failed. OpenAI rate limit reached. Wait a bit or check the project's usage limits.";
+    }
+
+    if (!code && !type && !message) return fallback;
+    return [
+      fallback,
+      code ? `code=${code}` : "",
+      type ? `type=${type}` : "",
+      message ? `message=${message}` : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
   }
 
   private async createOpenAiRecipeDraft(
