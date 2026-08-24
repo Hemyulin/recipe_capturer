@@ -5,6 +5,7 @@ import 'package:cookbuk/data/api_recipe_repository.dart';
 import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   late HttpServer server;
@@ -16,6 +17,7 @@ void main() {
   final requests = <_RequestLog>[];
 
   setUp(() async {
+    SharedPreferences.setMockInitialValues({});
     requests.clear();
     importStatusCode = 200;
     importErrorPayload = const {
@@ -109,6 +111,28 @@ void main() {
     );
     expect(requests.single.method, 'GET');
     expect(requests.single.path, '/recipes');
+  });
+
+  test('uses cached backend recipes when the backend is unavailable', () async {
+    await repository.getAll();
+    final unavailableServer = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      0,
+    );
+    final unavailablePort = unavailableServer.port;
+    await unavailableServer.close(force: true);
+    repository = ApiRecipeRepository(
+      baseUrl: 'http://127.0.0.1:$unavailablePort',
+    );
+
+    final recipes = await repository.getAll();
+
+    expect(recipes, hasLength(1));
+    expect(recipes.single.title, 'Oatmeal Buns');
+    expect(
+      recipes.single.mainImagePath,
+      'http://${server.address.host}:${server.port}/images/oatmeal-buns.jpg',
+    );
   });
 
   test('sends shared token headers when configured', () async {

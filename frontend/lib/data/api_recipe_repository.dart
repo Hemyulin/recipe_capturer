@@ -5,6 +5,7 @@ import 'package:cookbuk/data/demo_recipe_data.dart';
 import 'package:cookbuk/data/recipe_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiRecipeRepository
     implements
@@ -31,7 +32,7 @@ class ApiRecipeRepository
       final recipes = (decoded as List<dynamic>)
           .map((item) => _recipeFromJson(item as Map<String, dynamic>))
           .toList();
-      _offlineRecipes = recipes;
+      await _replaceCachedRecipes(recipes);
       return recipes;
     } on Object catch (error) {
       if (!_isOfflineError(error)) rethrow;
@@ -47,12 +48,17 @@ class ApiRecipeRepository
       body: _recipePayload(recipe),
       useSaveErrorMessage: true,
     );
-    return _recipeFromJson(jsonDecode(response) as Map<String, dynamic>);
+    final savedRecipe = _recipeFromJson(
+      jsonDecode(response) as Map<String, dynamic>,
+    );
+    await _upsertCachedRecipe(savedRecipe);
+    return savedRecipe;
   }
 
   @override
   Future<void> deleteById(String id) async {
     await _send('DELETE', '/recipes/$id', useSaveErrorMessage: true);
+    await _removeCachedRecipe(id);
   }
 
   @override
@@ -63,7 +69,11 @@ class ApiRecipeRepository
       body: _recipePayload(recipe),
       useSaveErrorMessage: true,
     );
-    return _recipeFromJson(jsonDecode(response) as Map<String, dynamic>);
+    final updatedRecipe = _recipeFromJson(
+      jsonDecode(response) as Map<String, dynamic>,
+    );
+    await _upsertCachedRecipe(updatedRecipe);
+    return updatedRecipe;
   }
 
   @override
@@ -78,7 +88,11 @@ class ApiRecipeRepository
       timeout: _imageUploadTimeout,
       useSaveErrorMessage: true,
     );
-    return _recipeFromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    final updatedRecipe = _recipeFromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+    await _upsertCachedRecipe(updatedRecipe);
+    return updatedRecipe;
   }
 
   @override
@@ -295,8 +309,53 @@ class ApiRecipeRepository
     return {'x-cookbuk-token': _sharedToken};
   }
 
-  List<Recipe> _offlineRecipeList() {
-    return _offlineRecipes ??= DemoRecipeData.recipes();
+  Future<List<Recipe>> _offlineRecipeList() async {
+    return _offlineRecipes ??=
+        await _cachedRecipeList() ?? DemoRecipeData.recipes();
+  }
+
+  Future<void> _replaceCachedRecipes(List<Recipe> recipes) async {
+    _offlineRecipes = recipes;
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(
+      _recipeCacheStorageKey,
+      jsonEncode(recipes.map((recipe) => recipe.toJson()).toList()),
+    );
+  }
+
+  Future<void> _upsertCachedRecipe(Recipe recipe) async {
+    final cachedRecipes = await _cachedRecipeList() ?? <Recipe>[];
+    final index = cachedRecipes.indexWhere((cached) => cached.id == recipe.id);
+    if (index == -1) {
+      cachedRecipes.add(recipe);
+    } else {
+      cachedRecipes[index] = recipe;
+    }
+    await _replaceCachedRecipes(cachedRecipes);
+  }
+
+  Future<void> _removeCachedRecipe(String id) async {
+    final cachedRecipes = await _cachedRecipeList() ?? <Recipe>[];
+    cachedRecipes.removeWhere((recipe) => recipe.id == id);
+    await _replaceCachedRecipes(cachedRecipes);
+  }
+
+  Future<List<Recipe>?> _cachedRecipeList() async {
+    if (_offlineRecipes != null) return _offlineRecipes;
+
+    final preferences = await SharedPreferences.getInstance();
+    final encoded = preferences.getString(_recipeCacheStorageKey);
+    if (encoded == null || encoded.trim().isEmpty) return null;
+
+    try {
+      final decoded = jsonDecode(encoded) as List<dynamic>;
+      return decoded
+          .map((item) => _recipeFromJson(item as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      await preferences.remove(_recipeCacheStorageKey);
+      return null;
+    }
   }
 
   bool _isOfflineError(Object error) {
@@ -376,6 +435,7 @@ class ApiRecipeRepository
   static const _imageUploadTimeout = Duration(seconds: 20);
   static const _aiImportTimeout = Duration(seconds: 120);
   static const _maxImportImages = 5;
+  static const _recipeCacheStorageKey = 'cookbuk.cachedRecipes.v1';
 }
 
 class ApiRecipeRepositoryException extends RecipeSaveException {
