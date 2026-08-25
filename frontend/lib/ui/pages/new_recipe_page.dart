@@ -216,6 +216,7 @@ class _NewRecipePageState extends State<NewRecipePage> {
   final TextEditingController _tagController = TextEditingController();
 
   final List<_IngredientRowData> _ingredients = [];
+  final List<_StepRowData> _preparationTasks = [];
   final List<_StepRowData> _steps = [];
   final Set<String> _selectedTags = {};
 
@@ -249,12 +250,16 @@ class _NewRecipePageState extends State<NewRecipePage> {
           excludeFromShopping: ingredient.excludeFromShopping,
         );
       }
+      for (final task in initialRecipe.preparationTasks) {
+        _addPreparationTaskRow(text: task);
+      }
       for (final step in initialRecipe.instructions) {
         _addStepRow(text: step);
       }
     }
 
     if (_ingredients.isEmpty) _addIngredientRow();
+    if (_preparationTasks.isEmpty) _addPreparationTaskRow();
     if (_steps.isEmpty) _addStepRow();
     if (!_seasonOptions.contains(_seasonController.text.trim())) {
       _seasonController.text = _seasonOptions.first;
@@ -271,6 +276,9 @@ class _NewRecipePageState extends State<NewRecipePage> {
     _notesController.dispose();
     _tagController.dispose();
     for (final row in _ingredients) {
+      row.dispose();
+    }
+    for (final row in _preparationTasks) {
       row.dispose();
     }
     for (final row in _steps) {
@@ -309,6 +317,25 @@ class _NewRecipePageState extends State<NewRecipePage> {
     final row = _ingredients.removeAt(index);
     row.dispose();
     if (_ingredients.isEmpty) _addIngredientRow();
+    setState(() {});
+  }
+
+  void _addPreparationTaskRow({String text = ''}) {
+    _preparationTasks.add(_StepRowData(text: text));
+  }
+
+  void _appendPreparationTaskAndFocus() {
+    setState(_addPreparationTaskRow);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _preparationTasks.last.focusNode.requestFocus();
+    });
+  }
+
+  void _removePreparationTaskRow(int index) {
+    final row = _preparationTasks.removeAt(index);
+    row.dispose();
+    if (_preparationTasks.isEmpty) _addPreparationTaskRow();
     setState(() {});
   }
 
@@ -393,6 +420,13 @@ class _NewRecipePageState extends State<NewRecipePage> {
         .toList();
   }
 
+  List<String> _collectPreparationTasks() {
+    return _preparationTasks
+        .map((row) => row.controller.text.trim())
+        .where((task) => task.isNotEmpty)
+        .toList();
+  }
+
   Recipe _currentDraftRecipe() {
     final title = _titleController.text.trim();
     if (title.isEmpty) {
@@ -402,6 +436,7 @@ class _NewRecipePageState extends State<NewRecipePage> {
       title,
       ingredients: _collectIngredients(),
       instructions: _collectSteps(),
+      preparationTasks: _collectPreparationTasks(),
       tags: _selectedTags.toList(),
       imagePaths: _imagePaths,
       servings: _parsePositiveInt(_servingsController),
@@ -497,10 +532,14 @@ class _NewRecipePageState extends State<NewRecipePage> {
     for (final row in _ingredients) {
       row.dispose();
     }
+    for (final row in _preparationTasks) {
+      row.dispose();
+    }
     for (final row in _steps) {
       row.dispose();
     }
     _ingredients.clear();
+    _preparationTasks.clear();
     _steps.clear();
 
     setState(() {
@@ -525,10 +564,14 @@ class _NewRecipePageState extends State<NewRecipePage> {
           excludeFromShopping: ingredient.excludeFromShopping,
         );
       }
+      for (final task in recipe.preparationTasks) {
+        _addPreparationTaskRow(text: task);
+      }
       for (final step in recipe.instructions) {
         _addStepRow(text: step);
       }
       if (_ingredients.isEmpty) _addIngredientRow();
+      if (_preparationTasks.isEmpty) _addPreparationTaskRow();
       if (_steps.isEmpty) _addStepRow();
     });
   }
@@ -592,6 +635,7 @@ class _NewRecipePageState extends State<NewRecipePage> {
           _titleController.text,
           ingredients: _collectIngredients(),
           instructions: _collectSteps(),
+          preparationTasks: _collectPreparationTasks(),
           tags: _selectedTags.toList(),
           imagePaths: recipeImagePaths,
           servings: servings,
@@ -624,6 +668,7 @@ class _NewRecipePageState extends State<NewRecipePage> {
           title: _titleController.text.trim(),
           ingredients: _collectIngredients(),
           instructions: _collectSteps(),
+          preparationTasks: _collectPreparationTasks(),
           tags: _selectedTags.toList(),
           imagePaths: recipeImagePaths,
           servings: servings,
@@ -1047,6 +1092,61 @@ class _NewRecipePageState extends State<NewRecipePage> {
           ),
           const SizedBox(height: 14),
           _buildSection(
+            title: 'Vorbereitung',
+            child: Column(
+              children: [
+                ...List.generate(_preparationTasks.length, (index) {
+                  final row = _preparationTasks[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(top: 14),
+                          child: Icon(
+                            Icons.hourglass_bottom_rounded,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            controller: row.controller,
+                            focusNode: row.focusNode,
+                            minLines: 1,
+                            maxLines: 3,
+                            decoration: const InputDecoration(
+                              hintText:
+                                  'z.B. Linsen 3 Stunden einweichen lassen',
+                            ),
+                            textInputAction: TextInputAction.next,
+                            onSubmitted: (_) =>
+                                _appendPreparationTaskAndFocus(),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => _removePreparationTaskRow(index),
+                          icon: const Icon(Icons.delete_outline),
+                          tooltip: 'Vorbereitung entfernen',
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    onPressed: _appendPreparationTaskAndFocus,
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Vorbereitung'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          _buildSection(
             title: 'Zubereitung',
             child: Column(
               children: [
@@ -1169,6 +1269,7 @@ class _RecipePolishReviewDialogState extends State<_RecipePolishReviewDialog> {
   late final TextEditingController _tagController;
   late String _season;
   final List<_IngredientRowData> _ingredients = [];
+  final List<_StepRowData> _preparationTasks = [];
   final List<_StepRowData> _steps = [];
   final Set<String> _tags = {};
 
@@ -1187,6 +1288,9 @@ class _RecipePolishReviewDialogState extends State<_RecipePolishReviewDialog> {
     _notesController.dispose();
     _tagController.dispose();
     for (final row in _ingredients) {
+      row.dispose();
+    }
+    for (final row in _preparationTasks) {
       row.dispose();
     }
     for (final row in _steps) {
@@ -1212,6 +1316,7 @@ class _RecipePolishReviewDialogState extends State<_RecipePolishReviewDialog> {
         ? recipe.season
         : widget.seasonOptions.first;
     _replaceIngredients(recipe.ingredients);
+    _replacePreparationTasks(recipe.preparationTasks);
     _replaceSteps(recipe.instructions);
     _tags
       ..clear()
@@ -1233,6 +1338,10 @@ class _RecipePolishReviewDialogState extends State<_RecipePolishReviewDialog> {
 
   void _resetIngredients() {
     setState(() => _replaceIngredients(widget.original.ingredients));
+  }
+
+  void _resetPreparationTasks() {
+    setState(() => _replacePreparationTasks(widget.original.preparationTasks));
   }
 
   void _resetSteps() {
@@ -1271,6 +1380,16 @@ class _RecipePolishReviewDialogState extends State<_RecipePolishReviewDialog> {
     if (_ingredients.isEmpty) _ingredients.add(_IngredientRowData());
   }
 
+  void _replacePreparationTasks(List<String> tasks) {
+    for (final row in _preparationTasks) {
+      row.dispose();
+    }
+    _preparationTasks
+      ..clear()
+      ..addAll(tasks.map((task) => _StepRowData(text: task)));
+    if (_preparationTasks.isEmpty) _preparationTasks.add(_StepRowData());
+  }
+
   void _replaceSteps(List<String> steps) {
     for (final row in _steps) {
       row.dispose();
@@ -1289,6 +1408,17 @@ class _RecipePolishReviewDialogState extends State<_RecipePolishReviewDialog> {
     final row = _ingredients.removeAt(index);
     row.dispose();
     if (_ingredients.isEmpty) _ingredients.add(_IngredientRowData());
+    setState(() {});
+  }
+
+  void _addPreparationTask() {
+    setState(() => _preparationTasks.add(_StepRowData()));
+  }
+
+  void _removePreparationTask(int index) {
+    final row = _preparationTasks.removeAt(index);
+    row.dispose();
+    if (_preparationTasks.isEmpty) _preparationTasks.add(_StepRowData());
     setState(() {});
   }
 
@@ -1330,6 +1460,10 @@ class _RecipePolishReviewDialogState extends State<_RecipePolishReviewDialog> {
       instructions: _steps
           .map((row) => row.controller.text.trim())
           .where((step) => step.isNotEmpty)
+          .toList(),
+      preparationTasks: _preparationTasks
+          .map((row) => row.controller.text.trim())
+          .where((task) => task.isNotEmpty)
           .toList(),
       tags: _tags.toList(),
       imagePaths: widget.original.imagePaths,
@@ -1395,6 +1529,12 @@ class _RecipePolishReviewDialogState extends State<_RecipePolishReviewDialog> {
                     title: 'Zubereitung',
                     onReset: _resetSteps,
                     child: _buildSteps(),
+                  ),
+                  const SizedBox(height: 12),
+                  _ReviewSection(
+                    title: 'Vorbereitung',
+                    onReset: _resetPreparationTasks,
+                    child: _buildPreparationTasks(),
                   ),
                   const SizedBox(height: 12),
                   _ReviewSection(
@@ -1589,6 +1729,55 @@ class _RecipePolishReviewDialogState extends State<_RecipePolishReviewDialog> {
     );
   }
 
+  Widget _buildPreparationTasks() {
+    return Column(
+      children: [
+        ...List.generate(_preparationTasks.length, (index) {
+          final row = _preparationTasks[index];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 14),
+                  child: Icon(
+                    Icons.hourglass_bottom_rounded,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    controller: row.controller,
+                    minLines: 1,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      hintText: 'z.B. Teig über Nacht kühlen',
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => _removePreparationTask(index),
+                  icon: const Icon(Icons.delete_outline),
+                  tooltip: 'Vorbereitung entfernen',
+                ),
+              ],
+            ),
+          );
+        }),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: _addPreparationTask,
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Vorbereitung'),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildTags() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1725,6 +1914,17 @@ class _OriginalRecipePreview extends StatelessWidget {
             child: Text('• ${ingredient.label}'),
           ),
         ),
+        if (recipe.preparationTasks.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Text('Vorbereitung', style: textTheme.titleMedium),
+          const SizedBox(height: 8),
+          ...recipe.preparationTasks.map(
+            (task) => Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text('• $task'),
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
         Text('Zubereitung', style: textTheme.titleMedium),
         const SizedBox(height: 8),

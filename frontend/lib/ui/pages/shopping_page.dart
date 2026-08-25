@@ -1881,19 +1881,22 @@ class _ShoppingItem {
         if (ingredient.excludeFromShopping || _isHouseholdBasic(name)) {
           continue;
         }
-        final unit = ingredient.unit.trim();
-        final key = '${name.toLowerCase()}|${unit.toLowerCase()}';
-        final knowledge = knowledgeByName[_normalizeName(name)];
+        final normalizedIngredient = _NormalizedShoppingIngredient.from(
+          ingredient,
+        );
+        final knowledge =
+            knowledgeByName[normalizedIngredient.knowledgeKey] ??
+            knowledgeByName[_normalizeName(name)];
         final builder = builders.putIfAbsent(
-          key,
+          normalizedIngredient.key,
           () => _ShoppingItemBuilder(
-            name: name,
-            unit: unit,
+            name: normalizedIngredient.displayName,
+            unit: normalizedIngredient.displayUnit,
             storeId: knowledge?.storeId,
             storeName: knowledge?.storeName,
           ),
         );
-        builder.add(ingredient.quantity.trim(), recipe.title);
+        builder.add(normalizedIngredient.quantity, recipe.title);
       }
     }
 
@@ -2010,6 +2013,179 @@ extension _ScopedShoppingItems on List<_ShoppingItem> {
   }
 }
 
+class _NormalizedShoppingIngredient {
+  const _NormalizedShoppingIngredient({
+    required this.key,
+    required this.knowledgeKey,
+    required this.displayName,
+    required this.displayUnit,
+    required this.quantity,
+  });
+
+  final String key;
+  final String knowledgeKey;
+  final String displayName;
+  final String displayUnit;
+  final String quantity;
+
+  static _NormalizedShoppingIngredient from(RecipeIngredient ingredient) {
+    final rawName = ingredient.name.trim();
+    final rawUnit = ingredient.unit.trim();
+    final rawQuantity = ingredient.quantity.trim();
+    final normalizedName = _ShoppingItem._normalizeName(rawName);
+    final countable = _CountableIngredient.match(normalizedName);
+
+    if (countable != null) {
+      return _NormalizedShoppingIngredient(
+        key: '${countable.canonicalKey}|count',
+        knowledgeKey: countable.knowledgeKey,
+        displayName: countable.displayName,
+        displayUnit: '',
+        quantity: _countQuantity(rawQuantity, rawUnit),
+      );
+    }
+
+    final unit = _NormalizedShoppingUnit.from(rawUnit);
+    if (unit != null) {
+      final convertedQuantity = unit.convert(rawQuantity);
+      return _NormalizedShoppingIngredient(
+        key: '$normalizedName|${unit.displayUnit}',
+        knowledgeKey: normalizedName,
+        displayName: rawName,
+        displayUnit: unit.displayUnit,
+        quantity: convertedQuantity,
+      );
+    }
+
+    return _NormalizedShoppingIngredient(
+      key: '$normalizedName|${rawUnit.toLowerCase()}',
+      knowledgeKey: normalizedName,
+      displayName: rawName,
+      displayUnit: rawUnit,
+      quantity: rawQuantity,
+    );
+  }
+
+  static String _countQuantity(String rawQuantity, String rawUnit) {
+    final parsedQuantity = _parseNumber(rawQuantity);
+    if (parsedQuantity != null) return _formatNumber(parsedQuantity);
+
+    final normalizedUnit = _ShoppingItem._normalizeName(rawUnit);
+    final parsedUnit = _parseNumber(normalizedUnit);
+    if (parsedUnit != null) return _formatNumber(parsedUnit);
+
+    return '1';
+  }
+}
+
+class _CountableIngredient {
+  const _CountableIngredient({
+    required this.canonicalKey,
+    required this.knowledgeKey,
+    required this.displayName,
+    required this.aliases,
+  });
+
+  final String canonicalKey;
+  final String knowledgeKey;
+  final String displayName;
+  final Set<String> aliases;
+
+  static const _items = [
+    _CountableIngredient(
+      canonicalKey: 'egg',
+      knowledgeKey: 'eier',
+      displayName: 'Eier',
+      aliases: {
+        'ei',
+        'eier',
+        'ei gr m',
+        'ei gr l',
+        'ei groesse m',
+        'ei größe m',
+        'ei groesse l',
+        'ei größe l',
+      },
+    ),
+    _CountableIngredient(
+      canonicalKey: 'onion',
+      knowledgeKey: 'zwiebeln',
+      displayName: 'Zwiebeln',
+      aliases: {'zwiebel', 'zwiebeln'},
+    ),
+    _CountableIngredient(
+      canonicalKey: 'lemon',
+      knowledgeKey: 'zitronen',
+      displayName: 'Zitronen',
+      aliases: {'zitrone', 'zitronen'},
+    ),
+    _CountableIngredient(
+      canonicalKey: 'garlic_clove',
+      knowledgeKey: 'knoblauchzehen',
+      displayName: 'Knoblauchzehen',
+      aliases: {'knoblauchzehe', 'knoblauchzehen'},
+    ),
+  ];
+
+  static _CountableIngredient? match(String normalizedName) {
+    for (final item in _items) {
+      if (item.aliases.contains(normalizedName)) return item;
+      for (final alias in item.aliases) {
+        if (normalizedName.startsWith('$alias ')) return item;
+      }
+    }
+    return null;
+  }
+}
+
+class _NormalizedShoppingUnit {
+  const _NormalizedShoppingUnit({
+    required this.displayUnit,
+    required this.factor,
+  });
+
+  final String displayUnit;
+  final double factor;
+
+  String convert(String quantity) {
+    final parsed = _parseNumber(quantity);
+    if (parsed == null) return quantity;
+    return _formatNumber(parsed * factor);
+  }
+
+  static _NormalizedShoppingUnit? from(String unit) {
+    final normalized = _ShoppingItem._normalizeName(unit);
+    return switch (normalized) {
+      'g' ||
+      'gr' ||
+      'gramm' ||
+      'gram' => const _NormalizedShoppingUnit(displayUnit: 'g', factor: 1),
+      'kg' || 'kilogramm' || 'kilogram' => const _NormalizedShoppingUnit(
+        displayUnit: 'g',
+        factor: 1000,
+      ),
+      'ml' || 'milliliter' => const _NormalizedShoppingUnit(
+        displayUnit: 'ml',
+        factor: 1,
+      ),
+      'l' ||
+      'liter' => const _NormalizedShoppingUnit(displayUnit: 'ml', factor: 1000),
+      _ => null,
+    };
+  }
+}
+
+double? _parseNumber(String value) {
+  final normalized = value.trim().replaceAll(',', '.');
+  if (normalized.isEmpty) return null;
+  return double.tryParse(normalized);
+}
+
+String _formatNumber(double value) {
+  if (value % 1 == 0) return value.toInt().toString();
+  return value.toStringAsFixed(1).replaceAll('.', ',');
+}
+
 class _ShoppingItemBuilder {
   _ShoppingItemBuilder({
     required this.name,
@@ -2034,7 +2210,7 @@ class _ShoppingItemBuilder {
     if (quantity.isEmpty) return;
 
     rawQuantities.add(quantity);
-    final parsed = double.tryParse(quantity.replaceAll(',', '.'));
+    final parsed = _parseNumber(quantity);
     if (parsed == null) {
       onlyNumericQuantities = false;
       return;
@@ -2057,9 +2233,7 @@ class _ShoppingItemBuilder {
   String _quantityLabel() {
     if (rawQuantities.isEmpty) return '';
     if (onlyNumericQuantities) {
-      final amount = total % 1 == 0
-          ? total.toInt().toString()
-          : total.toStringAsFixed(1).replaceAll('.', ',');
+      final amount = _formatNumber(total);
       return [amount, unit].where((part) => part.isNotEmpty).join(' ');
     }
 

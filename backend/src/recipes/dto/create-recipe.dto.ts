@@ -78,6 +78,11 @@ export class CreateRecipeDto {
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
+  preparationTasks?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
   tags?: string[];
 
   @IsOptional()

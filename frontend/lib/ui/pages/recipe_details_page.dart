@@ -352,6 +352,26 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
                   ),
           ),
           const SizedBox(height: 14),
+          if (recipe.preparationTasks.isNotEmpty) ...[
+            _buildSection(
+              title: 'Vorbereitung',
+              child: Column(
+                children: List.generate(recipe.preparationTasks.length, (
+                  index,
+                ) {
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      Icons.hourglass_bottom_rounded,
+                      color: colorScheme.primary,
+                    ),
+                    title: Text(recipe.preparationTasks[index]),
+                  );
+                }),
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
           _buildSection(
             title: 'Zubereitung',
             child: recipe.instructions.isEmpty

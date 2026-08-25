@@ -49,6 +49,11 @@ type StepRow = {
   sort_order: number;
 };
 
+type PreparationTaskRow = {
+  body: string;
+  sort_order: number;
+};
+
 type CookEventRow = {
   cooked_at: string;
   meal: string | null;
@@ -75,6 +80,7 @@ type ImportedRecipeDraft = {
   cookTimeMinutes?: number;
   ingredients?: RecipeIngredientDto[];
   instructions?: string[];
+  preparationTasks?: string[];
   tags?: string[];
   confidenceNotes?: string[];
 };
@@ -528,7 +534,10 @@ export class RecipesService {
     mkdirSync(storagePath, { recursive: true });
 
     const filename = `generated-${randomUUID()}.png`;
-    writeFileSync(join(storagePath, filename), Buffer.from(imageBase64, "base64"));
+    writeFileSync(
+      join(storagePath, filename),
+      Buffer.from(imageBase64, "base64"),
+    );
 
     return { imagePath: `/images/${filename}` };
   }
@@ -635,6 +644,7 @@ export class RecipesService {
                   "cookTimeMinutes",
                   "ingredients",
                   "instructions",
+                  "preparationTasks",
                   "tags",
                   "confidenceNotes",
                 ],
@@ -667,6 +677,10 @@ export class RecipesService {
                     },
                   },
                   instructions: {
+                    type: "array",
+                    items: { type: "string" },
+                  },
+                  preparationTasks: {
                     type: "array",
                     items: { type: "string" },
                   },
@@ -713,6 +727,7 @@ export class RecipesService {
                 "Write German output only.",
                 "Keep the recipe faithful: do not invent ingredients, quantities, temperatures, or times.",
                 "Improve clarity, consistency, and tone so the instructions read professionally but still naturally.",
+                "Move ahead-of-time tasks such as soaking, chilling, resting, marinating, thawing, or overnight preparation into preparationTasks.",
                 "Normalize ingredient names to normal German kitchen language.",
                 "Use one season exactly from: Ganzjährig, Frühling, Sommer, Herbst, Winter.",
                 "Use stable tag IDs only, never translated tag labels.",
@@ -787,6 +802,7 @@ export class RecipesService {
         "cookTimeMinutes",
         "ingredients",
         "instructions",
+        "preparationTasks",
         "tags",
         "confidenceNotes",
       ],
@@ -819,6 +835,10 @@ export class RecipesService {
           },
         },
         instructions: {
+          type: "array",
+          items: { type: "string" },
+        },
+        preparationTasks: {
           type: "array",
           items: { type: "string" },
         },
@@ -942,6 +962,24 @@ export class RecipesService {
       });
     }
 
+    if (input.preparationTasks != null) {
+      this.database.db
+        .prepare("DELETE FROM recipe_preparation_tasks WHERE recipe_id = ?")
+        .run(id);
+      const insert = this.database.db.prepare(
+        `
+        INSERT INTO recipe_preparation_tasks (id, recipe_id, body, sort_order)
+        VALUES (?, ?, ?, ?)
+        `,
+      );
+      input.preparationTasks
+        .map((task) => task.trim())
+        .filter((task) => task.length > 0)
+        .forEach((task, index) => {
+          insert.run(randomUUID(), id, task, index);
+        });
+    }
+
     if (input.tags != null) {
       this.database.db
         .prepare("DELETE FROM recipe_tags WHERE recipe_id = ?")
@@ -1007,6 +1045,7 @@ export class RecipesService {
             : [],
       ingredients: this.ingredientsFor(row.id),
       instructions: this.instructionsFor(row.id),
+      preparationTasks: this.preparationTasksFor(row.id),
       tags: this.tagsFor(row.id),
       cookCount: row.cook_count,
       lastCookedAt: row.last_cooked_at,
@@ -1071,6 +1110,21 @@ export class RecipesService {
         `,
       )
       .all(recipeId) as StepRow[];
+
+    return rows.map((row) => row.body);
+  }
+
+  private preparationTasksFor(recipeId: string) {
+    const rows = this.database.db
+      .prepare(
+        `
+        SELECT body, sort_order
+        FROM recipe_preparation_tasks
+        WHERE recipe_id = ?
+        ORDER BY sort_order ASC
+        `,
+      )
+      .all(recipeId) as PreparationTaskRow[];
 
     return rows.map((row) => row.body);
   }
@@ -1214,6 +1268,7 @@ export class RecipesService {
       "Keep notes short and practical; do not copy long cookbook introductions.",
       "Put ingredient preparation in the name when it identifies the ingredient, for example 'Knoblauchzehen, zerdrueckt'.",
       "Put optional usage notes, garnish notes, alternatives, or parentheticals such as 'plus extra to finish' in ingredient.note, not in ingredient.name.",
+      "Put ahead-of-time tasks such as soaking, chilling, resting, marinating, thawing, or overnight preparation into preparationTasks. Keep ordinary cooking steps in instructions.",
       "Separate ingredient quantity, unit, name, and note. Example: '140 ml olive oil (plus extra to finish)' becomes quantity='140', unit='ml', name='Olivenöl', note='plus etwas mehr zum Abschmecken'.",
       "Keep water in the ingredients if the recipe uses it, but set excludeFromShopping=true for water, boiling water, tap water, ice, and other household basics that do not belong on a grocery list.",
       `Return tags only as stable keys from this list: ${tagList}. Do not invent new tag keys and do not translate tag keys.`,
@@ -1301,6 +1356,10 @@ export class RecipesService {
       .map((step) => this.cleanText(step))
       .filter((step) => step.length > 0)
       .slice(0, 30);
+    const preparationTasks = (draft.preparationTasks ?? [])
+      .map((task) => this.cleanText(task))
+      .filter((task) => task.length > 0)
+      .slice(0, 12);
     const tags = (draft.tags ?? [])
       .map((tag) => this.cleanTag(tag))
       .filter((tag) => tag.length > 0)
@@ -1320,6 +1379,7 @@ export class RecipesService {
       cookTimeMinutes: this.nonNegativeIntOrUndefined(draft.cookTimeMinutes),
       ingredients,
       instructions,
+      preparationTasks,
       tags,
       confidenceNotes,
     };

@@ -66,6 +66,13 @@ CREATE TABLE IF NOT EXISTS recipe_steps (
   sort_order INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS recipe_preparation_tasks (
+  id TEXT PRIMARY KEY,
+  recipe_id TEXT NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+  body TEXT NOT NULL,
+  sort_order INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS meal_plan_slots (
   id TEXT PRIMARY KEY,
   household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,

@@ -25,6 +25,7 @@ class TodayPage extends StatefulWidget {
 
 class _TodayPageState extends State<TodayPage> {
   List<Recipe> _recipes = [];
+  List<MealPlanSlot> _upcomingMealSlots = [];
   final Map<String, String?> _mealRecipeIds = {};
   final Map<String, List<String>> _mealExtras = {};
   final Map<String, List<String>> _mealRecipeExtraIds = {};
@@ -78,20 +79,24 @@ class _TodayPageState extends State<TodayPage> {
       final recipes = await widget.repo.getAll();
       final mealSlots = await widget.mealPlanRepo.getRange(
         from: _today,
-        to: _today,
+        to: _today.add(const Duration(days: 3)),
       );
+      final todaySlots = mealSlots
+          .where((slot) => _isSameDay(slot.plannedFor, _today))
+          .toList();
       if (!mounted) return;
       setState(() {
         _recipes = recipes;
+        _upcomingMealSlots = mealSlots;
         _mealRecipeIds
           ..clear()
-          ..addAll(_slotValues(mealSlots));
+          ..addAll(_slotValues(todaySlots));
         _mealExtras
           ..clear()
-          ..addAll(_extrasValues(mealSlots));
+          ..addAll(_extrasValues(todaySlots));
         _mealRecipeExtraIds
           ..clear()
-          ..addAll(_recipeExtraIdsValues(mealSlots));
+          ..addAll(_recipeExtraIdsValues(todaySlots));
         _isLoading = false;
       });
     } catch (_) {
@@ -291,6 +296,115 @@ class _TodayPageState extends State<TodayPage> {
     ];
   }
 
+  List<_PreparationTask> _preparationTasks() {
+    final tasks = <_PreparationTask>[];
+    final seen = <String>{};
+
+    for (final slot in _upcomingMealSlots) {
+      if (slot.isRecipe) {
+        final recipe = _recipeById(slot.recipeId);
+        if (recipe != null) {
+          _addPreparationTasksForRecipe(
+            tasks: tasks,
+            seen: seen,
+            slot: slot,
+            recipe: recipe,
+          );
+        }
+      }
+
+      for (final recipeId in slot.recipeExtraIds) {
+        final recipe = _recipeById(recipeId);
+        if (recipe != null) {
+          _addPreparationTasksForRecipe(
+            tasks: tasks,
+            seen: seen,
+            slot: slot,
+            recipe: recipe,
+            isSide: true,
+          );
+        }
+      }
+    }
+
+    tasks.sort((a, b) {
+      final dateCompare = a.plannedFor.compareTo(b.plannedFor);
+      if (dateCompare != 0) return dateCompare;
+      final mealCompare = _mealOrder(a.meal).compareTo(_mealOrder(b.meal));
+      if (mealCompare != 0) return mealCompare;
+      return a.recipeTitle.compareTo(b.recipeTitle);
+    });
+    return tasks.take(6).toList();
+  }
+
+  void _addPreparationTasksForRecipe({
+    required List<_PreparationTask> tasks,
+    required Set<String> seen,
+    required MealPlanSlot slot,
+    required Recipe recipe,
+    bool isSide = false,
+  }) {
+    final candidates = recipe.preparationTasks.isNotEmpty
+        ? recipe.preparationTasks
+        : [
+            ...recipe.instructions,
+            if (recipe.notes.trim().isNotEmpty) recipe.notes,
+          ];
+
+    for (final candidate in candidates) {
+      final instruction = recipe.preparationTasks.isNotEmpty
+          ? candidate.trim().replaceAll(RegExp(r'\s+'), ' ')
+          : _preparationInstruction(candidate);
+      if (instruction == null) continue;
+      if (instruction.isEmpty) continue;
+      final key =
+          '${slot.plannedFor.toIso8601String()}|${slot.meal}|${recipe.id}|$instruction|$isSide';
+      if (!seen.add(key)) continue;
+      tasks.add(
+        _PreparationTask(
+          recipeTitle: recipe.title,
+          plannedFor: slot.plannedFor,
+          meal: slot.meal,
+          instruction: instruction,
+          durationLabel: _preparationDurationLabel(instruction),
+          isSide: isSide,
+        ),
+      );
+    }
+  }
+
+  String? _preparationInstruction(String value) {
+    final normalized = value.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (normalized.isEmpty) return null;
+    final lower = normalized.toLowerCase();
+    final hasPreparationSignal = _preparationSignals.any(lower.contains);
+    if (!hasPreparationSignal) return null;
+    return normalized;
+  }
+
+  String? _preparationDurationLabel(String instruction) {
+    final lower = instruction.toLowerCase();
+    if (lower.contains('über nacht') ||
+        lower.contains('ueber nacht') ||
+        lower.contains('overnight')) {
+      return 'über Nacht';
+    }
+
+    final match = RegExp(
+      r'(\d+(?:[,.]\d+)?)\s*(stunden?|std\.?|h|minuten?|min|tage?|tag)\b',
+      caseSensitive: false,
+    ).firstMatch(instruction);
+    if (match == null) return null;
+
+    final amount = match.group(1)!.replaceAll('.', ',');
+    final unit = match.group(2)!.toLowerCase();
+    if (unit.startsWith('min')) return '$amount Min.';
+    if (unit == 'h' || unit.startsWith('std') || unit.startsWith('stund')) {
+      return '$amount Std.';
+    }
+    return amount == '1' ? '1 Tag' : '$amount Tage';
+  }
+
   void _showPlanMessage(String message) {
     ScaffoldMessenger.of(
       context,
@@ -304,6 +418,10 @@ class _TodayPageState extends State<TodayPage> {
 
   static DateTime _dateOnly(DateTime date) {
     return DateTime(date.year, date.month, date.day);
+  }
+
+  static bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
   static DateTime _endOfWeek(DateTime date) {
@@ -399,34 +517,249 @@ class _TodayPageState extends State<TodayPage> {
                       : () => _repeatRecipe('dinner', 'Abendessen', dinner),
                 ),
                 const SizedBox(height: 18),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(18),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Heute vorbereiten',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Noch keine Vorbereitung geplant.',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                              ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                _PreparationCard(tasks: _preparationTasks(), today: _today),
               ],
             ),
     );
   }
+}
+
+const _preparationSignals = [
+  'einweich',
+  'quell',
+  'kühl',
+  'kuehl',
+  'kalt stell',
+  'kaltstellen',
+  'ziehen lass',
+  'ruhe',
+  'ruhen',
+  'marinier',
+  'auftau',
+  'vorkoch',
+  'vorbereit',
+  'über nacht',
+  'ueber nacht',
+  'soak',
+  'chill',
+  'refrigerate',
+  'rest',
+  'marinate',
+  'thaw',
+  'overnight',
+];
+
+class _PreparationTask {
+  const _PreparationTask({
+    required this.recipeTitle,
+    required this.plannedFor,
+    required this.meal,
+    required this.instruction,
+    this.durationLabel,
+    this.isSide = false,
+  });
+
+  final String recipeTitle;
+  final DateTime plannedFor;
+  final String meal;
+  final String instruction;
+  final String? durationLabel;
+  final bool isSide;
+}
+
+class _PreparationCard extends StatelessWidget {
+  const _PreparationCard({required this.tasks, required this.today});
+
+  final List<_PreparationTask> tasks;
+  final DateTime today;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.hourglass_bottom_rounded,
+                  size: 20,
+                  color: colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Heute vorbereiten',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (tasks.isEmpty)
+              Text(
+                'Für die nächsten Tage habe ich nichts mit Einweichen, Kühlen, Marinieren oder Ruhen gefunden.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              )
+            else
+              ...tasks.indexed.map((entry) {
+                final index = entry.$1;
+                final task = entry.$2;
+                return Padding(
+                  padding: EdgeInsets.only(top: index == 0 ? 0 : 12),
+                  child: _PreparationTaskTile(task: task, today: today),
+                );
+              }),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PreparationTaskTile extends StatelessWidget {
+  const _PreparationTaskTile({required this.task, required this.today});
+
+  final _PreparationTask task;
+  final DateTime today;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final meta = [
+      _relativeDayLabel(task.plannedFor, today),
+      _mealLabel(task.meal),
+      if (task.isSide) 'Beilage',
+    ].join(' · ');
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: colorScheme.primaryContainer.withValues(alpha: 0.7),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            Icons.checklist_rounded,
+            size: 18,
+            color: colorScheme.onPrimaryContainer,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      task.recipeTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  if (task.durationLabel != null) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colorScheme.secondaryContainer,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        task.durationLabel!,
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(
+                              color: colorScheme.onSecondaryContainer,
+                              fontWeight: FontWeight.w700,
+                            ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                meta,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                task.instruction,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+int _mealOrder(String meal) {
+  switch (meal) {
+    case 'breakfast':
+      return 0;
+    case 'lunch':
+      return 1;
+    case 'dinner':
+      return 2;
+  }
+  return 3;
+}
+
+String _mealLabel(String meal) {
+  switch (meal) {
+    case 'breakfast':
+      return 'Frühstück';
+    case 'lunch':
+      return 'Mittagessen';
+    case 'dinner':
+      return 'Abendessen';
+  }
+  return meal;
+}
+
+String _relativeDayLabel(DateTime date, DateTime today) {
+  final day = DateTime(date.year, date.month, date.day);
+  final base = DateTime(today.year, today.month, today.day);
+  final difference = day.difference(base).inDays;
+  if (difference == 0) return 'Heute';
+  if (difference == 1) return 'Morgen';
+  return _weekdayName(day.weekday);
+}
+
+String _weekdayName(int weekday) {
+  const labels = [
+    'Montag',
+    'Dienstag',
+    'Mittwoch',
+    'Donnerstag',
+    'Freitag',
+    'Samstag',
+    'Sonntag',
+  ];
+  return labels[weekday - 1];
 }
 
 class _MealSlotCard extends StatelessWidget {
