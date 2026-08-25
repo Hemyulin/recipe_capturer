@@ -113,6 +113,11 @@ void main() {
             'confidenceNotes': [],
           }),
         );
+      } else if (request.method == 'POST' &&
+          request.uri.path == '/recipes/imports/generated-image') {
+        request.response.write(
+          jsonEncode({'imagePath': '/images/ai-pasta.png'}),
+        );
       } else {
         request.response.write(jsonEncode({'ok': true}));
       }
@@ -201,6 +206,7 @@ void main() {
         RecipeIngredient(name: 'Oatmeal', quantity: '200', unit: 'g'),
         RecipeIngredient(name: 'boiling water', excludeFromShopping: true),
       ],
+      preparationTasks: const ['Teig 30 Minuten ruhen lassen.'],
       instructions: const ['Mix everything.', 'Bake until golden.'],
       tags: const ['One pot', 'Breakfast'],
       isFavorite: true,
@@ -232,6 +238,7 @@ void main() {
       expect(payload['title'], 'Oatmeal Buns');
       expect(payload['season'], 'Ganzjaehrig');
       expect(payload['ingredients'], isA<List<dynamic>>());
+      expect(payload['preparationTasks'], ['Teig 30 Minuten ruhen lassen.']);
       expect(
         payload['ingredients'],
         contains(containsPair('excludeFromShopping', true)),
@@ -304,6 +311,23 @@ void main() {
     expect(draft.title, 'Feine Foto Pasta');
     expect(draft.season, 'Ganzjährig');
     expect(draft.instructions, ['Pasta kochen.', 'Alles servieren.']);
+  });
+
+  test('generates recipe images through the backend', () async {
+    final imagePath = await repository.generateRecipeImage(
+      Recipe.create(
+        'pasta',
+        ingredients: const [RecipeIngredient(name: 'Pasta', quantity: '200')],
+        instructions: const ['Kochen.'],
+      ),
+    );
+
+    expect(requests.single.method, 'POST');
+    expect(requests.single.path, '/recipes/imports/generated-image');
+    expect(
+      imagePath,
+      'http://${server.address.host}:${server.port}/images/ai-pasta.png',
+    );
   });
 
   test(
