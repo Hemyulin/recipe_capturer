@@ -142,7 +142,13 @@ class ApiRecipeRepository
       useSaveErrorMessage: true,
     );
     final decoded = jsonDecode(response) as Map<String, dynamic>;
-    return _absoluteImagePath((decoded['imagePath'] as String? ?? '').trim());
+    final imagePath = (decoded['imagePath'] as String? ?? '').trim();
+    if (imagePath.isEmpty) {
+      throw const ApiRecipeRepositoryException(
+        'KI-Bild hat kein lesbares Bild geliefert.',
+      );
+    }
+    return _absoluteImagePath(imagePath);
   }
 
   Uri _uri(Uri baseUri, String path) {

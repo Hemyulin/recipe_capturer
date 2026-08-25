@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -90,6 +92,117 @@ class _PhotoCountBadge extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _IngredientEditorTile extends StatelessWidget {
+  const _IngredientEditorTile({
+    required this.row,
+    required this.onRemove,
+    this.nameHint = 'Zutat',
+    this.onNameSubmitted,
+  });
+
+  final _IngredientRowData row;
+  final VoidCallback onRemove;
+  final String nameHint;
+  final ValueChanged<String>? onNameSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLowest,
+        border: Border.all(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: row.nameController,
+                  focusNode: row.nameFocusNode,
+                  decoration: InputDecoration(
+                    labelText: 'Zutat',
+                    hintText: nameHint,
+                  ),
+                  textInputAction: TextInputAction.next,
+                  onSubmitted: onNameSubmitted,
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: onRemove,
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Zutat entfernen',
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: row.quantityController,
+                  decoration: const InputDecoration(
+                    labelText: 'Menge',
+                    hintText: '2',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: row.unitController,
+                  decoration: const InputDecoration(
+                    labelText: 'Einheit',
+                    hintText: 'EL',
+                  ),
+                  textInputAction: TextInputAction.next,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: row.noteController,
+            decoration: const InputDecoration(
+              labelText: 'Notiz',
+              hintText: 'optional, z.B. extra zum Servieren',
+            ),
+            textInputAction: TextInputAction.next,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AiImageProgressDialog extends StatelessWidget {
+  const _AiImageProgressDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      icon: const SizedBox(
+        width: 34,
+        height: 34,
+        child: CircularProgressIndicator(strokeWidth: 3),
+      ),
+      title: const Text('KI-Bild wird gekocht'),
+      content: Text(
+        'Das kann einen Moment dauern. Wenn alles klappt, liegt das neue Bild gleich vorne bei den Fotos.',
+        style: Theme.of(context).textTheme.bodyMedium,
       ),
     );
   }
@@ -509,6 +622,17 @@ class _NewRecipePageState extends State<NewRecipePage> {
     }
 
     setState(() => _isGeneratingImage = true);
+    var progressDialogOpen = false;
+    if (mounted) {
+      progressDialogOpen = true;
+      unawaited(
+        showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const _AiImageProgressDialog(),
+        ),
+      );
+    }
     try {
       final imagePath = await imageRepo.generateRecipeImage(draft);
       if (!mounted) return;
@@ -524,6 +648,9 @@ class _NewRecipePageState extends State<NewRecipePage> {
         context,
       ).showSnackBar(SnackBar(content: Text(_imageErrorMessage(error))));
     } finally {
+      if (mounted && progressDialogOpen) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
       if (mounted) setState(() => _isGeneratingImage = false);
     }
   }
@@ -1016,67 +1143,13 @@ class _NewRecipePageState extends State<NewRecipePage> {
               children: [
                 ...List.generate(_ingredients.length, (index) {
                   final row = _ingredients[index];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SizedBox(
-                              width: 70,
-                              child: TextField(
-                                controller: row.quantityController,
-                                decoration: const InputDecoration(
-                                  hintText: '2',
-                                ),
-                                keyboardType: TextInputType.number,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            SizedBox(
-                              width: 72,
-                              child: TextField(
-                                controller: row.unitController,
-                                decoration: const InputDecoration(
-                                  hintText: 'EL',
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: TextField(
-                                controller: row.nameController,
-                                focusNode: row.nameFocusNode,
-                                decoration: InputDecoration(
-                                  hintText: index == _ingredients.length - 1
-                                      ? 'Zutat'
-                                      : 'Name',
-                                ),
-                                textInputAction: TextInputAction.next,
-                                onSubmitted: (_) => _appendIngredientAndFocus(),
-                              ),
-                            ),
-                            IconButton(
-                              onPressed: () => _removeIngredientRow(index),
-                              icon: const Icon(Icons.delete_outline),
-                              tooltip: 'Zutat entfernen',
-                            ),
-                          ],
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.only(left: 150, right: 48),
-                          child: TextField(
-                            controller: row.noteController,
-                            decoration: const InputDecoration(
-                              hintText: 'Notiz, z.B. extra zum Servieren',
-                            ),
-                            textInputAction: TextInputAction.next,
-                          ),
-                        ),
-                      ],
-                    ),
+                  return _IngredientEditorTile(
+                    row: row,
+                    nameHint: index == _ingredients.length - 1
+                        ? 'Zutat'
+                        : 'Name',
+                    onRemove: () => _removeIngredientRow(index),
+                    onNameSubmitted: (_) => _appendIngredientAndFocus(),
                   );
                 }),
                 Align(
@@ -1323,43 +1396,6 @@ class _RecipePolishReviewDialogState extends State<_RecipePolishReviewDialog> {
       ..addAll(recipe.tags);
   }
 
-  void _resetBasics() {
-    final original = widget.original;
-    setState(() {
-      _titleController.text = original.title;
-      _servingsController.text = original.servings?.toString() ?? '';
-      _prepTimeController.text = original.prepTimeMinutes?.toString() ?? '';
-      _cookTimeController.text = original.cookTimeMinutes?.toString() ?? '';
-      _season = widget.seasonOptions.contains(original.season)
-          ? original.season
-          : widget.seasonOptions.first;
-    });
-  }
-
-  void _resetIngredients() {
-    setState(() => _replaceIngredients(widget.original.ingredients));
-  }
-
-  void _resetPreparationTasks() {
-    setState(() => _replacePreparationTasks(widget.original.preparationTasks));
-  }
-
-  void _resetSteps() {
-    setState(() => _replaceSteps(widget.original.instructions));
-  }
-
-  void _resetTags() {
-    setState(() {
-      _tags
-        ..clear()
-        ..addAll(widget.original.tags);
-    });
-  }
-
-  void _resetNotes() {
-    setState(() => _notesController.text = widget.original.notes);
-  }
-
   void _replaceIngredients(List<RecipeIngredient> ingredients) {
     for (final row in _ingredients) {
       row.dispose();
@@ -1515,37 +1551,37 @@ class _RecipePolishReviewDialogState extends State<_RecipePolishReviewDialog> {
                 children: [
                   _ReviewSection(
                     title: 'Grundlagen',
-                    onReset: _resetBasics,
+                    originalChild: _buildOriginalBasics(),
                     child: _buildBasics(),
                   ),
                   const SizedBox(height: 12),
                   _ReviewSection(
                     title: 'Zutaten',
-                    onReset: _resetIngredients,
+                    originalChild: _buildOriginalIngredients(),
                     child: _buildIngredients(),
                   ),
                   const SizedBox(height: 12),
                   _ReviewSection(
                     title: 'Zubereitung',
-                    onReset: _resetSteps,
+                    originalChild: _buildOriginalSteps(),
                     child: _buildSteps(),
                   ),
                   const SizedBox(height: 12),
                   _ReviewSection(
                     title: 'Vorbereitung',
-                    onReset: _resetPreparationTasks,
+                    originalChild: _buildOriginalPreparationTasks(),
                     child: _buildPreparationTasks(),
                   ),
                   const SizedBox(height: 12),
                   _ReviewSection(
                     title: 'Tags',
-                    onReset: _resetTags,
+                    originalChild: _buildOriginalTags(),
                     child: _buildTags(),
                   ),
                   const SizedBox(height: 12),
                   _ReviewSection(
                     title: 'Notizen',
-                    onReset: _resetNotes,
+                    originalChild: _buildOriginalNotes(),
                     child: TextField(
                       controller: _notesController,
                       minLines: 3,
@@ -1560,6 +1596,63 @@ class _RecipePolishReviewDialogState extends State<_RecipePolishReviewDialog> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildOriginalBasics() {
+    final original = widget.original;
+    return _OriginalValueList(
+      values: [
+        'Titel: ${original.title}',
+        if (original.servings != null) 'Portionen: ${original.servings}',
+        if (original.season.isNotEmpty) 'Saison: ${original.season}',
+        if (original.prepTimeMinutes != null)
+          'Vorbereitung: ${original.prepTimeMinutes} min',
+        if (original.cookTimeMinutes != null)
+          'Kochen: ${original.cookTimeMinutes} min',
+      ],
+      emptyText: 'Keine Grundlagen im Original.',
+    );
+  }
+
+  Widget _buildOriginalIngredients() {
+    return _OriginalValueList(
+      values: widget.original.ingredients
+          .map((ingredient) => ingredient.label)
+          .toList(),
+      emptyText: 'Keine Zutaten im Original.',
+    );
+  }
+
+  Widget _buildOriginalSteps() {
+    return _OriginalValueList(
+      values: widget.original.instructions.indexed
+          .map((entry) => '${entry.$1 + 1}. ${entry.$2}')
+          .toList(),
+      emptyText: 'Keine Schritte im Original.',
+    );
+  }
+
+  Widget _buildOriginalPreparationTasks() {
+    return _OriginalValueList(
+      values: widget.original.preparationTasks,
+      emptyText: 'Keine Vorbereitung im Original.',
+    );
+  }
+
+  Widget _buildOriginalTags() {
+    return _OriginalValueList(
+      values: widget.original.tags.map(tagLabelDe).toList(),
+      emptyText: 'Keine Tags im Original.',
+    );
+  }
+
+  Widget _buildOriginalNotes() {
+    return _OriginalValueList(
+      values: widget.original.notes.trim().isEmpty
+          ? const []
+          : [widget.original.notes.trim()],
+      emptyText: 'Keine Notizen im Original.',
     );
   }
 
@@ -1626,51 +1719,9 @@ class _RecipePolishReviewDialogState extends State<_RecipePolishReviewDialog> {
       children: [
         ...List.generate(_ingredients.length, (index) {
           final row = _ingredients[index];
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Column(
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: 64,
-                      child: TextField(
-                        controller: row.quantityController,
-                        decoration: const InputDecoration(hintText: '2'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    SizedBox(
-                      width: 68,
-                      child: TextField(
-                        controller: row.unitController,
-                        decoration: const InputDecoration(hintText: 'EL'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: row.nameController,
-                        decoration: const InputDecoration(hintText: 'Zutat'),
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => _removeIngredient(index),
-                      icon: const Icon(Icons.delete_outline),
-                      tooltip: 'Zutat entfernen',
-                    ),
-                  ],
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(left: 140, right: 48, top: 6),
-                  child: TextField(
-                    controller: row.noteController,
-                    decoration: const InputDecoration(hintText: 'Notiz'),
-                  ),
-                ),
-              ],
-            ),
+          return _IngredientEditorTile(
+            row: row,
+            onRemove: () => _removeIngredient(index),
           );
         }),
         Align(
@@ -1836,16 +1887,23 @@ class _RecipePolishReviewDialogState extends State<_RecipePolishReviewDialog> {
   }
 }
 
-class _ReviewSection extends StatelessWidget {
+class _ReviewSection extends StatefulWidget {
   const _ReviewSection({
     required this.title,
     required this.child,
-    required this.onReset,
+    required this.originalChild,
   });
 
   final String title;
   final Widget child;
-  final VoidCallback onReset;
+  final Widget originalChild;
+
+  @override
+  State<_ReviewSection> createState() => _ReviewSectionState();
+}
+
+class _ReviewSectionState extends State<_ReviewSection> {
+  bool _showOriginal = false;
 
   @override
   Widget build(BuildContext context) {
@@ -1859,22 +1917,71 @@ class _ReviewSection extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    title,
+                    widget.title,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
                 TextButton.icon(
-                  onPressed: onReset,
-                  icon: const Icon(Icons.undo_rounded),
-                  label: const Text('Original'),
+                  onPressed: () =>
+                      setState(() => _showOriginal = !_showOriginal),
+                  icon: Icon(
+                    _showOriginal
+                        ? Icons.auto_fix_high_outlined
+                        : Icons.history_rounded,
+                  ),
+                  label: Text(_showOriginal ? 'Vorschlag' : 'Original'),
                 ),
               ],
             ),
             const SizedBox(height: 10),
-            child,
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              child: KeyedSubtree(
+                key: ValueKey(_showOriginal),
+                child: _showOriginal ? widget.originalChild : widget.child,
+              ),
+            ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _OriginalValueList extends StatelessWidget {
+  const _OriginalValueList({required this.values, required this.emptyText});
+
+  final List<String> values;
+  final String emptyText;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final cleanValues = values
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList();
+
+    if (cleanValues.isEmpty) {
+      return Text(
+        emptyText,
+        style: textTheme.bodyMedium?.copyWith(
+          color: colorScheme.onSurfaceVariant,
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ...cleanValues.map(
+          (value) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(value, style: textTheme.bodyMedium),
+          ),
+        ),
+      ],
     );
   }
 }

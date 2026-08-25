@@ -778,7 +778,6 @@ export class RecipesService {
           quality:
             this.config.get<string>("COOKBUK_OPENAI_IMAGE_QUALITY")?.trim() ||
             "medium",
-          response_format: "b64_json",
           prompt: this.recipeImagePrompt(recipe),
         }),
       });
