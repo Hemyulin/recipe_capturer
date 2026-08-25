@@ -59,7 +59,7 @@ class MainShellPage extends StatelessWidget {
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),
             selectedIcon: Icon(Icons.settings),
-            label: 'Einstellungen',
+            label: 'Mehr',
           ),
         ],
       ),

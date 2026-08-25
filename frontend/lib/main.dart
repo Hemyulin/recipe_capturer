@@ -17,13 +17,14 @@ class MyApp extends StatelessWidget {
       animation: themeController,
       builder: (context, _) {
         final preset = themeController.preset;
-        final theme = preset.buildTheme();
-        final colorScheme = theme.colorScheme;
 
         return MaterialApp.router(
           debugShowCheckedModeBanner: false,
-          theme: theme,
+          theme: preset.buildTheme(),
+          darkTheme: preset.buildTheme(brightness: Brightness.dark),
+          themeMode: themeController.themeMode,
           builder: (context, child) {
+            final colorScheme = Theme.of(context).colorScheme;
             return DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -31,8 +32,8 @@ class MyApp extends StatelessWidget {
                   end: Alignment.bottomCenter,
                   colors: [
                     colorScheme.surface,
+                    colorScheme.surface,
                     colorScheme.surfaceContainerLow,
-                    preset.gradientEnd,
                   ],
                 ),
               ),

@@ -221,6 +221,7 @@ class _NewRecipePageState extends State<NewRecipePage> {
 
   List<String> _imagePaths = [];
   bool _isPolishing = false;
+  bool _isGeneratingImage = false;
 
   @override
   void initState() {
@@ -431,8 +432,8 @@ class _NewRecipePageState extends State<NewRecipePage> {
     try {
       final polished = await polishRepo.polishRecipe(draft);
       if (!mounted) return;
-      final shouldApply = await _showPolishPreview(polished);
-      if (shouldApply == true) _replaceFormWithRecipe(polished);
+      final reviewed = await _showPolishReview(draft, polished);
+      if (reviewed != null) _replaceFormWithRecipe(reviewed);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -443,71 +444,53 @@ class _NewRecipePageState extends State<NewRecipePage> {
     }
   }
 
-  Future<bool?> _showPolishPreview(Recipe recipe) {
-    return showDialog<bool>(
+  Future<Recipe?> _showPolishReview(Recipe original, Recipe suggestion) {
+    return showDialog<Recipe>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('KI-Vorschlag übernehmen?'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  recipe.title,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 10),
-                if (recipe.ingredients.isNotEmpty) ...[
-                  Text(
-                    'Zutaten',
-                    style: Theme.of(context).textTheme.labelLarge,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    recipe.ingredients
-                        .take(6)
-                        .map((ingredient) => '• ${ingredient.label}')
-                        .join('\n'),
-                  ),
-                  if (recipe.ingredients.length > 6)
-                    Text('… ${recipe.ingredients.length - 6} weitere'),
-                  const SizedBox(height: 12),
-                ],
-                if (recipe.instructions.isNotEmpty) ...[
-                  Text(
-                    'Zubereitung',
-                    style: Theme.of(context).textTheme.labelLarge,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    recipe.instructions
-                        .take(4)
-                        .indexed
-                        .map((entry) => '${entry.$1 + 1}. ${entry.$2}')
-                        .join('\n'),
-                  ),
-                  if (recipe.instructions.length > 4)
-                    Text('… ${recipe.instructions.length - 4} weitere'),
-                ],
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => context.pop(false),
-            child: const Text('Abbrechen'),
-          ),
-          FilledButton(
-            onPressed: () => context.pop(true),
-            child: const Text('Übernehmen'),
-          ),
-        ],
+      builder: (context) => _RecipePolishReviewDialog(
+        original: original,
+        suggestion: suggestion,
+        seasonOptions: _seasonOptions,
       ),
     );
+  }
+
+  Future<void> _generateRecipeImage() async {
+    final imageRepo = widget.repo is RecipeAiImageRepository
+        ? widget.repo as RecipeAiImageRepository
+        : null;
+    if (imageRepo == null || _isGeneratingImage || _imagePaths.length >= 5) {
+      return;
+    }
+
+    late final Recipe draft;
+    try {
+      draft = _currentDraftRecipe();
+    } catch (error) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_saveErrorMessage(error))));
+      return;
+    }
+
+    setState(() => _isGeneratingImage = true);
+    try {
+      final imagePath = await imageRepo.generateRecipeImage(draft);
+      if (!mounted) return;
+      setState(
+        () => _imagePaths = [imagePath, ..._imagePaths].take(5).toList(),
+      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('KI-Bild erstellt.')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_imageErrorMessage(error))));
+    } finally {
+      if (mounted) setState(() => _isGeneratingImage = false);
+    }
   }
 
   void _replaceFormWithRecipe(Recipe recipe) {
@@ -718,6 +701,11 @@ class _NewRecipePageState extends State<NewRecipePage> {
     return 'KI konnte das Rezept nicht aufräumen.';
   }
 
+  String _imageErrorMessage(Object error) {
+    if (error is RecipeSaveException) return error.userMessage;
+    return 'KI konnte kein Bild erstellen.';
+  }
+
   Widget _buildPhotoPicker(ColorScheme colorScheme) {
     final imagePath = _imagePaths.isEmpty ? null : _imagePaths.first;
     final canAddImages = _imagePaths.length < 5;
@@ -784,6 +772,22 @@ class _NewRecipePageState extends State<NewRecipePage> {
               onPressed: canAddImages ? _pickImages : null,
               icon: const Icon(Icons.add_photo_alternate_outlined),
               tooltip: 'Foto hinzufügen',
+            ),
+            IconButton(
+              onPressed:
+                  canAddImages &&
+                      !_isGeneratingImage &&
+                      widget.repo is RecipeAiImageRepository
+                  ? _generateRecipeImage
+                  : null,
+              icon: _isGeneratingImage
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.auto_awesome_outlined),
+              tooltip: 'KI-Bild generieren',
             ),
           ],
         ),
@@ -1136,6 +1140,613 @@ class _NewRecipePageState extends State<NewRecipePage> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _RecipePolishReviewDialog extends StatefulWidget {
+  const _RecipePolishReviewDialog({
+    required this.original,
+    required this.suggestion,
+    required this.seasonOptions,
+  });
+
+  final Recipe original;
+  final Recipe suggestion;
+  final List<String> seasonOptions;
+
+  @override
+  State<_RecipePolishReviewDialog> createState() =>
+      _RecipePolishReviewDialogState();
+}
+
+class _RecipePolishReviewDialogState extends State<_RecipePolishReviewDialog> {
+  late final TextEditingController _titleController;
+  late final TextEditingController _servingsController;
+  late final TextEditingController _prepTimeController;
+  late final TextEditingController _cookTimeController;
+  late final TextEditingController _notesController;
+  late final TextEditingController _tagController;
+  late String _season;
+  final List<_IngredientRowData> _ingredients = [];
+  final List<_StepRowData> _steps = [];
+  final Set<String> _tags = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRecipe(widget.suggestion);
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _servingsController.dispose();
+    _prepTimeController.dispose();
+    _cookTimeController.dispose();
+    _notesController.dispose();
+    _tagController.dispose();
+    for (final row in _ingredients) {
+      row.dispose();
+    }
+    for (final row in _steps) {
+      row.dispose();
+    }
+    super.dispose();
+  }
+
+  void _loadRecipe(Recipe recipe) {
+    _titleController = TextEditingController(text: recipe.title);
+    _servingsController = TextEditingController(
+      text: recipe.servings?.toString() ?? '',
+    );
+    _prepTimeController = TextEditingController(
+      text: recipe.prepTimeMinutes?.toString() ?? '',
+    );
+    _cookTimeController = TextEditingController(
+      text: recipe.cookTimeMinutes?.toString() ?? '',
+    );
+    _notesController = TextEditingController(text: recipe.notes);
+    _tagController = TextEditingController();
+    _season = widget.seasonOptions.contains(recipe.season)
+        ? recipe.season
+        : widget.seasonOptions.first;
+    _replaceIngredients(recipe.ingredients);
+    _replaceSteps(recipe.instructions);
+    _tags
+      ..clear()
+      ..addAll(recipe.tags);
+  }
+
+  void _resetBasics() {
+    final original = widget.original;
+    setState(() {
+      _titleController.text = original.title;
+      _servingsController.text = original.servings?.toString() ?? '';
+      _prepTimeController.text = original.prepTimeMinutes?.toString() ?? '';
+      _cookTimeController.text = original.cookTimeMinutes?.toString() ?? '';
+      _season = widget.seasonOptions.contains(original.season)
+          ? original.season
+          : widget.seasonOptions.first;
+    });
+  }
+
+  void _resetIngredients() {
+    setState(() => _replaceIngredients(widget.original.ingredients));
+  }
+
+  void _resetSteps() {
+    setState(() => _replaceSteps(widget.original.instructions));
+  }
+
+  void _resetTags() {
+    setState(() {
+      _tags
+        ..clear()
+        ..addAll(widget.original.tags);
+    });
+  }
+
+  void _resetNotes() {
+    setState(() => _notesController.text = widget.original.notes);
+  }
+
+  void _replaceIngredients(List<RecipeIngredient> ingredients) {
+    for (final row in _ingredients) {
+      row.dispose();
+    }
+    _ingredients
+      ..clear()
+      ..addAll(
+        ingredients.map(
+          (ingredient) => _IngredientRowData(
+            quantity: ingredient.quantity,
+            unit: ingredient.unit,
+            name: ingredient.name,
+            note: ingredient.note,
+            excludeFromShopping: ingredient.excludeFromShopping,
+          ),
+        ),
+      );
+    if (_ingredients.isEmpty) _ingredients.add(_IngredientRowData());
+  }
+
+  void _replaceSteps(List<String> steps) {
+    for (final row in _steps) {
+      row.dispose();
+    }
+    _steps
+      ..clear()
+      ..addAll(steps.map((step) => _StepRowData(text: step)));
+    if (_steps.isEmpty) _steps.add(_StepRowData());
+  }
+
+  void _addIngredient() {
+    setState(() => _ingredients.add(_IngredientRowData()));
+  }
+
+  void _removeIngredient(int index) {
+    final row = _ingredients.removeAt(index);
+    row.dispose();
+    if (_ingredients.isEmpty) _ingredients.add(_IngredientRowData());
+    setState(() {});
+  }
+
+  void _addStep() {
+    setState(() => _steps.add(_StepRowData()));
+  }
+
+  void _removeStep(int index) {
+    final row = _steps.removeAt(index);
+    row.dispose();
+    if (_steps.isEmpty) _steps.add(_StepRowData());
+    setState(() {});
+  }
+
+  void _addTag() {
+    final value = _tagController.text.trim();
+    if (value.isEmpty) return;
+    setState(() {
+      _tags.add(value);
+      _tagController.clear();
+    });
+  }
+
+  Recipe _reviewedRecipe() {
+    return Recipe.create(
+      _titleController.text,
+      ingredients: _ingredients
+          .map(
+            (row) => RecipeIngredient(
+              name: row.nameController.text.trim(),
+              quantity: row.quantityController.text.trim(),
+              unit: row.unitController.text.trim(),
+              note: row.noteController.text.trim(),
+              excludeFromShopping: row.excludeFromShopping,
+            ),
+          )
+          .where((ingredient) => ingredient.name.isNotEmpty)
+          .toList(),
+      instructions: _steps
+          .map((row) => row.controller.text.trim())
+          .where((step) => step.isNotEmpty)
+          .toList(),
+      tags: _tags.toList(),
+      imagePaths: widget.original.imagePaths,
+      servings: _positiveInt(_servingsController.text),
+      season: _season,
+      prepTimeMinutes: _positiveInt(_prepTimeController.text),
+      cookTimeMinutes: _positiveInt(_cookTimeController.text),
+      notes: _notesController.text,
+    );
+  }
+
+  int? _positiveInt(String value) {
+    final parsed = int.tryParse(value.trim());
+    if (parsed == null || parsed <= 0) return null;
+    return parsed;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog.fullscreen(
+      child: DefaultTabController(
+        length: 2,
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Text('KI-Vorschlag prüfen'),
+            leading: IconButton(
+              onPressed: () => Navigator.of(context).pop(),
+              icon: const Icon(Icons.close_rounded),
+              tooltip: 'Abbrechen',
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(_reviewedRecipe()),
+                child: const Text('Übernehmen'),
+              ),
+              const SizedBox(width: 12),
+            ],
+            bottom: const TabBar(
+              tabs: [
+                Tab(text: 'Bearbeiten'),
+                Tab(text: 'Original'),
+              ],
+            ),
+          ),
+          body: TabBarView(
+            children: [
+              ListView(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                children: [
+                  _ReviewSection(
+                    title: 'Grundlagen',
+                    onReset: _resetBasics,
+                    child: _buildBasics(),
+                  ),
+                  const SizedBox(height: 12),
+                  _ReviewSection(
+                    title: 'Zutaten',
+                    onReset: _resetIngredients,
+                    child: _buildIngredients(),
+                  ),
+                  const SizedBox(height: 12),
+                  _ReviewSection(
+                    title: 'Zubereitung',
+                    onReset: _resetSteps,
+                    child: _buildSteps(),
+                  ),
+                  const SizedBox(height: 12),
+                  _ReviewSection(
+                    title: 'Tags',
+                    onReset: _resetTags,
+                    child: _buildTags(),
+                  ),
+                  const SizedBox(height: 12),
+                  _ReviewSection(
+                    title: 'Notizen',
+                    onReset: _resetNotes,
+                    child: TextField(
+                      controller: _notesController,
+                      minLines: 3,
+                      maxLines: 6,
+                      decoration: const InputDecoration(hintText: 'Optional'),
+                    ),
+                  ),
+                ],
+              ),
+              _OriginalRecipePreview(recipe: widget.original),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBasics() {
+    return Column(
+      children: [
+        TextField(
+          controller: _titleController,
+          decoration: const InputDecoration(labelText: 'Titel'),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _servingsController,
+                decoration: const InputDecoration(labelText: 'Portionen'),
+                keyboardType: TextInputType.number,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                initialValue: _season,
+                decoration: const InputDecoration(labelText: 'Saison'),
+                items: [
+                  for (final season in widget.seasonOptions)
+                    DropdownMenuItem(value: season, child: Text(season)),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => _season = value);
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _prepTimeController,
+                decoration: const InputDecoration(labelText: 'Vorbereitung'),
+                keyboardType: TextInputType.number,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                controller: _cookTimeController,
+                decoration: const InputDecoration(labelText: 'Kochen'),
+                keyboardType: TextInputType.number,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildIngredients() {
+    return Column(
+      children: [
+        ...List.generate(_ingredients.length, (index) {
+          final row = _ingredients[index];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Column(
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 64,
+                      child: TextField(
+                        controller: row.quantityController,
+                        decoration: const InputDecoration(hintText: '2'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 68,
+                      child: TextField(
+                        controller: row.unitController,
+                        decoration: const InputDecoration(hintText: 'EL'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: row.nameController,
+                        decoration: const InputDecoration(hintText: 'Zutat'),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => _removeIngredient(index),
+                      icon: const Icon(Icons.delete_outline),
+                      tooltip: 'Zutat entfernen',
+                    ),
+                  ],
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(left: 140, right: 48, top: 6),
+                  child: TextField(
+                    controller: row.noteController,
+                    decoration: const InputDecoration(hintText: 'Notiz'),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: _addIngredient,
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Zutat'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSteps() {
+    return Column(
+      children: [
+        ...List.generate(_steps.length, (index) {
+          final row = _steps[index];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 14),
+                  child: CircleAvatar(radius: 14, child: Text('${index + 1}')),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    controller: row.controller,
+                    minLines: 1,
+                    maxLines: 5,
+                    decoration: const InputDecoration(hintText: 'Schritt'),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => _removeStep(index),
+                  icon: const Icon(Icons.delete_outline),
+                  tooltip: 'Schritt entfernen',
+                ),
+              ],
+            ),
+          );
+        }),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: _addStep,
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Schritt'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTags() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ...selectableRecipeTagLabelsDe.entries.map((entry) {
+              final selected = _tags.contains(entry.key);
+              return FilterChip(
+                label: Text(entry.value),
+                selected: selected,
+                onSelected: (value) {
+                  setState(() {
+                    if (value) {
+                      _tags.add(entry.key);
+                    } else {
+                      _tags.remove(entry.key);
+                    }
+                  });
+                },
+              );
+            }),
+            ..._tags
+                .where((tag) => !selectableRecipeTagLabelsDe.containsKey(tag))
+                .map(
+                  (tag) => InputChip(
+                    label: Text(tag),
+                    selected: true,
+                    onDeleted: () => setState(() => _tags.remove(tag)),
+                  ),
+                ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _tagController,
+                decoration: const InputDecoration(hintText: 'Eigener Tag'),
+                onSubmitted: (_) => _addTag(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              onPressed: _addTag,
+              icon: const Icon(Icons.add_rounded),
+              tooltip: 'Tag hinzufügen',
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ReviewSection extends StatelessWidget {
+  const _ReviewSection({
+    required this.title,
+    required this.child,
+    required this.onReset,
+  });
+
+  final String title;
+  final Widget child;
+  final VoidCallback onReset;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: onReset,
+                  icon: const Icon(Icons.undo_rounded),
+                  label: const Text('Original'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OriginalRecipePreview extends StatelessWidget {
+  const _OriginalRecipePreview({required this.recipe});
+
+  final Recipe recipe;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      children: [
+        Text(recipe.title, style: textTheme.titleLarge),
+        const SizedBox(height: 8),
+        Text(
+          [
+            if (recipe.servings != null) '${recipe.servings} Portionen',
+            if (recipe.totalTimeMinutes != null)
+              '${recipe.totalTimeMinutes} min',
+            if (recipe.season.isNotEmpty) recipe.season,
+          ].join(' · '),
+          style: textTheme.bodyMedium?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text('Zutaten', style: textTheme.titleMedium),
+        const SizedBox(height: 8),
+        ...recipe.ingredients.map(
+          (ingredient) => Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text('• ${ingredient.label}'),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text('Zubereitung', style: textTheme.titleMedium),
+        const SizedBox(height: 8),
+        ...recipe.instructions.indexed.map(
+          (entry) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text('${entry.$1 + 1}. ${entry.$2}'),
+          ),
+        ),
+        if (recipe.tags.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Text('Tags', style: textTheme.titleMedium),
+          const SizedBox(height: 8),
+          Text(recipe.tags.map(tagLabelDe).join(' · ')),
+        ],
+        if (recipe.notes.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Text('Notizen', style: textTheme.titleMedium),
+          const SizedBox(height: 8),
+          Text(recipe.notes),
+        ],
+      ],
     );
   }
 }

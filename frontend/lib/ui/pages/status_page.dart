@@ -178,6 +178,8 @@ class _StatusPageState extends State<StatusPage> {
           const SizedBox(height: 20),
           Text('Design', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 10),
+          const _ThemeModeSettingsCard(),
+          const SizedBox(height: 12),
           const _ThemeSettingsCard(),
         ],
       ),
@@ -432,6 +434,46 @@ class _StatusRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ThemeModeSettingsCard extends StatelessWidget {
+  const _ThemeModeSettingsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: themeController,
+      builder: (context, _) {
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Modus',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                SegmentedButton<ThemeMode>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(value: ThemeMode.system, label: Text('Auto')),
+                    ButtonSegment(value: ThemeMode.light, label: Text('Hell')),
+                    ButtonSegment(value: ThemeMode.dark, label: Text('Dunkel')),
+                  ],
+                  selected: {themeController.themeMode},
+                  onSelectionChanged: (selection) {
+                    themeController.setThemeMode(selection.first);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

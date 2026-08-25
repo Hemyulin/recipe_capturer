@@ -213,6 +213,57 @@ class _TodayPageState extends State<TodayPage> {
     }
   }
 
+  Future<void> _repeatRecipe(
+    String slotId,
+    String mealTitle,
+    Recipe recipe,
+  ) async {
+    final weekdays = await showModalBottomSheet<Set<int>>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => _RepeatMealSheet(
+        mealTitle: mealTitle,
+        recipeTitle: recipe.title,
+        startDate: _today,
+        endDate: _endOfWeek(_today),
+      ),
+    );
+    if (weekdays == null || weekdays.isEmpty || !mounted) return;
+
+    final dates = _datesUntil(
+      _today,
+      _endOfWeek(_today),
+    ).where((date) => weekdays.contains(date.weekday)).toList();
+    if (dates.isEmpty) return;
+
+    var queuedCount = 0;
+    for (final date in dates) {
+      try {
+        await widget.mealPlanRepo.setRecipe(
+          date: date,
+          meal: slotId,
+          recipeId: recipe.id,
+        );
+      } catch (error) {
+        if (!mounted) return;
+        if (error is MealPlanQueuedException) {
+          queuedCount += 1;
+          continue;
+        }
+        _showPlanMessage(_mealPlanErrorMessage(error));
+        await _loadRecipes();
+        return;
+      }
+    }
+
+    if (!mounted) return;
+    await _loadRecipes();
+    final suffix = queuedCount > 0
+        ? ' Wird synchronisiert, sobald die Verbindung wieder da ist.'
+        : '';
+    _showPlanMessage('${dates.length} Mahlzeiten geplant.$suffix');
+  }
+
   Map<String, String?> _slotValues(List<MealPlanSlot> slots) {
     return {
       for (final slot in slots)
@@ -255,6 +306,19 @@ class _TodayPageState extends State<TodayPage> {
     return DateTime(date.year, date.month, date.day);
   }
 
+  static DateTime _endOfWeek(DateTime date) {
+    return _dateOnly(date).add(Duration(days: 7 - date.weekday));
+  }
+
+  static Iterable<DateTime> _datesUntil(DateTime start, DateTime end) sync* {
+    var cursor = _dateOnly(start);
+    final last = _dateOnly(end);
+    while (!cursor.isAfter(last)) {
+      yield cursor;
+      cursor = cursor.add(const Duration(days: 1));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final breakfast = _recipeForSlot('breakfast');
@@ -279,7 +343,7 @@ class _TodayPageState extends State<TodayPage> {
               onRetry: _loadRecipes,
             )
           : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
               children: [
                 MealPlanSyncBanner(status: _syncStatus),
                 if (_syncStatus.isVisible) const SizedBox(height: 12),
@@ -289,13 +353,16 @@ class _TodayPageState extends State<TodayPage> {
                   recipe: breakfast,
                   isLeftovers: breakfastIsLeftovers,
                   extras: _extraLabels('breakfast'),
-                  isRecurring: breakfast != null && !breakfastIsLeftovers,
                   onTap: breakfast == null || breakfastIsLeftovers
                       ? () => _chooseRecipe('breakfast')
                       : () => _openRecipe(breakfast),
                   onChange: () => _chooseRecipe('breakfast'),
                   onClear: () => _clearRecipe('breakfast'),
                   onExtras: () => _editExtras('breakfast'),
+                  onRepeat: breakfast == null || breakfastIsLeftovers
+                      ? null
+                      : () =>
+                            _repeatRecipe('breakfast', 'Frühstück', breakfast),
                 ),
                 const SizedBox(height: 12),
                 _MealSlotCard(
@@ -310,6 +377,9 @@ class _TodayPageState extends State<TodayPage> {
                   onChange: () => _chooseRecipe('lunch'),
                   onClear: () => _clearRecipe('lunch'),
                   onExtras: () => _editExtras('lunch'),
+                  onRepeat: lunch == null || lunchIsLeftovers
+                      ? null
+                      : () => _repeatRecipe('lunch', 'Mittagessen', lunch),
                 ),
                 const SizedBox(height: 12),
                 _MealSlotCard(
@@ -324,6 +394,9 @@ class _TodayPageState extends State<TodayPage> {
                   onChange: () => _chooseRecipe('dinner'),
                   onClear: () => _clearRecipe('dinner'),
                   onExtras: () => _editExtras('dinner'),
+                  onRepeat: dinner == null || dinnerIsLeftovers
+                      ? null
+                      : () => _repeatRecipe('dinner', 'Abendessen', dinner),
                 ),
                 const SizedBox(height: 18),
                 Card(
@@ -363,11 +436,11 @@ class _MealSlotCard extends StatelessWidget {
     this.recipe,
     this.isLeftovers = false,
     this.extras = const [],
-    this.isRecurring = false,
     this.onTap,
     this.onChange,
     this.onClear,
     this.onExtras,
+    this.onRepeat,
   });
 
   final String title;
@@ -375,11 +448,11 @@ class _MealSlotCard extends StatelessWidget {
   final Recipe? recipe;
   final bool isLeftovers;
   final List<String> extras;
-  final bool isRecurring;
   final VoidCallback? onTap;
   final VoidCallback? onChange;
   final VoidCallback? onClear;
   final VoidCallback? onExtras;
+  final VoidCallback? onRepeat;
 
   @override
   Widget build(BuildContext context) {
@@ -446,10 +519,11 @@ class _MealSlotCard extends StatelessWidget {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        if (isRecurring)
-                          const _MealBadge(
-                            icon: Icons.lock_outline,
-                            label: 'wiederkehrend',
+                        if (onRepeat != null)
+                          _MealActionChip(
+                            icon: Icons.repeat_rounded,
+                            label: 'Wiederholen',
+                            onTap: onRepeat!,
                           ),
                         if (recipe?.totalTimeMinutes != null)
                           _MealBadge(
@@ -466,6 +540,7 @@ class _MealSlotCard extends StatelessWidget {
                   ],
                 ),
               ),
+              const SizedBox(width: 8),
               _ExtrasButton(onPressed: onExtras, hasExtras: extras.isNotEmpty),
             ],
           ),
@@ -495,22 +570,20 @@ class _ExtrasButton extends StatelessWidget {
 
     return Tooltip(
       message: 'Beilagen bearbeiten',
-      child: TextButton.icon(
+      child: IconButton.filledTonal(
         onPressed: onPressed,
-        style: TextButton.styleFrom(
-          visualDensity: VisualDensity.compact,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          minimumSize: const Size(0, 34),
+        style: IconButton.styleFrom(
+          fixedSize: const Size.square(38),
+          minimumSize: const Size.square(38),
+          padding: EdgeInsets.zero,
           foregroundColor: hasExtras
               ? colorScheme.onSecondaryContainer
               : colorScheme.onSurfaceVariant,
           backgroundColor: hasExtras
               ? colorScheme.secondaryContainer
               : colorScheme.surfaceContainerHighest,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
-        icon: const Icon(Icons.restaurant_menu_rounded, size: 16),
-        label: const Text('Beilagen'),
+        icon: const Icon(Icons.restaurant_menu_rounded, size: 18),
       ),
     );
   }
@@ -653,6 +726,127 @@ class _RevealAction extends StatelessWidget {
           child: Icon(icon, color: foregroundColor),
         ),
       ),
+    );
+  }
+}
+
+class _RepeatMealSheet extends StatefulWidget {
+  const _RepeatMealSheet({
+    required this.mealTitle,
+    required this.recipeTitle,
+    required this.startDate,
+    required this.endDate,
+  });
+
+  final String mealTitle;
+  final String recipeTitle;
+  final DateTime startDate;
+  final DateTime endDate;
+
+  @override
+  State<_RepeatMealSheet> createState() => _RepeatMealSheetState();
+}
+
+class _RepeatMealSheetState extends State<_RepeatMealSheet> {
+  late final Set<int> _weekdays = {widget.startDate.weekday};
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Wiederholen', style: textTheme.titleLarge),
+            const SizedBox(height: 6),
+            Text(
+              '${widget.mealTitle}: ${widget.recipeTitle}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (var weekday = 1; weekday <= 7; weekday++)
+                  FilterChip(
+                    label: Text(_weekdayLabel(weekday)),
+                    selected: _weekdays.contains(weekday),
+                    onSelected: (selected) {
+                      setState(() {
+                        if (selected) {
+                          _weekdays.add(weekday);
+                        } else {
+                          _weekdays.remove(weekday);
+                        }
+                      });
+                    },
+                  ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Von heute bis Sonntag.',
+              style: textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _weekdays.isEmpty
+                    ? null
+                    : () => Navigator.of(context).pop(_weekdays),
+                icon: const Icon(Icons.repeat_rounded),
+                label: const Text('Eintragen'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _weekdayLabel(int weekday) {
+    const labels = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+    return labels[weekday - 1];
+  }
+}
+
+class _MealActionChip extends StatelessWidget {
+  const _MealActionChip({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return ActionChip(
+      avatar: Icon(icon, size: 15, color: colorScheme.primary),
+      label: Text(label),
+      onPressed: onTap,
+      visualDensity: VisualDensity.compact,
+      backgroundColor: colorScheme.surfaceContainerHigh,
+      side: BorderSide(color: colorScheme.outlineVariant),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     );
   }
 }

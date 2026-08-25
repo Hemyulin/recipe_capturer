@@ -50,8 +50,10 @@ pnpm rebuild better-sqlite3
 | `COOKBUK_HOUSEHOLD_ID` | `local-household` | MVP household scope |
 | `COOKBUK_HOUSEHOLD_NAME` | `CookBuk Household` | Display/admin label |
 | `COOKBUK_CORS_ORIGIN` | `*` | Comma-separated origins or `*` |
-| `OPENAI_API_KEY` | empty | Enables AI recipe import from photos |
-| `COOKBUK_OPENAI_RECIPE_MODEL` | `gpt-5-mini` | Vision-capable model for recipe drafts |
+| `OPENAI_API_KEY` | empty | Enables AI recipe import, polish, and generated images |
+| `COOKBUK_OPENAI_RECIPE_MODEL` | `gpt-5-mini` | Vision-capable model for recipe drafts and polish |
+| `COOKBUK_OPENAI_IMAGE_MODEL` | `gpt-image-1-mini` | Image model for generated recipe photos |
+| `COOKBUK_OPENAI_IMAGE_QUALITY` | `medium` | Generated image quality: `low`, `medium`, `high`, or `auto` |
 | `COOKBUK_RECIPE_IMPORT_LANGUAGE` | `de` | AI import output language: `de` or `en` |
 
 For Pi + Tailscale, run with `COOKBUK_HOST=0.0.0.0` and point the Flutter app at
@@ -104,6 +106,10 @@ Endpoints:
 - `POST /recipes/:id/image` with multipart field `image`
 - `POST /recipes/imports/photo` with multipart field `image`; returns an
   editable draft and requires `OPENAI_API_KEY`
+- `POST /recipes/imports/polish`; returns an improved editable draft and
+  requires `OPENAI_API_KEY`
+- `POST /recipes/imports/generated-image`; stores a generated recipe photo and
+  returns an `/images/...` path; requires `OPENAI_API_KEY`
 - `DELETE /recipes/:id`
 
 Delete currently archives recipes instead of hard-deleting them.
@@ -154,6 +160,21 @@ Endpoints:
 - `PUT /meal-plan/:date/:meal/extras`
 - `DELETE /meal-plan/:date/:meal`
 
+Shopping knowledge:
+
+- `GET /shopping/stores`
+- `POST /shopping/stores`
+- `PATCH /shopping/stores/:id`
+- `DELETE /shopping/stores/:id`
+- `GET /shopping/items`
+- `POST /shopping/items`
+- `PATCH /shopping/items/:id`
+- `DELETE /shopping/items/:id`
+- `GET /shopping/manual-items?weekStart=YYYY-MM-DD`
+- `POST /shopping/manual-items/:weekStart`
+- `PATCH /shopping/manual-items/:id`
+- `DELETE /shopping/manual-items/:id`
+
 Meal slots can carry lightweight text extras such as bread, salad, or quark.
 They can also carry recipe extras for side dishes such as hummus, dips, cakes, or
 anything else that should still behave like a standalone recipe. Text extras are
@@ -182,8 +203,10 @@ Tracked schema includes:
 - recipe tags, ingredients, and steps
 - meal plan slots with `recipe`, `leftovers`, or `empty`
 - cook events for automatic statistics
+- shopping stores
+- persistent shopping items with optional default store
+- manual weekly shopping items
 
 ## MVP TODO
 
-- Add manual shopping-list items.
 - Add Pi deployment and backup scripts.

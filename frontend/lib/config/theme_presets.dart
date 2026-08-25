@@ -45,34 +45,51 @@ class CookbukThemePreset {
 
   List<Color> get swatches => [primary, secondary, tertiary];
 
-  ThemeData buildTheme() {
+  ThemeData buildTheme({Brightness brightness = Brightness.light}) {
+    final isDark = brightness == Brightness.dark;
     final colorScheme =
         ColorScheme.fromSeed(
           seedColor: seedColor,
-          brightness: Brightness.light,
+          brightness: brightness,
         ).copyWith(
-          primary: primary,
-          onPrimary: Colors.white,
-          onPrimaryContainer: onPrimaryContainer,
-          primaryContainer: primaryContainer,
-          secondary: secondary,
-          onSecondary: Colors.white,
-          secondaryContainer: secondaryContainer,
-          onSecondaryContainer: onSecondaryContainer,
-          tertiary: tertiary,
-          onTertiary: Colors.white,
-          tertiaryContainer: tertiaryContainer,
-          onTertiaryContainer: onTertiaryContainer,
-          surface: surface,
-          onSurface: const Color(0xFF21211D),
-          onSurfaceVariant: const Color(0xFF6B6960),
-          surfaceContainerLowest: Colors.white,
-          surfaceContainerLow: surfaceLow,
-          surfaceContainer: surfaceLow,
-          surfaceContainerHigh: surfaceHigh,
-          surfaceContainerHighest: surfaceHighest,
-          outline: outline,
-          outlineVariant: outlineVariant,
+          primary: isDark ? _darkAccent(primary) : primary,
+          onPrimary: isDark ? const Color(0xFF171511) : Colors.white,
+          onPrimaryContainer: isDark
+              ? _darkOnContainer(primaryContainer)
+              : onPrimaryContainer,
+          primaryContainer: isDark ? _darkContainer(primary) : primaryContainer,
+          secondary: isDark ? _darkAccent(secondary) : secondary,
+          onSecondary: isDark ? const Color(0xFF171511) : Colors.white,
+          secondaryContainer: isDark
+              ? _darkContainer(secondary)
+              : secondaryContainer,
+          onSecondaryContainer: isDark
+              ? _darkOnContainer(secondaryContainer)
+              : onSecondaryContainer,
+          tertiary: isDark ? _darkAccent(tertiary) : tertiary,
+          onTertiary: isDark ? const Color(0xFF171511) : Colors.white,
+          tertiaryContainer: isDark
+              ? _darkContainer(tertiary)
+              : tertiaryContainer,
+          onTertiaryContainer: isDark
+              ? _darkOnContainer(tertiaryContainer)
+              : onTertiaryContainer,
+          surface: isDark ? _darkSurface : _lightSurface,
+          onSurface: isDark ? _darkOnSurface : _lightOnSurface,
+          onSurfaceVariant: isDark
+              ? _darkOnSurfaceVariant
+              : _lightOnSurfaceVariant,
+          surfaceContainerLowest: isDark
+              ? _darkSurfaceLowest
+              : _lightSurfaceLowest,
+          surfaceContainerLow: isDark ? _darkSurfaceLow : _lightSurfaceLow,
+          surfaceContainer: isDark ? _darkSurfaceLow : _lightSurfaceLow,
+          surfaceContainerHigh: isDark ? _darkSurfaceHigh : _lightSurfaceHigh,
+          surfaceContainerHighest: isDark
+              ? _darkSurfaceHighest
+              : _lightSurfaceHighest,
+          outline: isDark ? _darkOutline : _lightOutline,
+          outlineVariant: isDark ? _darkOutlineVariant : _lightOutlineVariant,
         );
 
     final base = ThemeData(useMaterial3: true, colorScheme: colorScheme);
@@ -141,9 +158,11 @@ class CookbukThemePreset {
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: colorScheme.onSurface,
+        backgroundColor: isDark
+            ? colorScheme.surfaceContainerHighest
+            : colorScheme.onSurface,
         contentTextStyle: textTheme.bodyMedium?.copyWith(
-          color: colorScheme.surface,
+          color: isDark ? colorScheme.onSurface : colorScheme.surface,
         ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       ),
@@ -233,6 +252,38 @@ class CookbukThemePreset {
       ),
     );
   }
+
+  static const _lightSurface = Color(0xFFFBF8F2);
+  static const _lightSurfaceLowest = Color(0xFFFFFFFF);
+  static const _lightSurfaceLow = Color(0xFFFFFCF7);
+  static const _lightSurfaceHigh = Color(0xFFF5EFE6);
+  static const _lightSurfaceHighest = Color(0xFFEDE3D6);
+  static const _lightOnSurface = Color(0xFF21211D);
+  static const _lightOnSurfaceVariant = Color(0xFF6B6960);
+  static const _lightOutline = Color(0xFF90877B);
+  static const _lightOutlineVariant = Color(0xFFE1D7C9);
+
+  static const _darkSurface = Color(0xFF151411);
+  static const _darkSurfaceLowest = Color(0xFF0F0E0C);
+  static const _darkSurfaceLow = Color(0xFF1C1A16);
+  static const _darkSurfaceHigh = Color(0xFF26231E);
+  static const _darkSurfaceHighest = Color(0xFF312C25);
+  static const _darkOnSurface = Color(0xFFF3EDE4);
+  static const _darkOnSurfaceVariant = Color(0xFFC9C0B4);
+  static const _darkOutline = Color(0xFF998F82);
+  static const _darkOutlineVariant = Color(0xFF494239);
+
+  static Color _darkAccent(Color color) {
+    return Color.lerp(color, Colors.white, 0.34)!;
+  }
+
+  static Color _darkContainer(Color color) {
+    return Color.lerp(_darkSurfaceHighest, color, 0.42)!;
+  }
+
+  static Color _darkOnContainer(Color color) {
+    return Color.lerp(color, Colors.white, 0.76)!;
+  }
 }
 
 class CookbukThemes {
@@ -263,16 +314,16 @@ class CookbukThemes {
     CookbukThemePreset(
       id: 'sage',
       label: 'Salbei',
-      seedColor: Color(0xFF4F7C4F),
-      primary: Color(0xFF2F6B3F),
-      primaryContainer: Color(0xFFD4EBCF),
-      onPrimaryContainer: Color(0xFF0B2A14),
-      secondary: Color(0xFF5E8E62),
-      secondaryContainer: Color(0xFFE0F0D9),
-      onSecondaryContainer: Color(0xFF16351A),
-      tertiary: Color(0xFF7A8F4C),
-      tertiaryContainer: Color(0xFFE6EFC8),
-      onTertiaryContainer: Color(0xFF24310C),
+      seedColor: Color(0xFF527A57),
+      primary: Color(0xFF2F7047),
+      primaryContainer: Color(0xFFD6EBD8),
+      onPrimaryContainer: Color(0xFF0D2B18),
+      secondary: Color(0xFF73945D),
+      secondaryContainer: Color(0xFFE1EED4),
+      onSecondaryContainer: Color(0xFF233516),
+      tertiary: Color(0xFF43806D),
+      tertiaryContainer: Color(0xFFD3ECE5),
+      onTertiaryContainer: Color(0xFF0D3128),
       surface: Color(0xFFF4F8EF),
       surfaceLow: Color(0xFFFBFFF7),
       surfaceHigh: Color(0xFFEAF2E2),
@@ -284,13 +335,13 @@ class CookbukThemes {
     CookbukThemePreset(
       id: 'tomato',
       label: 'Tomate',
-      seedColor: Color(0xFFC94A3A),
-      primary: Color(0xFFB94334),
-      primaryContainer: Color(0xFFFFDAD3),
-      onPrimaryContainer: Color(0xFF4E130B),
-      secondary: Color(0xFF5E7C42),
-      secondaryContainer: Color(0xFFE1EACB),
-      onSecondaryContainer: Color(0xFF1D2B12),
+      seedColor: Color(0xFF5E7C42),
+      primary: Color(0xFF5E7C42),
+      primaryContainer: Color(0xFFE1EACB),
+      onPrimaryContainer: Color(0xFF1D2B12),
+      secondary: Color(0xFFB94334),
+      secondaryContainer: Color(0xFFFFDAD3),
+      onSecondaryContainer: Color(0xFF4E130B),
       tertiary: Color(0xFFC18A2E),
       tertiaryContainer: Color(0xFFF8E4B7),
       onTertiaryContainer: Color(0xFF402A03),
@@ -305,16 +356,16 @@ class CookbukThemes {
     CookbukThemePreset(
       id: 'blueberry',
       label: 'Blaubeere',
-      seedColor: Color(0xFF5650A5),
-      primary: Color(0xFF46439B),
-      primaryContainer: Color(0xFFE2DFFF),
-      onPrimaryContainer: Color(0xFF17134A),
-      secondary: Color(0xFF6D4E9A),
-      secondaryContainer: Color(0xFFEBDDFB),
-      onSecondaryContainer: Color(0xFF291244),
-      tertiary: Color(0xFF315F9D),
-      tertiaryContainer: Color(0xFFDCE8FF),
-      onTertiaryContainer: Color(0xFF0B2345),
+      seedColor: Color(0xFF5756B0),
+      primary: Color(0xFF5149A6),
+      primaryContainer: Color(0xFFE4E0FF),
+      onPrimaryContainer: Color(0xFF19144D),
+      secondary: Color(0xFF7D4FA3),
+      secondaryContainer: Color(0xFFEFDDFC),
+      onSecondaryContainer: Color(0xFF311247),
+      tertiary: Color(0xFF3867A9),
+      tertiaryContainer: Color(0xFFDDE8FF),
+      onTertiaryContainer: Color(0xFF0D2547),
       surface: Color(0xFFF7F5FF),
       surfaceLow: Color(0xFFFDFBFF),
       surfaceHigh: Color(0xFFEEEAF8),
@@ -326,13 +377,13 @@ class CookbukThemes {
     CookbukThemePreset(
       id: 'sesame',
       label: 'Sesam',
-      seedColor: Color(0xFF8B7A48),
-      primary: Color(0xFF736332),
-      primaryContainer: Color(0xFFECE2B8),
-      onPrimaryContainer: Color(0xFF282008),
-      secondary: Color(0xFF3F7568),
-      secondaryContainer: Color(0xFFCBECE3),
-      onSecondaryContainer: Color(0xFF092720),
+      seedColor: Color(0xFF3F7568),
+      primary: Color(0xFF3F7568),
+      primaryContainer: Color(0xFFCBECE3),
+      onPrimaryContainer: Color(0xFF092720),
+      secondary: Color(0xFF736332),
+      secondaryContainer: Color(0xFFECE2B8),
+      onSecondaryContainer: Color(0xFF282008),
       tertiary: Color(0xFFB86545),
       tertiaryContainer: Color(0xFFF7DCCF),
       onTertiaryContainer: Color(0xFF471D0E),
