@@ -86,6 +86,7 @@ class Recipe {
   final DateTime createdAt;
   final List<RecipeIngredient> ingredients;
   final List<String> instructions;
+  final List<String> preparationTasks;
   final List<String> tags;
   final bool isFavorite;
   final List<String> imagePaths;
@@ -102,6 +103,7 @@ class Recipe {
     required this.createdAt,
     required this.ingredients,
     required this.instructions,
+    this.preparationTasks = const [],
     required this.tags,
     required this.isFavorite,
     this.imagePaths = const [],
@@ -135,6 +137,7 @@ class Recipe {
     String title, {
     List<RecipeIngredient> ingredients = const [],
     List<String> instructions = const [],
+    List<String> preparationTasks = const [],
     List<String> tags = const [],
     bool isFavorite = false,
     List<String> imagePaths = const [],
@@ -162,6 +165,10 @@ class Recipe {
           .map((step) => step.trim())
           .where((step) => step.isNotEmpty)
           .toList(),
+      preparationTasks: preparationTasks
+          .map((task) => task.trim())
+          .where((task) => task.isNotEmpty)
+          .toList(),
       tags: tags
           .map((tag) => tag.trim())
           .where((tag) => tag.isNotEmpty)
@@ -184,6 +191,7 @@ class Recipe {
     DateTime? createdAt,
     List<RecipeIngredient>? ingredients,
     List<String>? instructions,
+    List<String>? preparationTasks,
     List<String>? tags,
     bool? isFavorite,
     List<String>? imagePaths,
@@ -203,6 +211,7 @@ class Recipe {
       createdAt: createdAt ?? this.createdAt,
       ingredients: ingredients ?? this.ingredients,
       instructions: instructions ?? this.instructions,
+      preparationTasks: preparationTasks ?? this.preparationTasks,
       tags: tags ?? this.tags,
       isFavorite: isFavorite ?? this.isFavorite,
       imagePaths: imagePaths ?? this.imagePaths,
@@ -241,6 +250,7 @@ class Recipe {
           .map((ingredient) => ingredient.toJson())
           .toList(),
       'instructions': instructions,
+      'preparationTasks': preparationTasks,
       'tags': tags,
       'isFavorite': isFavorite,
       'imagePaths': imagePaths,
@@ -282,6 +292,10 @@ class Recipe {
           .where((ingredient) => ingredient.name.isNotEmpty)
           .toList(),
       instructions: instructions,
+      preparationTasks: (json['preparationTasks'] as List<dynamic>? ?? [])
+          .map((task) => task.toString().trim())
+          .where((task) => task.isNotEmpty)
+          .toList(),
       tags: (json['tags'] as List<dynamic>? ?? [])
           .map((e) => e.toString())
           .toList(),

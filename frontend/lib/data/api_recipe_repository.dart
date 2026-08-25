@@ -162,6 +162,7 @@ class ApiRecipeRepository
           .map((ingredient) => ingredient.toJson())
           .toList(),
       'instructions': recipe.instructions,
+      'preparationTasks': recipe.preparationTasks,
       'tags': recipe.tags,
       'imagePaths': recipe.imagePaths.map(_imagePathForPayload).toList(),
     };
@@ -192,6 +193,9 @@ class ApiRecipeRepository
           .toList(),
       instructions: (json['instructions'] as List<dynamic>? ?? [])
           .map((step) => step.toString())
+          .toList(),
+      preparationTasks: (json['preparationTasks'] as List<dynamic>? ?? [])
+          .map((task) => task.toString())
           .toList(),
       tags: (json['tags'] as List<dynamic>? ?? [])
           .map((tag) => tag.toString())

@@ -130,6 +130,46 @@ void main() {
     expect(find.text(testRecipes.first.title), findsNothing);
   });
 
+  testWidgets('shows preparation tasks from upcoming planned recipes', (
+    WidgetTester tester,
+  ) async {
+    final repo = InMemoryRecipeRepository();
+    final mealPlanRepo = InMemoryMealPlanRepository();
+    final lentils = Recipe.create(
+      'Madjadra',
+      ingredients: const [
+        RecipeIngredient(name: 'Linsen', quantity: '250', unit: 'g'),
+      ],
+      preparationTasks: const ['Linsen am Vormittag in Wasser legen.'],
+      instructions: const ['Zwiebeln langsam braten.'],
+      tags: const ['dinner'],
+      servings: 4,
+      prepTimeMinutes: 15,
+      cookTimeMinutes: 45,
+    );
+    await repo.add(lentils);
+
+    final today = DateTime.now();
+    final selectedDate = DateTime(today.year, today.month, today.day);
+    await mealPlanRepo.setRecipe(
+      date: selectedDate.add(const Duration(days: 1)),
+      meal: 'dinner',
+      recipeId: lentils.id,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TodayPage(repo: repo, mealPlanRepo: mealPlanRepo),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Heute vorbereiten'), findsOneWidget);
+    expect(find.text('Madjadra'), findsOneWidget);
+    expect(find.text('Morgen · Abendessen'), findsOneWidget);
+    expect(find.text('Linsen am Vormittag in Wasser legen.'), findsOneWidget);
+  });
+
   testWidgets('sets leftovers for a Today meal', (WidgetTester tester) async {
     final repo = InMemoryRecipeRepository();
     final mealPlanRepo = InMemoryMealPlanRepository();
@@ -403,6 +443,8 @@ void main() {
       'Oatmeal Buns',
       ingredients: const [
         RecipeIngredient(name: 'Haferflocken', quantity: '80', unit: 'g'),
+        RecipeIngredient(name: 'Ei'),
+        RecipeIngredient(name: 'Eier', quantity: '2'),
         RecipeIngredient(name: 'Magerquark', quantity: '250', unit: 'g'),
         RecipeIngredient(
           name: 'Backpapier',
@@ -414,9 +456,20 @@ void main() {
       instructions: const ['Mischen und backen.'],
       tags: const ['breakfast'],
     );
+    final cakeRecipe = Recipe.create(
+      'Kuchen',
+      ingredients: const [
+        RecipeIngredient(name: 'Ei (Gr. M)'),
+        RecipeIngredient(name: 'Mehl', quantity: '0,5', unit: 'kg'),
+        RecipeIngredient(name: 'Mehl', quantity: '200', unit: 'g'),
+      ],
+      instructions: const ['Backen.'],
+      tags: const ['dessert'],
+    );
 
     await repo.add(testRecipes.first);
     await repo.add(secondOatRecipe);
+    await repo.add(cakeRecipe);
 
     final today = DateTime.now();
     final selectedDate = DateTime(today.year, today.month, today.day);
@@ -431,6 +484,12 @@ void main() {
       recipeId: secondOatRecipe.id,
     );
     await mealPlanRepo.setLeftovers(date: selectedDate, meal: 'dinner');
+    await mealPlanRepo.setExtras(
+      date: selectedDate,
+      meal: 'dinner',
+      recipeExtraIds: [cakeRecipe.id],
+      extras: const [],
+    );
 
     await tester.pumpWidget(
       MaterialApp(
@@ -440,8 +499,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Einkauf'), findsOneWidget);
-    expect(find.text('2 Rezepte, 3 Zutaten'), findsOneWidget);
+    expect(find.text('2 Rezepte, 5 Zutaten'), findsOneWidget);
     expect(find.text('200 g Haferflocken'), findsOneWidget);
+    expect(find.text('4 Eier'), findsOneWidget);
+    expect(find.text('700 g Mehl'), findsOneWidget);
     expect(find.text('250 g Magerquark'), findsOneWidget);
     expect(find.text('1 Banane'), findsOneWidget);
     expect(find.text('1 Backpapier'), findsNothing);
@@ -450,7 +511,7 @@ void main() {
     await tester.tap(find.text('200 g Haferflocken'));
     await tester.pumpAndSettle();
 
-    expect(find.text('1/3'), findsOneWidget);
+    expect(find.text('1/5'), findsOneWidget);
   });
 
   testWidgets('copies the shopping list as plain text', (
