@@ -236,7 +236,7 @@ class _RecipeListPageState extends State<RecipeListPage> {
   }
 
   Future<void> _showFilterSheet() async {
-    final result = await showModalBottomSheet<_RecipeFilterState>(
+    await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       builder: (context) => _RecipeFilterSheet(
@@ -249,24 +249,26 @@ class _RecipeListPageState extends State<RecipeListPage> {
         ),
         seasons: _availableSeasons,
         tags: _availableTags,
+        onChanged: (value) {
+          if (!mounted) return;
+          setState(() {
+            _favoritesOnly = value.favoritesOnly;
+            _needsReviewOnly = value.needsReviewOnly;
+            _selectedSeason = value.selectedSeason;
+            _maxTotalTimeMinutes = value.maxTotalTimeMinutes;
+            _selectedTag = value.selectedTag;
+          });
+        },
       ),
     );
-    if (result == null || !mounted) return;
-    setState(() {
-      _favoritesOnly = result.favoritesOnly;
-      _needsReviewOnly = result.needsReviewOnly;
-      _selectedSeason = result.selectedSeason;
-      _maxTotalTimeMinutes = result.maxTotalTimeMinutes;
-      _selectedTag = result.selectedTag;
-    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     final filteredRecipes = _filteredRecipes();
     final hasAnyRecipe = recipesSnapshot.isNotEmpty;
     final activeFilterCount = _activeFilterCount;
+    final needsReviewCount = recipesSnapshot.where(_needsReview).length;
 
     final Widget content = _isLoading
         ? const LoadStateView.loading()
@@ -340,15 +342,26 @@ class _RecipeListPageState extends State<RecipeListPage> {
               decoration: InputDecoration(
                 hintText: 'Titel, Zutat oder Tag',
                 prefixIcon: const Icon(Icons.search_rounded),
+                suffixIconConstraints: const BoxConstraints.tightFor(
+                  width: 48,
+                  height: 48,
+                ),
                 suffixIcon: _searchController.text.isEmpty
                     ? null
-                    : IconButton(
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() {});
-                        },
-                        icon: const Icon(Icons.close_rounded),
-                        tooltip: 'Suche löschen',
+                    : Center(
+                        child: IconButton(
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() {});
+                          },
+                          icon: const Icon(Icons.close_rounded),
+                          tooltip: 'Suche löschen',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints.tightFor(
+                            width: 40,
+                            height: 40,
+                          ),
+                        ),
                       ),
               ),
               onChanged: (_) => setState(() {}),
@@ -413,17 +426,13 @@ class _RecipeListPageState extends State<RecipeListPage> {
               ],
             ),
           ),
-          if (recipesSnapshot.where(_needsReview).isNotEmpty)
+          if (!_isLoading && _loadError == null && hasAnyRecipe)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  '${recipesSnapshot.where(_needsReview).length} Rezepte offen',
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
+              child: _RecipeListSummary(
+                visibleCount: filteredRecipes.length,
+                totalCount: recipesSnapshot.length,
+                needsReviewCount: needsReviewCount,
               ),
             ),
           Expanded(child: content),
@@ -458,11 +467,13 @@ class _RecipeFilterSheet extends StatefulWidget {
     required this.initial,
     required this.seasons,
     required this.tags,
+    required this.onChanged,
   });
 
   final _RecipeFilterState initial;
   final List<String> seasons;
   final List<String> tags;
+  final ValueChanged<_RecipeFilterState> onChanged;
 
   @override
   State<_RecipeFilterSheet> createState() => _RecipeFilterSheetState();
@@ -474,6 +485,23 @@ class _RecipeFilterSheetState extends State<_RecipeFilterSheet> {
   late String? _selectedSeason = widget.initial.selectedSeason;
   late int? _maxTotalTimeMinutes = widget.initial.maxTotalTimeMinutes;
   late String? _selectedTag = widget.initial.selectedTag;
+
+  void _emitChange() {
+    widget.onChanged(
+      _RecipeFilterState(
+        favoritesOnly: _favoritesOnly,
+        needsReviewOnly: _needsReviewOnly,
+        selectedSeason: _selectedSeason,
+        maxTotalTimeMinutes: _maxTotalTimeMinutes,
+        selectedTag: _selectedTag,
+      ),
+    );
+  }
+
+  void _update(VoidCallback change) {
+    setState(change);
+    _emitChange();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -487,13 +515,13 @@ class _RecipeFilterSheetState extends State<_RecipeFilterSheet> {
           const SizedBox(height: 12),
           SwitchListTile(
             value: _favoritesOnly,
-            onChanged: (value) => setState(() => _favoritesOnly = value),
+            onChanged: (value) => _update(() => _favoritesOnly = value),
             title: const Text('Favoriten'),
             secondary: const Icon(Icons.favorite_border_rounded),
           ),
           SwitchListTile(
             value: _needsReviewOnly,
-            onChanged: (value) => setState(() => _needsReviewOnly = value),
+            onChanged: (value) => _update(() => _needsReviewOnly = value),
             title: const Text('Noch prüfen'),
             secondary: const Icon(Icons.rate_review_outlined),
           ),
@@ -506,7 +534,7 @@ class _RecipeFilterSheetState extends State<_RecipeFilterSheet> {
               for (final season in widget.seasons)
                 DropdownMenuItem<String?>(value: season, child: Text(season)),
             ],
-            onChanged: (value) => setState(() => _selectedSeason = value),
+            onChanged: (value) => _update(() => _selectedSeason = value),
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<int?>(
@@ -519,7 +547,7 @@ class _RecipeFilterSheetState extends State<_RecipeFilterSheet> {
               DropdownMenuItem<int?>(value: 45, child: Text('bis 45 min')),
               DropdownMenuItem<int?>(value: 60, child: Text('bis 60 min')),
             ],
-            onChanged: (value) => setState(() => _maxTotalTimeMinutes = value),
+            onChanged: (value) => _update(() => _maxTotalTimeMinutes = value),
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String?>(
@@ -533,40 +561,28 @@ class _RecipeFilterSheetState extends State<_RecipeFilterSheet> {
                   child: Text(tagLabelDe(tag)),
                 ),
             ],
-            onChanged: (value) => setState(() => _selectedTag = value),
+            onChanged: (value) => _update(() => _selectedTag = value),
           ),
           const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () {
-                    setState(() {
-                      _favoritesOnly = false;
-                      _needsReviewOnly = false;
-                      _selectedSeason = null;
-                      _maxTotalTimeMinutes = null;
-                      _selectedTag = null;
-                    });
-                  },
+                  onPressed: () => _update(() {
+                    _favoritesOnly = false;
+                    _needsReviewOnly = false;
+                    _selectedSeason = null;
+                    _maxTotalTimeMinutes = null;
+                    _selectedTag = null;
+                  }),
                   child: const Text('Zurücksetzen'),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: FilledButton(
-                  onPressed: () {
-                    Navigator.of(context).pop(
-                      _RecipeFilterState(
-                        favoritesOnly: _favoritesOnly,
-                        needsReviewOnly: _needsReviewOnly,
-                        selectedSeason: _selectedSeason,
-                        maxTotalTimeMinutes: _maxTotalTimeMinutes,
-                        selectedTag: _selectedTag,
-                      ),
-                    );
-                  },
-                  child: const Text('Anwenden'),
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Fertig'),
                 ),
               ),
             ],
@@ -639,6 +655,36 @@ class _RecipeCreateFan extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _RecipeListSummary extends StatelessWidget {
+  const _RecipeListSummary({
+    required this.visibleCount,
+    required this.totalCount,
+    required this.needsReviewCount,
+  });
+
+  final int visibleCount;
+  final int totalCount;
+  final int needsReviewCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textStyle = Theme.of(context).textTheme.labelMedium?.copyWith(
+      color: colorScheme.onSurfaceVariant,
+      fontWeight: FontWeight.w600,
+    );
+    final parts = [
+      '$visibleCount von $totalCount ${totalCount == 1 ? 'Rezept' : 'Rezepten'}',
+      if (needsReviewCount > 0) '$needsReviewCount offen',
+    ];
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Text(parts.join(' · '), style: textStyle),
     );
   }
 }

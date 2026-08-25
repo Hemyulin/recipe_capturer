@@ -35,3 +35,7 @@ abstract interface class RecipeAiImportRepository {
 abstract interface class RecipeAiPolishRepository {
   Future<Recipe> polishRecipe(Recipe recipe);
 }
+
+abstract interface class RecipeAiImageRepository {
+  Future<String> generateRecipeImage(Recipe recipe);
+}

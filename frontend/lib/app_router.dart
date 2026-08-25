@@ -2,8 +2,10 @@ import 'package:go_router/go_router.dart';
 import 'package:cookbuk/config/app_config.dart';
 import 'package:cookbuk/data/api_meal_plan_repository.dart';
 import 'package:cookbuk/data/api_recipe_repository.dart';
+import 'package:cookbuk/data/api_shopping_knowledge_repository.dart';
 import 'package:cookbuk/data/meal_plan_repository.dart';
 import 'package:cookbuk/data/recipe_repository.dart';
+import 'package:cookbuk/data/shopping_knowledge_repository.dart';
 import 'package:cookbuk/domain/recipe.dart';
 import 'package:cookbuk/ui/pages/main_shell_page.dart';
 import 'package:cookbuk/ui/pages/new_recipe_page.dart';
@@ -20,6 +22,10 @@ final repo = ApiRecipeRepository(
   sharedToken: AppConfig.sharedToken,
 );
 final mealPlanRepo = ApiMealPlanRepository(
+  baseUrls: AppConfig.apiBaseUrls,
+  sharedToken: AppConfig.sharedToken,
+);
+final shoppingKnowledgeRepo = ApiShoppingKnowledgeRepository(
   baseUrls: AppConfig.apiBaseUrls,
   sharedToken: AppConfig.sharedToken,
 );
@@ -52,8 +58,11 @@ final router = GoRouter(
         ),
         GoRoute(
           path: '/shopping',
-          builder: (context, state) =>
-              ShoppingPage(repo: repo, mealPlanRepo: mealPlanRepo),
+          builder: (context, state) => ShoppingPage(
+            repo: repo,
+            mealPlanRepo: mealPlanRepo,
+            shoppingRepo: shoppingKnowledgeRepo,
+          ),
         ),
         GoRoute(
           path: '/settings',
@@ -108,3 +117,4 @@ final router = GoRouter(
 
 RecipeRepository get recipeRepository => repo;
 MealPlanRepository get mealPlanRepository => mealPlanRepo;
+ShoppingKnowledgeRepository get shoppingRepository => shoppingKnowledgeRepo;

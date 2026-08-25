@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cookbuk/domain/recipe.dart';
-import 'package:cookbuk/ui/formatters/tag_label_de.dart';
 import 'package:cookbuk/ui/widgets/recipe_image.dart';
 
 class RecipeCard extends StatelessWidget {
@@ -95,17 +94,6 @@ class RecipeCard extends StatelessWidget {
                         ),
                     ],
                   ),
-                  if (recipe.tags.isNotEmpty) ...[
-                    const SizedBox(height: 7),
-                    Text(
-                      recipe.tags.take(3).map(tagLabelDe).join(' · '),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),

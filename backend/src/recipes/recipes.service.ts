@@ -493,6 +493,46 @@ export class RecipesService {
     }
   }
 
+  async generateRecipeImage(input: CreateRecipeDto) {
+    const apiKey = this.config.get<string>("OPENAI_API_KEY")?.trim();
+    if (!apiKey) {
+      throw new ServiceUnavailableException(
+        "AI recipe image is not configured. Set OPENAI_API_KEY on the backend.",
+      );
+    }
+
+    const model =
+      this.config.get<string>("COOKBUK_OPENAI_IMAGE_MODEL")?.trim() ||
+      "gpt-image-1-mini";
+
+    const response = await this.createOpenAiRecipeImage(model, apiKey, input);
+
+    if (!response.ok) {
+      throw new ServiceUnavailableException(
+        (await this.openAiErrorMessage(response)).replace(
+          "AI recipe import failed.",
+          "AI recipe image failed.",
+        ),
+      );
+    }
+
+    const payload = (await response.json()) as unknown;
+    const imageBase64 = this.extractOpenAiImageBase64(payload);
+    if (!imageBase64) {
+      throw new ServiceUnavailableException(
+        "AI recipe image returned no image.",
+      );
+    }
+
+    const storagePath = this.imageStoragePath();
+    mkdirSync(storagePath, { recursive: true });
+
+    const filename = `generated-${randomUUID()}.png`;
+    writeFileSync(join(storagePath, filename), Buffer.from(imageBase64, "base64"));
+
+    return { imagePath: `/images/${filename}` };
+  }
+
   private validateRecipeImage(image: UploadedRecipeImage) {
     if (!image.buffer || image.buffer.length === 0) {
       throw new BadRequestException("Image file is empty");
@@ -701,6 +741,35 @@ export class RecipesService {
     } catch {
       throw new ServiceUnavailableException(
         "AI recipe polish could not reach OpenAI.",
+      );
+    }
+  }
+
+  private async createOpenAiRecipeImage(
+    model: string,
+    apiKey: string,
+    recipe: CreateRecipeDto,
+  ) {
+    try {
+      return await fetch("https://api.openai.com/v1/images/generations", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          size: "1024x1024",
+          quality:
+            this.config.get<string>("COOKBUK_OPENAI_IMAGE_QUALITY")?.trim() ||
+            "medium",
+          response_format: "b64_json",
+          prompt: this.recipeImagePrompt(recipe),
+        }),
+      });
+    } catch {
+      throw new ServiceUnavailableException(
+        "AI recipe image could not reach OpenAI.",
       );
     }
   }
@@ -1151,6 +1220,35 @@ export class RecipesService {
     ].join(" ");
   }
 
+  private recipeImagePrompt(recipe: CreateRecipeDto) {
+    const ingredients = (recipe.ingredients ?? [])
+      .map((ingredient) => {
+        const parts = [
+          ingredient.quantity,
+          ingredient.unit,
+          ingredient.name,
+          ingredient.note ? `(${ingredient.note})` : "",
+        ]
+          .map((part) => this.cleanText(part))
+          .filter(Boolean);
+        return parts.join(" ");
+      })
+      .filter(Boolean)
+      .slice(0, 18)
+      .join(", ");
+
+    return [
+      "Create an appetizing, natural-looking food photo for a private recipe app.",
+      "Style: realistic home-cooked meal, warm daylight, simple plate or bowl, minimal props, no text, no watermark, no people.",
+      `Recipe title: ${this.cleanText(recipe.title) || "Hausgemachtes Gericht"}.`,
+      ingredients ? `Visible ingredient cues: ${ingredients}.` : "",
+      recipe.notes ? `Recipe notes: ${this.cleanText(recipe.notes)}.` : "",
+      "The image should look like the finished dish, not a cookbook cover or collage.",
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+
   private deletePreviousStoredImage(imageUrl: string | null) {
     if (!imageUrl?.startsWith("/images/")) return;
 
@@ -1182,6 +1280,12 @@ export class RecipesService {
       .filter((text): text is string => typeof text === "string")
       .join("\n")
       .trim();
+  }
+
+  private extractOpenAiImageBase64(payload: unknown) {
+    const response = payload as { data?: { b64_json?: unknown }[] };
+    const image = response.data?.[0]?.b64_json;
+    return typeof image === "string" ? image.trim() : "";
   }
 
   private normalizeImportedRecipeDraft(value: unknown): ImportedRecipeDraft {

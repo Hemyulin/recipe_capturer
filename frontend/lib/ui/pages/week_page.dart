@@ -382,6 +382,8 @@ class _WeekPageState extends State<WeekPage> {
                   meals: _meals,
                   slotValueFor: _slotValue,
                   onSelectDate: (date) => setState(() => _selectedDate = date),
+                  onPreviousWeek: () => unawaited(_moveWeek(-1)),
+                  onNextWeek: () => unawaited(_moveWeek(1)),
                 ),
               ),
             ),
@@ -472,13 +474,15 @@ class _WeekHeader extends StatelessWidget {
   }
 }
 
-class _WeekDayStrip extends StatelessWidget {
+class _WeekDayStrip extends StatefulWidget {
   const _WeekDayStrip({
     required this.days,
     required this.selectedDate,
     required this.meals,
     required this.slotValueFor,
     required this.onSelectDate,
+    required this.onPreviousWeek,
+    required this.onNextWeek,
   });
 
   final List<DateTime> days;
@@ -486,26 +490,57 @@ class _WeekDayStrip extends StatelessWidget {
   final List<_MealInfo> meals;
   final String? Function(DateTime date, String meal) slotValueFor;
   final void Function(DateTime date) onSelectDate;
+  final VoidCallback onPreviousWeek;
+  final VoidCallback onNextWeek;
+
+  @override
+  State<_WeekDayStrip> createState() => _WeekDayStripState();
+}
+
+class _WeekDayStripState extends State<_WeekDayStrip> {
+  double _dragDelta = 0;
+
+  void _handleDragUpdate(DragUpdateDetails details) {
+    _dragDelta += details.delta.dx;
+  }
+
+  void _handleDragEnd(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    final shouldGoNext = _dragDelta < -48 || velocity < -450;
+    final shouldGoPrevious = _dragDelta > 48 || velocity > 450;
+    _dragDelta = 0;
+
+    if (shouldGoNext) {
+      widget.onNextWeek();
+    } else if (shouldGoPrevious) {
+      widget.onPreviousWeek();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 84,
-      child: Row(
-        children: [
-          for (final day in days) ...[
-            Expanded(
-              child: _WeekDayChip(
-                date: day,
-                isSelected: _isSameDate(day, selectedDate),
-                meals: meals,
-                slotValueFor: (meal) => slotValueFor(day, meal),
-                onTap: () => onSelectDate(day),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onHorizontalDragUpdate: _handleDragUpdate,
+      onHorizontalDragEnd: _handleDragEnd,
+      child: SizedBox(
+        height: 84,
+        child: Row(
+          children: [
+            for (final day in widget.days) ...[
+              Expanded(
+                child: _WeekDayChip(
+                  date: day,
+                  isSelected: _isSameDate(day, widget.selectedDate),
+                  meals: widget.meals,
+                  slotValueFor: (meal) => widget.slotValueFor(day, meal),
+                  onTap: () => widget.onSelectDate(day),
+                ),
               ),
-            ),
-            if (day != days.last) const SizedBox(width: 4),
+              if (day != widget.days.last) const SizedBox(width: 4),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -743,12 +778,47 @@ class _WeekMealCard extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Icon(meal.icon, size: 17, color: colorScheme.primary),
-                        const SizedBox(width: 6),
-                        Text(
-                          meal.label,
-                          style: Theme.of(context).textTheme.titleMedium,
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Icon(
+                                meal.icon,
+                                size: 17,
+                                color: colorScheme.primary,
+                              ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  meal.label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.titleMedium,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
+                        const SizedBox(width: 8),
+                        _ExtrasButton(
+                          onPressed: onExtras,
+                          hasExtras: extras.isNotEmpty,
+                        ),
+                        if (isPlanned) ...[
+                          const SizedBox(width: 4),
+                          IconButton(
+                            onPressed: onClear,
+                            icon: const Icon(Icons.close_rounded),
+                            tooltip: 'Mahlzeit leeren',
+                            visualDensity: VisualDensity.compact,
+                            constraints: const BoxConstraints.tightFor(
+                              width: 38,
+                              height: 38,
+                            ),
+                            padding: EdgeInsets.zero,
+                          ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -781,27 +851,6 @@ class _WeekMealCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (isPlanned)
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _ExtrasButton(
-                      onPressed: onExtras,
-                      hasExtras: extras.isNotEmpty,
-                    ),
-                    const SizedBox(height: 2),
-                    IconButton(
-                      onPressed: onClear,
-                      icon: const Icon(Icons.close_rounded),
-                      tooltip: 'Mahlzeit leeren',
-                    ),
-                  ],
-                )
-              else
-                _ExtrasButton(
-                  onPressed: onExtras,
-                  hasExtras: extras.isNotEmpty,
-                ),
             ],
           ),
         ),
@@ -822,22 +871,20 @@ class _ExtrasButton extends StatelessWidget {
 
     return Tooltip(
       message: 'Beilagen bearbeiten',
-      child: TextButton.icon(
+      child: IconButton.filledTonal(
         onPressed: onPressed,
-        style: TextButton.styleFrom(
-          visualDensity: VisualDensity.compact,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          minimumSize: const Size(0, 34),
+        style: IconButton.styleFrom(
+          fixedSize: const Size.square(38),
+          minimumSize: const Size.square(38),
+          padding: EdgeInsets.zero,
           foregroundColor: hasExtras
               ? colorScheme.onSecondaryContainer
               : colorScheme.onSurfaceVariant,
           backgroundColor: hasExtras
               ? colorScheme.secondaryContainer
               : colorScheme.surfaceContainerHighest,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
-        icon: const Icon(Icons.restaurant_menu_rounded, size: 16),
-        label: const Text('Beilagen'),
+        icon: const Icon(Icons.restaurant_menu_rounded, size: 18),
       ),
     );
   }

@@ -89,3 +89,35 @@ CREATE TABLE IF NOT EXISTS recipe_cook_events (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_recipe_cook_events_unique_planned_meal
 ON recipe_cook_events (household_id, recipe_id, cooked_at, meal);
+
+CREATE TABLE IF NOT EXISTS shopping_stores (
+  id TEXT PRIMARY KEY,
+  household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (household_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS shopping_items (
+  id TEXT PRIMARY KEY,
+  household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  normalized_name TEXT NOT NULL,
+  store_id TEXT REFERENCES shopping_stores(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (household_id, normalized_name)
+);
+
+CREATE TABLE IF NOT EXISTS manual_shopping_items (
+  id TEXT PRIMARY KEY,
+  household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  week_start TEXT NOT NULL,
+  name TEXT NOT NULL,
+  normalized_name TEXT NOT NULL,
+  quantity_label TEXT,
+  store_id TEXT REFERENCES shopping_stores(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

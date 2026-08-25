@@ -6,6 +6,7 @@ import { DatabaseModule } from "./database/database.module";
 import { HealthModule } from "./health/health.module";
 import { MealPlanModule } from "./meal-plan/meal-plan.module";
 import { RecipesModule } from "./recipes/recipes.module";
+import { ShoppingModule } from "./shopping/shopping.module";
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { RecipesModule } from "./recipes/recipes.module";
     HealthModule,
     MealPlanModule,
     RecipesModule,
+    ShoppingModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: SharedTokenGuard }],
 })

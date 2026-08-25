@@ -12,7 +12,8 @@ class ApiRecipeRepository
         RecipeRepository,
         RecipeImageRepository,
         RecipeAiImportRepository,
-        RecipeAiPolishRepository {
+        RecipeAiPolishRepository,
+        RecipeAiImageRepository {
   ApiRecipeRepository({
     String? baseUrl,
     List<String>? baseUrls,
@@ -129,6 +130,19 @@ class ApiRecipeRepository
       jsonDecode(response) as Map<String, dynamic>,
       imagePaths: recipe.imagePaths,
     );
+  }
+
+  @override
+  Future<String> generateRecipeImage(Recipe recipe) async {
+    final response = await _send(
+      'POST',
+      '/recipes/imports/generated-image',
+      body: _recipePayload(recipe),
+      timeout: _aiImageTimeout,
+      useSaveErrorMessage: true,
+    );
+    final decoded = jsonDecode(response) as Map<String, dynamic>;
+    return _absoluteImagePath((decoded['imagePath'] as String? ?? '').trim());
   }
 
   Uri _uri(Uri baseUri, String path) {
@@ -453,6 +467,15 @@ class ApiRecipeRepository
       if (normalized.startsWith('AI recipe polish returned')) {
         return 'KI-Aufräumen hat keine lesbaren Rezeptdaten geliefert.';
       }
+      if (normalized.startsWith('AI recipe image is not configured')) {
+        return 'KI-Bild ist auf dem Pi noch nicht konfiguriert. Prüfe OPENAI_API_KEY.';
+      }
+      if (normalized.startsWith('AI recipe image failed.')) {
+        return 'KI-Bild fehlgeschlagen. ${normalized.replaceFirst('AI recipe image failed. ', '')}';
+      }
+      if (normalized.startsWith('AI recipe image returned')) {
+        return 'KI-Bild hat kein lesbares Bild geliefert.';
+      }
       if (normalized.startsWith('Only image uploads')) {
         return 'Das Bildformat wurde vom Pi nicht akzeptiert.';
       }
@@ -480,6 +503,7 @@ class ApiRecipeRepository
   static const _imageUploadTimeout = Duration(seconds: 20);
   static const _aiImportTimeout = Duration(seconds: 120);
   static const _aiPolishTimeout = Duration(seconds: 90);
+  static const _aiImageTimeout = Duration(seconds: 150);
   static const _maxImportImages = 5;
   static const _recipeCacheStorageKey = 'cookbuk.cachedRecipes.v1';
 }

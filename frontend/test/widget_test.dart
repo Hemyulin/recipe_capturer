@@ -186,6 +186,49 @@ void main() {
     expect(lunch.recipeId, testRecipes.first.id);
   });
 
+  testWidgets('repeats a Today recipe through current Sunday', (
+    WidgetTester tester,
+  ) async {
+    final repo = InMemoryRecipeRepository();
+    final mealPlanRepo = InMemoryMealPlanRepository();
+    await repo.add(testRecipes.first);
+
+    final today = DateTime.now();
+    final selectedDate = DateTime(today.year, today.month, today.day);
+    await mealPlanRepo.setRecipe(
+      date: selectedDate,
+      meal: 'breakfast',
+      recipeId: testRecipes.first.id,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TodayPage(repo: repo, mealPlanRepo: mealPlanRepo),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Wiederholen'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Eintragen'));
+    await tester.pumpAndSettle();
+
+    final endOfWeek = selectedDate.add(
+      Duration(days: 7 - selectedDate.weekday),
+    );
+    final slots = await mealPlanRepo.getRange(
+      from: selectedDate,
+      to: endOfWeek,
+    );
+    final repeatedBreakfasts = slots.where(
+      (slot) =>
+          slot.meal == 'breakfast' &&
+          slot.recipeId == testRecipes.first.id &&
+          slot.plannedFor.weekday == selectedDate.weekday,
+    );
+    expect(repeatedBreakfasts, hasLength(1));
+  });
+
   testWidgets('adds text extras to a Today meal', (WidgetTester tester) async {
     final repo = InMemoryRecipeRepository();
     final mealPlanRepo = InMemoryMealPlanRepository();
@@ -198,7 +241,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Beilagen').first);
+    await tester.tap(find.byTooltip('Beilagen bearbeiten').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Brot'));
     await tester.pumpAndSettle();
@@ -318,6 +361,37 @@ void main() {
     final breakfast = slots.singleWhere((slot) => slot.meal == 'breakfast');
     expect(breakfast.isRecipe, true);
     expect(breakfast.recipeId, testRecipes.first.id);
+  });
+
+  testWidgets('swipes the Week day strip to the next week', (
+    WidgetTester tester,
+  ) async {
+    final repo = InMemoryRecipeRepository();
+    final mealPlanRepo = InMemoryMealPlanRepository();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: WeekPage(repo: repo, mealPlanRepo: mealPlanRepo),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final today = DateTime.now();
+    final weekStart = DateTime(
+      today.year,
+      today.month,
+      today.day,
+    ).subtract(Duration(days: today.weekday - 1));
+    final nextWeekStart = weekStart.add(const Duration(days: 7));
+    expect(find.text(_weekLabel(weekStart)), findsOneWidget);
+
+    await tester.drag(
+      find.text(_weekdayLabel(today.weekday)),
+      const Offset(-300, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(_weekLabel(nextWeekStart)), findsOneWidget);
   });
 
   testWidgets('builds a shopping list from planned recipes', (
@@ -529,6 +603,20 @@ class _FakeDiagnosticMealPlanRepository
 
   @override
   Future<void> syncPendingChanges() async {}
+}
+
+String _weekLabel(DateTime start) {
+  final end = start.add(const Duration(days: 6));
+  return '${_shortDate(start)} - ${_shortDate(end)}';
+}
+
+String _shortDate(DateTime date) {
+  return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.';
+}
+
+String _weekdayLabel(int weekday) {
+  const labels = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+  return labels[weekday - 1];
 }
 
 final testRecipes = [

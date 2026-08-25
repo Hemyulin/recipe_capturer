@@ -77,4 +77,9 @@ export class RecipesController {
   polishRecipe(@Body() body: CreateRecipeDto) {
     return this.recipesService.polishRecipeDraft(body);
   }
+
+  @Post("imports/generated-image")
+  generateRecipeImage(@Body() body: CreateRecipeDto) {
+    return this.recipesService.generateRecipeImage(body);
+  }
 }
