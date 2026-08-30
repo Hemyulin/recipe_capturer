@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ApiRecipeRepository
     implements
         RecipeRepository,
+        PaginatedRecipeRepository,
         RecipeImageRepository,
         RecipeAiImportRepository,
         RecipeAiPolishRepository,
@@ -39,6 +40,75 @@ class ApiRecipeRepository
     } on Object catch (error) {
       if (!_isOfflineError(error)) rethrow;
       return _offlineRecipeList();
+    }
+  }
+
+  @override
+  Future<RecipePageResult> getPage(RecipePageQuery query) async {
+    try {
+      final uriQuery = <String, String>{
+        'limit': query.limit.toString(),
+        'offset': query.offset.toString(),
+        if (query.search.trim().isNotEmpty) 'search': query.search.trim(),
+        if (query.favoritesOnly) 'favoritesOnly': 'true',
+        if (query.needsReviewOnly) 'needsReviewOnly': 'true',
+        if (query.season?.trim().isNotEmpty ?? false)
+          'season': query.season!.trim(),
+        if (query.maxTotalTimeMinutes != null)
+          'maxTotalTimeMinutes': query.maxTotalTimeMinutes.toString(),
+        if (query.tag?.trim().isNotEmpty ?? false) 'tag': query.tag!.trim(),
+      };
+      final response = await _send(
+        'GET',
+        Uri(path: '/recipes', queryParameters: uriQuery).toString(),
+      );
+      final decoded = jsonDecode(response);
+      if (decoded is List<dynamic>) {
+        final recipes = decoded
+            .map((item) => _recipeFromJson(item as Map<String, dynamic>))
+            .toList();
+        await _replaceCachedRecipes(recipes);
+        return RecipePageResult(
+          items: recipes,
+          total: recipes.length,
+          totalCount: recipes.length,
+          needsReviewCount: recipes.where(_needsReview).length,
+          seasons: _seasonsFrom(recipes),
+          tags: _tagsFrom(recipes),
+        );
+      }
+
+      final json = decoded as Map<String, dynamic>;
+      final recipes = (json['items'] as List<dynamic>? ?? [])
+          .map((item) => _recipeFromJson(item as Map<String, dynamic>))
+          .toList();
+      if (query.offset == 0) await _replaceCachedRecipes(recipes);
+      return RecipePageResult(
+        items: recipes,
+        total: json['total'] as int? ?? recipes.length,
+        totalCount: json['totalCount'] as int? ?? recipes.length,
+        needsReviewCount: json['needsReviewCount'] as int? ?? 0,
+        seasons: (json['seasons'] as List<dynamic>? ?? [])
+            .map((season) => season.toString())
+            .where((season) => season.trim().isNotEmpty)
+            .toList(),
+        tags: (json['tags'] as List<dynamic>? ?? [])
+            .map((tag) => tag.toString())
+            .where((tag) => tag.trim().isNotEmpty)
+            .toList(),
+      );
+    } on Object catch (error) {
+      if (!_isOfflineError(error)) rethrow;
+      final recipes = await _offlineRecipeList();
+      final filtered = _filterRecipesLocally(recipes, query);
+      return RecipePageResult(
+        items: filtered.skip(query.offset).take(query.limit).toList(),
+        total: filtered.length,
+        totalCount: recipes.length,
+        needsReviewCount: recipes.where(_needsReview).length,
+        seasons: _seasonsFrom(recipes),
+        tags: _tagsFrom(recipes),
+      );
     }
   }
 
@@ -152,7 +222,16 @@ class ApiRecipeRepository
   }
 
   Uri _uri(Uri baseUri, String path) {
-    return baseUri.replace(path: '${baseUri.path}$path');
+    final relative = Uri.parse(path);
+    final basePath = baseUri.path.endsWith('/')
+        ? baseUri.path.substring(0, baseUri.path.length - 1)
+        : baseUri.path;
+    return baseUri.replace(
+      path: '$basePath${relative.path}',
+      queryParameters: relative.queryParameters.isEmpty
+          ? null
+          : relative.queryParameters,
+    );
   }
 
   Map<String, dynamic> _recipePayload(Recipe recipe) {
@@ -209,6 +288,49 @@ class ApiRecipeRepository
           .toSet()
           .toList(),
     );
+  }
+
+  List<Recipe> _filterRecipesLocally(
+    List<Recipe> recipes,
+    RecipePageQuery query,
+  ) {
+    final search = query.search.trim().toLowerCase();
+    return recipes.where((recipe) {
+      if (query.favoritesOnly && !recipe.isFavorite) return false;
+      if (query.needsReviewOnly && !_needsReview(recipe)) return false;
+      if (query.season != null && recipe.season != query.season) return false;
+      if (query.maxTotalTimeMinutes != null) {
+        final totalTime = recipe.totalTimeMinutes;
+        if (totalTime == null || totalTime > query.maxTotalTimeMinutes!) {
+          return false;
+        }
+      }
+      if (query.tag != null && !recipe.tags.contains(query.tag)) return false;
+      if (search.isEmpty) return true;
+      return recipe.title.toLowerCase().contains(search) ||
+          recipe.ingredients.any((ingredient) => ingredient.matches(search)) ||
+          recipe.tags.any((tag) => tag.toLowerCase().contains(search));
+    }).toList();
+  }
+
+  bool _needsReview(Recipe recipe) => recipe.tags.contains('needs_review');
+
+  List<String> _seasonsFrom(List<Recipe> recipes) {
+    return recipes
+        .map((recipe) => recipe.season.trim())
+        .where((season) => season.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+  }
+
+  List<String> _tagsFrom(List<Recipe> recipes) {
+    return recipes
+        .expand((recipe) => recipe.tags)
+        .where((tag) => tag != 'needs_review')
+        .toSet()
+        .toList()
+      ..sort();
   }
 
   String _absoluteImagePath(String value) {

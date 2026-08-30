@@ -30,8 +30,12 @@ class RecipeListPage extends StatefulWidget {
 }
 
 class _RecipeListPageState extends State<RecipeListPage> {
+  static const _pageSize = 20;
+
   List<Recipe> recipesSnapshot = [];
+  final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounce;
   bool _favoritesOnly = false;
   bool _needsReviewOnly = false;
   String? _selectedSeason;
@@ -40,31 +44,51 @@ class _RecipeListPageState extends State<RecipeListPage> {
   bool _isCreateMenuOpen = false;
   bool _isImporting = false;
   bool _isLoading = true;
+  bool _isLoadingMore = false;
+  bool _hasMoreRecipes = false;
+  int _visibleRecipeCount = 0;
+  int _totalRecipeCount = 0;
+  int _needsReviewCount = 0;
+  List<String> _pagedSeasons = [];
+  List<String> _pagedTags = [];
   String? _loadError;
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_handleScroll);
     _refresh();
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
+    _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
+
+  bool get _usesPagination => widget.repo is PaginatedRecipeRepository;
 
   Future<void> _refresh() async {
     setState(() {
       _isLoading = true;
       _loadError = null;
+      _isLoadingMore = false;
     });
     try {
+      if (_usesPagination) {
+        await _loadRecipePage(reset: true);
+        return;
+      }
       final snapshot = await widget.repo.getAll();
       snapshot.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       if (!mounted) return;
       setState(() {
         recipesSnapshot = snapshot;
+        _visibleRecipeCount = snapshot.length;
+        _totalRecipeCount = snapshot.length;
+        _needsReviewCount = snapshot.where(_needsReview).length;
         _isLoading = false;
       });
     } catch (_) {
@@ -74,6 +98,75 @@ class _RecipeListPageState extends State<RecipeListPage> {
         _loadError = 'Backend nicht erreichbar.';
       });
     }
+  }
+
+  Future<void> _loadRecipePage({required bool reset}) async {
+    final paginatedRepo = widget.repo is PaginatedRecipeRepository
+        ? widget.repo as PaginatedRecipeRepository
+        : null;
+    if (paginatedRepo == null) return;
+    if (!reset && (_isLoadingMore || !_hasMoreRecipes)) return;
+
+    if (!reset) {
+      setState(() => _isLoadingMore = true);
+    }
+
+    try {
+      final result = await paginatedRepo.getPage(
+        RecipePageQuery(
+          search: _searchController.text,
+          favoritesOnly: _favoritesOnly,
+          needsReviewOnly: _needsReviewOnly,
+          season: _selectedSeason,
+          maxTotalTimeMinutes: _maxTotalTimeMinutes,
+          tag: _selectedTag,
+          limit: _pageSize,
+          offset: reset ? 0 : recipesSnapshot.length,
+        ),
+      );
+      if (!mounted) return;
+      setState(() {
+        recipesSnapshot = reset
+            ? result.items
+            : [...recipesSnapshot, ...result.items];
+        _visibleRecipeCount = result.total;
+        _totalRecipeCount = result.totalCount;
+        _needsReviewCount = result.needsReviewCount;
+        _pagedSeasons = result.seasons;
+        _pagedTags = result.tags;
+        _hasMoreRecipes = recipesSnapshot.length < result.total;
+        _isLoading = false;
+        _isLoadingMore = false;
+        _loadError = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _isLoadingMore = false;
+        if (reset) _loadError = 'Backend nicht erreichbar.';
+      });
+    }
+  }
+
+  void _handleScroll() {
+    if (!_usesPagination || !_hasMoreRecipes || _isLoadingMore || _isLoading) {
+      return;
+    }
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 500) {
+      unawaited(_loadRecipePage(reset: false));
+    }
+  }
+
+  void _onSearchChanged() {
+    setState(() {});
+    if (!_usesPagination) return;
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 300),
+      () => unawaited(_refresh()),
+    );
   }
 
   Future<void> _handleCreateAction(_RecipeCreateAction action) async {
@@ -161,6 +254,7 @@ class _RecipeListPageState extends State<RecipeListPage> {
   }
 
   List<Recipe> _filteredRecipes() {
+    if (_usesPagination) return recipesSnapshot;
     final query = _searchController.text.trim().toLowerCase();
 
     return recipesSnapshot.where((recipe) {
@@ -204,6 +298,7 @@ class _RecipeListPageState extends State<RecipeListPage> {
   }
 
   List<String> get _availableSeasons {
+    if (_usesPagination) return _pagedSeasons;
     final seasons =
         recipesSnapshot
             .map((recipe) => recipe.season.trim())
@@ -215,6 +310,7 @@ class _RecipeListPageState extends State<RecipeListPage> {
   }
 
   List<String> get _availableTags {
+    if (_usesPagination) return _pagedTags;
     final tags =
         recipesSnapshot
             .expand((recipe) => recipe.tags)
@@ -233,6 +329,7 @@ class _RecipeListPageState extends State<RecipeListPage> {
       _maxTotalTimeMinutes = null;
       _selectedTag = null;
     });
+    if (_usesPagination) unawaited(_refresh());
   }
 
   Future<void> _showFilterSheet() async {
@@ -258,6 +355,7 @@ class _RecipeListPageState extends State<RecipeListPage> {
             _maxTotalTimeMinutes = value.maxTotalTimeMinutes;
             _selectedTag = value.selectedTag;
           });
+          if (_usesPagination) unawaited(_refresh());
         },
       ),
     );
@@ -266,9 +364,13 @@ class _RecipeListPageState extends State<RecipeListPage> {
   @override
   Widget build(BuildContext context) {
     final filteredRecipes = _filteredRecipes();
-    final hasAnyRecipe = recipesSnapshot.isNotEmpty;
+    final hasAnyRecipe = _usesPagination
+        ? _totalRecipeCount > 0
+        : recipesSnapshot.isNotEmpty;
     final activeFilterCount = _activeFilterCount;
-    final needsReviewCount = recipesSnapshot.where(_needsReview).length;
+    final needsReviewCount = _usesPagination
+        ? _needsReviewCount
+        : recipesSnapshot.where(_needsReview).length;
 
     final Widget content = _isLoading
         ? const LoadStateView.loading()
@@ -292,6 +394,7 @@ class _RecipeListPageState extends State<RecipeListPage> {
                   : 1;
 
               return GridView.builder(
+                controller: _scrollController,
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 120),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: columns,
@@ -303,8 +406,16 @@ class _RecipeListPageState extends State<RecipeListPage> {
                       ? 1.08
                       : 0.92,
                 ),
-                itemCount: filteredRecipes.length,
+                itemCount: filteredRecipes.length + (_isLoadingMore ? 1 : 0),
                 itemBuilder: (context, index) {
+                  if (index >= filteredRecipes.length) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: CircularProgressIndicator(),
+                      ),
+                    );
+                  }
                   final recipe = filteredRecipes[index];
                   return RecipeCard(
                     recipe: recipe,
@@ -352,7 +463,7 @@ class _RecipeListPageState extends State<RecipeListPage> {
                         child: IconButton(
                           onPressed: () {
                             _searchController.clear();
-                            setState(() {});
+                            _onSearchChanged();
                           },
                           icon: const Icon(Icons.close_rounded),
                           tooltip: 'Suche löschen',
@@ -364,7 +475,7 @@ class _RecipeListPageState extends State<RecipeListPage> {
                         ),
                       ),
               ),
-              onChanged: (_) => setState(() {}),
+              onChanged: (_) => _onSearchChanged(),
             ),
           ),
           Padding(
@@ -431,7 +542,10 @@ class _RecipeListPageState extends State<RecipeListPage> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: _RecipeListSummary(
                 visibleCount: filteredRecipes.length,
-                totalCount: recipesSnapshot.length,
+                totalCount: _usesPagination
+                    ? _totalRecipeCount
+                    : recipesSnapshot.length,
+                matchingCount: _usesPagination ? _visibleRecipeCount : null,
                 needsReviewCount: needsReviewCount,
               ),
             ),
@@ -663,11 +777,13 @@ class _RecipeListSummary extends StatelessWidget {
   const _RecipeListSummary({
     required this.visibleCount,
     required this.totalCount,
+    this.matchingCount,
     required this.needsReviewCount,
   });
 
   final int visibleCount;
   final int totalCount;
+  final int? matchingCount;
   final int needsReviewCount;
 
   @override
@@ -677,8 +793,11 @@ class _RecipeListSummary extends StatelessWidget {
       color: colorScheme.onSurfaceVariant,
       fontWeight: FontWeight.w600,
     );
+    final countLabel = matchingCount == null
+        ? '$visibleCount von $totalCount'
+        : '$visibleCount von $matchingCount Treffern, $totalCount gesamt';
     final parts = [
-      '$visibleCount von $totalCount ${totalCount == 1 ? 'Rezept' : 'Rezepten'}',
+      '$countLabel ${totalCount == 1 ? 'Rezept' : 'Rezepten'}',
       if (needsReviewCount > 0) '$needsReviewCount offen',
     ];
 
