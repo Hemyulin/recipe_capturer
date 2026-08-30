@@ -70,11 +70,13 @@ class _TodayPageState extends State<TodayPage> {
     }
   }
 
-  Future<void> _loadRecipes() async {
-    setState(() {
-      _isLoading = true;
-      _loadError = null;
-    });
+  Future<void> _loadRecipes({bool showLoading = true}) async {
+    if (showLoading) {
+      setState(() {
+        _isLoading = true;
+        _loadError = null;
+      });
+    }
     try {
       final recipes = await widget.repo.getAll();
       final mealSlots = await widget.mealPlanRepo.getRange(
@@ -102,11 +104,13 @@ class _TodayPageState extends State<TodayPage> {
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _isLoading = false;
+        if (showLoading) _isLoading = false;
         _loadError = 'Backend nicht erreichbar.';
       });
     }
   }
+
+  Future<void> _refreshPlanQuietly() => _loadRecipes(showLoading: false);
 
   Recipe? _recipeById(String? id) {
     if (id == null) return null;
@@ -152,9 +156,11 @@ class _TodayPageState extends State<TodayPage> {
           recipeId: selected,
         );
       }
+      await _refreshPlanQuietly();
     } catch (error) {
       if (!mounted) return;
       if (error is MealPlanQueuedException) {
+        await _refreshPlanQuietly();
         _showPlanMessage(error.userMessage);
         return;
       }
@@ -167,9 +173,11 @@ class _TodayPageState extends State<TodayPage> {
     setState(() => _mealRecipeIds[slotId] = null);
     try {
       await widget.mealPlanRepo.setEmpty(date: _today, meal: slotId);
+      await _refreshPlanQuietly();
     } catch (error) {
       if (!mounted) return;
       if (error is MealPlanQueuedException) {
+        await _refreshPlanQuietly();
         _showPlanMessage(error.userMessage);
         return;
       }
@@ -204,9 +212,11 @@ class _TodayPageState extends State<TodayPage> {
         extras: result.extras,
         recipeExtraIds: result.recipeExtraIds,
       );
+      await _refreshPlanQuietly();
     } catch (error) {
       if (!mounted) return;
       if (error is MealPlanQueuedException) {
+        await _refreshPlanQuietly();
         _showPlanMessage(error.userMessage);
         return;
       }
@@ -367,10 +377,21 @@ class _TodayPageState extends State<TodayPage> {
           meal: slot.meal,
           instruction: instruction,
           durationLabel: _preparationDurationLabel(instruction),
+          dueLabel: _preparationDueLabel(slot, instruction),
           isSide: isSide,
         ),
       );
     }
+  }
+
+  String? _preparationDueLabel(MealPlanSlot slot, String instruction) {
+    final minutes = _preparationDurationMinutes(instruction);
+    if (minutes == null) return null;
+    final mealTime = _mealDateTime(slot.plannedFor, slot.meal);
+    final due = mealTime.subtract(Duration(minutes: minutes));
+    final hour = due.hour.toString().padLeft(2, '0');
+    final minute = due.minute.toString().padLeft(2, '0');
+    return 'bis $hour:$minute';
   }
 
   String? _preparationInstruction(String value) {
@@ -405,6 +426,30 @@ class _TodayPageState extends State<TodayPage> {
     return amount == '1' ? '1 Tag' : '$amount Tage';
   }
 
+  int? _preparationDurationMinutes(String instruction) {
+    final lower = instruction.toLowerCase();
+    if (lower.contains('über nacht') ||
+        lower.contains('ueber nacht') ||
+        lower.contains('overnight')) {
+      return 12 * 60;
+    }
+
+    final match = RegExp(
+      r'(\d+(?:[,.]\d+)?)\s*(stunden?|std\.?|h|minuten?|min|tage?|tag)\b',
+      caseSensitive: false,
+    ).firstMatch(instruction);
+    if (match == null) return null;
+
+    final amount = double.tryParse(match.group(1)!.replaceAll(',', '.'));
+    if (amount == null) return null;
+    final unit = match.group(2)!.toLowerCase();
+    if (unit.startsWith('min')) return amount.round();
+    if (unit == 'h' || unit.startsWith('std') || unit.startsWith('stund')) {
+      return (amount * 60).round();
+    }
+    return (amount * 24 * 60).round();
+  }
+
   void _showPlanMessage(String message) {
     ScaffoldMessenger.of(
       context,
@@ -418,6 +463,16 @@ class _TodayPageState extends State<TodayPage> {
 
   static DateTime _dateOnly(DateTime date) {
     return DateTime(date.year, date.month, date.day);
+  }
+
+  static DateTime _mealDateTime(DateTime date, String meal) {
+    final time = switch (meal) {
+      'breakfast' => (hour: 7, minute: 30),
+      'lunch' => (hour: 12, minute: 30),
+      'dinner' => (hour: 18, minute: 30),
+      _ => (hour: 18, minute: 0),
+    };
+    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
   }
 
   static bool _isSameDay(DateTime a, DateTime b) {
@@ -442,6 +497,7 @@ class _TodayPageState extends State<TodayPage> {
     final breakfast = _recipeForSlot('breakfast');
     final lunch = _recipeForSlot('lunch');
     final dinner = _recipeForSlot('dinner');
+    final preparationTasks = _preparationTasks();
     final breakfastIsLeftovers = _isLeftoversSlot('breakfast');
     final lunchIsLeftovers = _isLeftoversSlot('lunch');
     final dinnerIsLeftovers = _isLeftoversSlot('dinner');
@@ -460,64 +516,84 @@ class _TodayPageState extends State<TodayPage> {
                   'Prüfe, ob der CookBuk-Backendserver läuft und dein Gerät im Tailscale ist.',
               onRetry: _loadRecipes,
             )
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+          : Stack(
               children: [
-                MealPlanSyncBanner(status: _syncStatus),
-                if (_syncStatus.isVisible) const SizedBox(height: 12),
-                _MealSlotCard(
-                  title: 'Frühstück',
-                  time: '07:30',
-                  recipe: breakfast,
-                  isLeftovers: breakfastIsLeftovers,
-                  extras: _extraLabels('breakfast'),
-                  onTap: breakfast == null || breakfastIsLeftovers
-                      ? () => _chooseRecipe('breakfast')
-                      : () => _openRecipe(breakfast),
-                  onChange: () => _chooseRecipe('breakfast'),
-                  onClear: () => _clearRecipe('breakfast'),
-                  onExtras: () => _editExtras('breakfast'),
-                  onRepeat: breakfast == null || breakfastIsLeftovers
-                      ? null
-                      : () =>
-                            _repeatRecipe('breakfast', 'Frühstück', breakfast),
+                ListView(
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    8,
+                    16,
+                    preparationTasks.isEmpty ? 120 : 190,
+                  ),
+                  children: [
+                    MealPlanSyncBanner(status: _syncStatus),
+                    if (_syncStatus.isVisible) const SizedBox(height: 12),
+                    _MealSlotCard(
+                      title: 'Frühstück',
+                      time: '07:30',
+                      recipe: breakfast,
+                      isLeftovers: breakfastIsLeftovers,
+                      extras: _extraLabels('breakfast'),
+                      onTap: breakfast == null || breakfastIsLeftovers
+                          ? () => _chooseRecipe('breakfast')
+                          : () => _openRecipe(breakfast),
+                      onChange: () => _chooseRecipe('breakfast'),
+                      onClear: () => _clearRecipe('breakfast'),
+                      onExtras: () => _editExtras('breakfast'),
+                      onRepeat: breakfast == null || breakfastIsLeftovers
+                          ? null
+                          : () => _repeatRecipe(
+                              'breakfast',
+                              'Frühstück',
+                              breakfast,
+                            ),
+                    ),
+                    const SizedBox(height: 12),
+                    _MealSlotCard(
+                      title: 'Mittagessen',
+                      time: '12:30',
+                      recipe: lunch,
+                      isLeftovers: lunchIsLeftovers,
+                      extras: _extraLabels('lunch'),
+                      onTap: lunch == null || lunchIsLeftovers
+                          ? () => _chooseRecipe('lunch')
+                          : () => _openRecipe(lunch),
+                      onChange: () => _chooseRecipe('lunch'),
+                      onClear: () => _clearRecipe('lunch'),
+                      onExtras: () => _editExtras('lunch'),
+                      onRepeat: lunch == null || lunchIsLeftovers
+                          ? null
+                          : () => _repeatRecipe('lunch', 'Mittagessen', lunch),
+                    ),
+                    const SizedBox(height: 12),
+                    _MealSlotCard(
+                      title: 'Abendessen',
+                      time: '18:30',
+                      recipe: dinner,
+                      isLeftovers: dinnerIsLeftovers,
+                      extras: _extraLabels('dinner'),
+                      onTap: dinner == null || dinnerIsLeftovers
+                          ? () => _chooseRecipe('dinner')
+                          : () => _openRecipe(dinner),
+                      onChange: () => _chooseRecipe('dinner'),
+                      onClear: () => _clearRecipe('dinner'),
+                      onExtras: () => _editExtras('dinner'),
+                      onRepeat: dinner == null || dinnerIsLeftovers
+                          ? null
+                          : () => _repeatRecipe('dinner', 'Abendessen', dinner),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                _MealSlotCard(
-                  title: 'Mittagessen',
-                  time: '12:30',
-                  recipe: lunch,
-                  isLeftovers: lunchIsLeftovers,
-                  extras: _extraLabels('lunch'),
-                  onTap: lunch == null || lunchIsLeftovers
-                      ? () => _chooseRecipe('lunch')
-                      : () => _openRecipe(lunch),
-                  onChange: () => _chooseRecipe('lunch'),
-                  onClear: () => _clearRecipe('lunch'),
-                  onExtras: () => _editExtras('lunch'),
-                  onRepeat: lunch == null || lunchIsLeftovers
-                      ? null
-                      : () => _repeatRecipe('lunch', 'Mittagessen', lunch),
-                ),
-                const SizedBox(height: 12),
-                _MealSlotCard(
-                  title: 'Abendessen',
-                  time: '18:30',
-                  recipe: dinner,
-                  isLeftovers: dinnerIsLeftovers,
-                  extras: _extraLabels('dinner'),
-                  onTap: dinner == null || dinnerIsLeftovers
-                      ? () => _chooseRecipe('dinner')
-                      : () => _openRecipe(dinner),
-                  onChange: () => _chooseRecipe('dinner'),
-                  onClear: () => _clearRecipe('dinner'),
-                  onExtras: () => _editExtras('dinner'),
-                  onRepeat: dinner == null || dinnerIsLeftovers
-                      ? null
-                      : () => _repeatRecipe('dinner', 'Abendessen', dinner),
-                ),
-                const SizedBox(height: 18),
-                _PreparationCard(tasks: _preparationTasks(), today: _today),
+                if (preparationTasks.isNotEmpty)
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    bottom: 16,
+                    child: _PreparationIsland(
+                      tasks: preparationTasks,
+                      today: _today,
+                    ),
+                  ),
               ],
             ),
     );
@@ -556,6 +632,7 @@ class _PreparationTask {
     required this.meal,
     required this.instruction,
     this.durationLabel,
+    this.dueLabel,
     this.isSide = false,
   });
 
@@ -564,11 +641,12 @@ class _PreparationTask {
   final String meal;
   final String instruction;
   final String? durationLabel;
+  final String? dueLabel;
   final bool isSide;
 }
 
-class _PreparationCard extends StatelessWidget {
-  const _PreparationCard({required this.tasks, required this.today});
+class _PreparationIsland extends StatelessWidget {
+  const _PreparationIsland({required this.tasks, required this.today});
 
   final List<_PreparationTask> tasks;
   final DateTime today;
@@ -576,47 +654,115 @@ class _PreparationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final firstTask = tasks.first;
+    final meta = [
+      firstTask.recipeTitle,
+      _relativeDayLabel(firstTask.plannedFor, today),
+      _mealLabel(firstTask.meal),
+      if (firstTask.dueLabel != null) firstTask.dueLabel!,
+    ].join(' · ');
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    return SafeArea(
+      top: false,
+      child: Material(
+        color: colorScheme.surface,
+        elevation: 8,
+        shadowColor: colorScheme.shadow.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(24),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => _showPreparationSheet(context, tasks, today),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+            child: Row(
               children: [
-                Icon(
-                  Icons.hourglass_bottom_rounded,
-                  size: 20,
-                  color: colorScheme.primary,
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.hourglass_bottom_rounded,
+                    color: colorScheme.onPrimaryContainer,
+                  ),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  'Heute vorbereiten',
-                  style: Theme.of(context).textTheme.titleLarge,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Heute vorbereiten · ${tasks.length} ${tasks.length == 1 ? 'Aufgabe' : 'Aufgaben'}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${firstTask.instruction} · $meta',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.keyboard_arrow_up_rounded,
+                  color: colorScheme.onSurfaceVariant,
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-            if (tasks.isEmpty)
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showPreparationSheet(
+    BuildContext context,
+    List<_PreparationTask> tasks,
+    DateTime today,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          top: false,
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            children: [
               Text(
-                'Für die nächsten Tage habe ich nichts mit Einweichen, Kühlen, Marinieren oder Ruhen gefunden.',
+                'Heute vorbereiten',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Alles, was euch später Küchenzeit spart.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
-              )
-            else
+              ),
+              const SizedBox(height: 16),
               ...tasks.indexed.map((entry) {
                 final index = entry.$1;
                 final task = entry.$2;
                 return Padding(
-                  padding: EdgeInsets.only(top: index == 0 ? 0 : 12),
+                  padding: EdgeInsets.only(top: index == 0 ? 0 : 14),
                   child: _PreparationTaskTile(task: task, today: today),
                 );
               }),
-          ],
-        ),
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -633,6 +779,7 @@ class _PreparationTaskTile extends StatelessWidget {
     final meta = [
       _relativeDayLabel(task.plannedFor, today),
       _mealLabel(task.meal),
+      if (task.dueLabel != null) task.dueLabel!,
       if (task.isSide) 'Beilage',
     ].join(' · ');
 
