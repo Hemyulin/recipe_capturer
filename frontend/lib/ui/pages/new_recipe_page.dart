@@ -334,6 +334,7 @@ class _NewRecipePageState extends State<NewRecipePage> {
   final Set<String> _selectedTags = {};
 
   List<String> _imagePaths = [];
+  int _imageRevision = 0;
   bool _isPolishing = false;
   bool _isGeneratingImage = false;
 
@@ -482,6 +483,7 @@ class _NewRecipePageState extends State<NewRecipePage> {
         ..._imagePaths,
         ...images.map((image) => image.path).take(remainingSlots),
       ];
+      _imageRevision += 1;
     });
   }
 
@@ -490,12 +492,16 @@ class _NewRecipePageState extends State<NewRecipePage> {
     setState(() {
       final selected = _imagePaths.removeAt(index);
       _imagePaths.insert(0, selected);
+      _imageRevision += 1;
     });
   }
 
   void _removePhoto(int index) {
     if (index < 0 || index >= _imagePaths.length) return;
-    setState(() => _imagePaths.removeAt(index));
+    setState(() {
+      _imagePaths.removeAt(index);
+      _imageRevision += 1;
+    });
   }
 
   bool _isLocalUploadCandidate(String? path) {
@@ -636,9 +642,10 @@ class _NewRecipePageState extends State<NewRecipePage> {
     try {
       final imagePath = await imageRepo.generateRecipeImage(draft);
       if (!mounted) return;
-      setState(
-        () => _imagePaths = [imagePath, ..._imagePaths].take(5).toList(),
-      );
+      setState(() {
+        _imagePaths = [imagePath, ..._imagePaths].take(5).toList();
+        _imageRevision += 1;
+      });
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('KI-Bild erstellt.')));
@@ -915,6 +922,7 @@ class _NewRecipePageState extends State<NewRecipePage> {
                         RecipeImage(
                           path: imagePath,
                           placeholderSeed: widget.initialRecipe?.id,
+                          cacheKey: _imageRevision,
                         ),
                         Positioned(
                           left: 12,

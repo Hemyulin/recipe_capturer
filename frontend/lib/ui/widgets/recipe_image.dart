@@ -12,11 +12,13 @@ class RecipeImage extends StatefulWidget {
     required this.path,
     this.fit = BoxFit.cover,
     this.placeholderSeed,
+    this.cacheKey,
   });
 
   final String? path;
   final BoxFit fit;
   final String? placeholderSeed;
+  final Object? cacheKey;
 
   @override
   State<RecipeImage> createState() => _RecipeImageState();
@@ -34,7 +36,8 @@ class _RecipeImageState extends State<RecipeImage> {
   @override
   void didUpdateWidget(covariant RecipeImage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.path != widget.path) {
+    if (oldWidget.path != widget.path ||
+        oldWidget.cacheKey != widget.cacheKey) {
       _resolvedPath = _resolvePath(widget.path);
     }
   }
@@ -102,8 +105,14 @@ class _RecipeImageState extends State<RecipeImage> {
 
       final uri = Uri.parse(url);
       final extension = path.extension(uri.path).split('?').first;
+      final cacheIdentity = widget.cacheKey == null
+          ? url
+          : '$url#${widget.cacheKey}';
       final cacheFile = File(
-        path.join(cacheDirectory.path, '${_stableHash(url)}$extension'),
+        path.join(
+          cacheDirectory.path,
+          '${_stableHash(cacheIdentity)}$extension',
+        ),
       );
       if (await cacheFile.exists() && await cacheFile.length() > 0) {
         return cacheFile.path;

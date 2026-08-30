@@ -164,10 +164,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Heute vorbereiten'), findsOneWidget);
-    expect(find.text('Madjadra'), findsOneWidget);
-    expect(find.text('Morgen · Abendessen'), findsOneWidget);
-    expect(find.text('Linsen am Vormittag in Wasser legen.'), findsOneWidget);
+    expect(find.textContaining('Heute vorbereiten'), findsOneWidget);
+    expect(find.textContaining('Madjadra'), findsOneWidget);
+    expect(find.textContaining('Morgen · Abendessen'), findsOneWidget);
+    expect(
+      find.textContaining('Linsen am Vormittag in Wasser legen.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('sets leftovers for a Today meal', (WidgetTester tester) async {
@@ -224,6 +227,40 @@ void main() {
     final lunch = slots.singleWhere((slot) => slot.meal == 'lunch');
     expect(lunch.isRecipe, true);
     expect(lunch.recipeId, testRecipes.first.id);
+  });
+
+  testWidgets('updates preparation after setting a Today meal', (
+    WidgetTester tester,
+  ) async {
+    final repo = InMemoryRecipeRepository();
+    final mealPlanRepo = InMemoryMealPlanRepository();
+    final prepRecipe = Recipe.create(
+      'Linsen Dal',
+      ingredients: const [
+        RecipeIngredient(name: 'Linsen', quantity: '250', unit: 'g'),
+      ],
+      preparationTasks: const ['Linsen 3 Stunden einweichen lassen.'],
+      instructions: const ['Kochen.'],
+      tags: const ['dinner'],
+    );
+    await repo.add(prepRecipe);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TodayPage(repo: repo, mealPlanRepo: mealPlanRepo),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Heute vorbereiten'), findsNothing);
+
+    await tester.tap(find.text('Nichts geplant').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Linsen Dal').last);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Heute vorbereiten'), findsOneWidget);
+    expect(find.textContaining('Linsen 3 Stunden'), findsOneWidget);
   });
 
   testWidgets('repeats a Today recipe through current Sunday', (
