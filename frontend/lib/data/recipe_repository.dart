@@ -19,6 +19,50 @@ abstract interface class RecipeRepository {
   Future<Recipe> update(Recipe recipe);
 }
 
+class RecipePageQuery {
+  const RecipePageQuery({
+    this.search = '',
+    this.favoritesOnly = false,
+    this.needsReviewOnly = false,
+    this.season,
+    this.maxTotalTimeMinutes,
+    this.tag,
+    this.limit = 20,
+    this.offset = 0,
+  });
+
+  final String search;
+  final bool favoritesOnly;
+  final bool needsReviewOnly;
+  final String? season;
+  final int? maxTotalTimeMinutes;
+  final String? tag;
+  final int limit;
+  final int offset;
+}
+
+class RecipePageResult {
+  const RecipePageResult({
+    required this.items,
+    required this.total,
+    required this.totalCount,
+    required this.needsReviewCount,
+    required this.seasons,
+    required this.tags,
+  });
+
+  final List<Recipe> items;
+  final int total;
+  final int totalCount;
+  final int needsReviewCount;
+  final List<String> seasons;
+  final List<String> tags;
+}
+
+abstract interface class PaginatedRecipeRepository {
+  Future<RecipePageResult> getPage(RecipePageQuery query);
+}
+
 abstract interface class RecipeImageRepository {
   Future<Recipe> uploadImage({
     required String recipeId,

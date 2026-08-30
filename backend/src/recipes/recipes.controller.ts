@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UploadedFile,
   UploadedFiles,
   UseInterceptors,
@@ -21,7 +22,37 @@ export class RecipesController {
   constructor(private readonly recipesService: RecipesService) {}
 
   @Get()
-  findAll() {
+  findAll(
+    @Query("limit") limit?: string,
+    @Query("offset") offset?: string,
+    @Query("search") search?: string,
+    @Query("favoritesOnly") favoritesOnly?: string,
+    @Query("needsReviewOnly") needsReviewOnly?: string,
+    @Query("season") season?: string,
+    @Query("maxTotalTimeMinutes") maxTotalTimeMinutes?: string,
+    @Query("tag") tag?: string,
+  ) {
+    if (
+      limit != null ||
+      offset != null ||
+      search != null ||
+      favoritesOnly != null ||
+      needsReviewOnly != null ||
+      season != null ||
+      maxTotalTimeMinutes != null ||
+      tag != null
+    ) {
+      return this.recipesService.findPage({
+        limit,
+        offset,
+        search,
+        favoritesOnly,
+        needsReviewOnly,
+        season,
+        maxTotalTimeMinutes,
+        tag,
+      });
+    }
     return this.recipesService.findAll();
   }
 

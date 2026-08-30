@@ -64,6 +64,17 @@ type MealPlanReferenceRow = {
   recipe_extra_ids_json: string;
 };
 
+type RecipePageQueryInput = {
+  limit?: string;
+  offset?: string;
+  search?: string;
+  favoritesOnly?: string;
+  needsReviewOnly?: string;
+  season?: string;
+  maxTotalTimeMinutes?: string;
+  tag?: string;
+};
+
 export type UploadedRecipeImage = {
   originalname: string;
   mimetype: string;
@@ -190,6 +201,126 @@ export class RecipesService {
       .all(this.householdId()) as RecipeRow[];
 
     return rows.map((row) => this.toApiRecipe(row));
+  }
+
+  findPage(input: RecipePageQueryInput) {
+    const limit = this.clampedPositiveInt(input.limit, 20, 1, 50);
+    const offset = this.clampedPositiveInt(input.offset, 0, 0, 100000);
+    const where = ["r.household_id = ?", "r.archived_at IS NULL"];
+    const params: unknown[] = [this.householdId()];
+    const search = this.cleanText(input.search).toLowerCase();
+    const season = this.cleanText(input.season);
+    const tag = this.cleanText(input.tag);
+    const maxTotalTimeMinutes = this.nonNegativeIntOrUndefined(
+      Number(input.maxTotalTimeMinutes),
+    );
+
+    if (this.isTruthyQueryFlag(input.favoritesOnly)) {
+      where.push("r.is_favorite = 1");
+    }
+    if (this.isTruthyQueryFlag(input.needsReviewOnly)) {
+      where.push(
+        "EXISTS (SELECT 1 FROM recipe_tags rt WHERE rt.recipe_id = r.id AND rt.tag = 'needs_review')",
+      );
+    }
+    if (season) {
+      where.push("r.season = ?");
+      params.push(season);
+    }
+    if (maxTotalTimeMinutes != null) {
+      where.push(
+        "(COALESCE(r.prep_minutes, 0) + COALESCE(r.cook_minutes, 0)) <= ?",
+      );
+      params.push(maxTotalTimeMinutes);
+    }
+    if (tag) {
+      where.push(
+        "EXISTS (SELECT 1 FROM recipe_tags rt WHERE rt.recipe_id = r.id AND rt.tag = ?)",
+      );
+      params.push(tag);
+    }
+    if (search) {
+      where.push(`
+        (
+          LOWER(r.title) LIKE ?
+          OR LOWER(COALESCE(r.description, '')) LIKE ?
+          OR EXISTS (
+            SELECT 1 FROM recipe_ingredients ri
+            WHERE ri.recipe_id = r.id
+              AND (
+                LOWER(ri.name) LIKE ?
+                OR LOWER(COALESCE(ri.unit, '')) LIKE ?
+                OR LOWER(COALESCE(ri.note, '')) LIKE ?
+                OR LOWER(COALESCE(ri.usage_note, '')) LIKE ?
+              )
+          )
+          OR EXISTS (
+            SELECT 1 FROM recipe_tags rt
+            WHERE rt.recipe_id = r.id AND LOWER(rt.tag) LIKE ?
+          )
+        )
+      `);
+      const like = `%${search}%`;
+      params.push(like, like, like, like, like, like, like);
+    }
+
+    const whereSql = where.join(" AND ");
+    const total = (
+      this.database.db
+        .prepare(
+          `
+          SELECT COUNT(*) AS count
+          FROM recipes r
+          WHERE ${whereSql}
+          `,
+        )
+        .get(...params) as { count: number }
+    ).count;
+    const totalCount = (
+      this.database.db
+        .prepare(
+          `
+          SELECT COUNT(*) AS count
+          FROM recipes
+          WHERE household_id = ? AND archived_at IS NULL
+          `,
+        )
+        .get(this.householdId()) as { count: number }
+    ).count;
+    const needsReviewCount = (
+      this.database.db
+        .prepare(
+          `
+          SELECT COUNT(DISTINCT r.id) AS count
+          FROM recipes r
+          JOIN recipe_tags rt ON rt.recipe_id = r.id
+          WHERE r.household_id = ?
+            AND r.archived_at IS NULL
+            AND rt.tag = 'needs_review'
+          `,
+        )
+        .get(this.householdId()) as { count: number }
+    ).count;
+    const rows = this.database.db
+      .prepare(
+        `
+        SELECT r.*
+        FROM recipes r
+        WHERE ${whereSql}
+        ORDER BY r.created_at DESC
+        LIMIT ? OFFSET ?
+        `,
+      )
+      .all(...params, limit, offset) as RecipeRow[];
+
+    return {
+      items: rows.map((row) => this.toApiRecipe(row)),
+      total,
+      totalCount,
+      needsReviewCount,
+      seasons: this.recipeSeasons(),
+      tags: this.recipeTags(),
+    };
   }
 
   findOne(id: string) {
@@ -1386,6 +1517,57 @@ export class RecipesService {
 
   private cleanText(value: unknown) {
     return typeof value === "string" ? value.trim() : "";
+  }
+
+  private clampedPositiveInt(
+    value: unknown,
+    fallback: number,
+    min: number,
+    max: number,
+  ) {
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed)) return fallback;
+    return Math.min(Math.max(parsed, min), max);
+  }
+
+  private isTruthyQueryFlag(value: unknown) {
+    return value === true || value === "true" || value === "1";
+  }
+
+  private recipeSeasons() {
+    const rows = this.database.db
+      .prepare(
+        `
+        SELECT DISTINCT season
+        FROM recipes
+        WHERE household_id = ?
+          AND archived_at IS NULL
+          AND season IS NOT NULL
+          AND TRIM(season) != ''
+        ORDER BY season ASC
+        `,
+      )
+      .all(this.householdId()) as { season: string }[];
+
+    return rows.map((row) => row.season);
+  }
+
+  private recipeTags() {
+    const rows = this.database.db
+      .prepare(
+        `
+        SELECT DISTINCT rt.tag
+        FROM recipe_tags rt
+        JOIN recipes r ON r.id = rt.recipe_id
+        WHERE r.household_id = ?
+          AND r.archived_at IS NULL
+          AND rt.tag != 'needs_review'
+        ORDER BY rt.tag ASC
+        `,
+      )
+      .all(this.householdId()) as { tag: string }[];
+
+    return rows.map((row) => row.tag);
   }
 
   private normalizeIngredient(

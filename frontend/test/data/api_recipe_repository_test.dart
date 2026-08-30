@@ -34,6 +34,7 @@ void main() {
         _RequestLog(
           method: request.method,
           path: request.uri.path,
+          queryParameters: request.uri.queryParameters,
           body: body,
           token: request.headers.value('x-cookbuk-token'),
         ),
@@ -41,7 +42,20 @@ void main() {
 
       request.response.headers.contentType = ContentType.json;
       if (request.method == 'GET' && request.uri.path == '/recipes') {
-        request.response.write(jsonEncode([_recipeJson()]));
+        if (request.uri.queryParameters.containsKey('limit')) {
+          request.response.write(
+            jsonEncode({
+              'items': [_recipeJson()],
+              'total': 7,
+              'totalCount': 42,
+              'needsReviewCount': 3,
+              'seasons': ['Ganzjährig'],
+              'tags': ['breakfast', 'quick'],
+            }),
+          );
+        } else {
+          request.response.write(jsonEncode([_recipeJson()]));
+        }
       } else if (request.method == 'POST' && request.uri.path == '/recipes') {
         request.response.write(jsonEncode(_recipeJson()));
       } else if (request.method == 'PATCH' &&
@@ -197,6 +211,32 @@ void main() {
       'http://${server.address.host}:${server.port}/images/oatmeal-buns.jpg',
     );
     expect(requests.single.path, '/recipes');
+  });
+
+  test('reads paged recipes from the backend', () async {
+    final page = await repository.getPage(
+      const RecipePageQuery(
+        search: 'oat',
+        favoritesOnly: true,
+        tag: 'breakfast',
+        limit: 20,
+        offset: 40,
+      ),
+    );
+
+    expect(requests.single.method, 'GET');
+    expect(requests.single.path, '/recipes');
+    expect(requests.single.queryParameters['search'], 'oat');
+    expect(requests.single.queryParameters['favoritesOnly'], 'true');
+    expect(requests.single.queryParameters['tag'], 'breakfast');
+    expect(requests.single.queryParameters['limit'], '20');
+    expect(requests.single.queryParameters['offset'], '40');
+    expect(page.items.single.title, 'Oatmeal Buns');
+    expect(page.total, 7);
+    expect(page.totalCount, 42);
+    expect(page.needsReviewCount, 3);
+    expect(page.seasons, ['Ganzjährig']);
+    expect(page.tags, ['breakfast', 'quick']);
   });
 
   test('writes backend-safe recipe payloads', () async {
@@ -431,12 +471,14 @@ class _RequestLog {
   const _RequestLog({
     required this.method,
     required this.path,
+    required this.queryParameters,
     required this.body,
     required this.token,
   });
 
   final String method;
   final String path;
+  final Map<String, String> queryParameters;
   final String body;
   final String? token;
 }
