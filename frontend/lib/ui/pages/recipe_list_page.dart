@@ -12,6 +12,7 @@ import 'package:cookbuk/ui/pages/recipe_camera_import_page.dart';
 import 'package:cookbuk/ui/widgets/backend_connection_icon.dart';
 import 'package:cookbuk/ui/widgets/load_state_view.dart';
 import 'package:cookbuk/ui/widgets/recipe_card.dart';
+import 'package:cookbuk/ui/widgets/recipe_plan_sheet.dart';
 
 class RecipeListPage extends StatefulWidget {
   const RecipeListPage({
@@ -403,7 +404,7 @@ class _RecipeListPageState extends State<RecipeListPage> {
                   mainAxisExtent: columns == 1
                       ? 362
                       : columns == 2
-                      ? 330
+                      ? 376
                       : 318,
                 ),
                 itemCount: filteredRecipes.length + (_isLoadingMore ? 1 : 0),
@@ -419,6 +420,13 @@ class _RecipeListPageState extends State<RecipeListPage> {
                   final recipe = filteredRecipes[index];
                   return RecipeCard(
                     recipe: recipe,
+                    onPlan: widget.mealPlanRepo == null
+                        ? null
+                        : () => showRecipePlanSheet(
+                            context: context,
+                            recipe: recipe,
+                            mealPlanRepo: widget.mealPlanRepo!,
+                          ),
                     onTap: () async {
                       await context.push('/details', extra: recipe);
                       await _refresh();

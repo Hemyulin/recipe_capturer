@@ -6,6 +6,7 @@ import 'package:cookbuk/domain/recipe.dart';
 import 'package:cookbuk/ui/formatters/tag_label_de.dart';
 import 'package:cookbuk/ui/widgets/backend_connection_icon.dart';
 import 'package:cookbuk/ui/widgets/recipe_image.dart';
+import 'package:cookbuk/ui/widgets/recipe_plan_sheet.dart';
 
 class RecipeDetailsPage extends StatefulWidget {
   const RecipeDetailsPage({
@@ -88,6 +89,16 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
     final saved = await context.push<bool>('/edit', extra: recipe);
     if (!mounted) return;
     if (saved == true) await _refreshRecipe();
+  }
+
+  Future<void> _planRecipe() async {
+    final mealPlanRepo = widget.mealPlanRepo;
+    if (mealPlanRepo == null) return;
+    await showRecipePlanSheet(
+      context: context,
+      recipe: recipe,
+      mealPlanRepo: mealPlanRepo,
+    );
   }
 
   Future<void> _confirmAndDelete() async {
@@ -284,6 +295,17 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
           const SizedBox(height: 16),
           Text(recipe.title, style: textTheme.headlineSmall),
           const SizedBox(height: 10),
+          if (widget.mealPlanRepo != null) ...[
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _planRecipe,
+                icon: const Icon(Icons.event_available_outlined),
+                label: const Text('Zum Wochenplan'),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           Wrap(
             spacing: 8,
             runSpacing: 8,

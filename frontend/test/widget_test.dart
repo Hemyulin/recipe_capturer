@@ -10,6 +10,8 @@ import 'package:cookbuk/data/meal_plan_repository.dart';
 import 'package:cookbuk/domain/meal_plan_slot.dart';
 import 'package:cookbuk/domain/recipe.dart';
 import 'package:cookbuk/ui/pages/new_recipe_page.dart';
+import 'package:cookbuk/ui/pages/recipe_details_page.dart';
+import 'package:cookbuk/ui/pages/recipe_list_page.dart';
 import 'package:cookbuk/ui/pages/shopping_page.dart';
 import 'package:cookbuk/ui/pages/status_page.dart';
 import 'package:cookbuk/ui/pages/today_page.dart';
@@ -72,6 +74,86 @@ void main() {
     );
 
     expect(find.text('Neues Rezept'), findsOneWidget);
+  });
+
+  testWidgets('plans a recipe from the recipe list card action', (
+    WidgetTester tester,
+  ) async {
+    final repo = InMemoryRecipeRepository();
+    final mealPlanRepo = InMemoryMealPlanRepository();
+    await repo.add(testRecipes.first);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RecipeListPage(
+          title: 'Rezepte',
+          repo: repo,
+          mealPlanRepo: mealPlanRepo,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Zum Wochenplan'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mittag'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Plan ansehen'), findsOneWidget);
+    expect(find.text('Rückgängig'), findsOneWidget);
+
+    final today = DateTime.now();
+    final slots = await mealPlanRepo.getRange(from: today, to: today);
+    final lunch = slots.singleWhere((slot) => slot.meal == 'lunch');
+    expect(lunch.recipeId, testRecipes.first.id);
+
+    await tester.tap(find.text('Rückgängig'));
+    await tester.pumpAndSettle();
+
+    final undoneSlots = await mealPlanRepo.getRange(from: today, to: today);
+    expect(
+      undoneSlots.singleWhere((slot) => slot.meal == 'lunch').isEmpty,
+      true,
+    );
+  });
+
+  testWidgets('plans a recipe from the recipe detail page action', (
+    WidgetTester tester,
+  ) async {
+    final repo = InMemoryRecipeRepository();
+    final mealPlanRepo = InMemoryMealPlanRepository();
+    await repo.add(testRecipes.first);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RecipeDetailsPage(
+          recipe: testRecipes.first,
+          repo: repo,
+          mealPlanRepo: mealPlanRepo,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Zum Wochenplan'),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Zum Wochenplan'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Morgen'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Abend'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Plan ansehen'), findsOneWidget);
+    expect(find.text('Rückgängig'), findsOneWidget);
+
+    final tomorrow = DateTime.now().add(const Duration(days: 1));
+    final slots = await mealPlanRepo.getRange(from: tomorrow, to: tomorrow);
+    final dinner = slots.singleWhere((slot) => slot.meal == 'dinner');
+    expect(dinner.recipeId, testRecipes.first.id);
   });
 
   testWidgets('shows AI import review framing for imported drafts', (
