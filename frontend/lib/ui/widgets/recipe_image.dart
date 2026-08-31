@@ -2,9 +2,14 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:cookbuk/domain/recipe.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
+
+String recipeImageCacheKey(Recipe recipe) {
+  return '${recipe.id}:${recipe.imagePaths.join('|')}';
+}
 
 class RecipeImage extends StatefulWidget {
   const RecipeImage({
