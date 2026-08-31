@@ -95,6 +95,7 @@ class Recipe {
   final int? prepTimeMinutes;
   final int? cookTimeMinutes;
   final String notes;
+  final List<String> confidenceNotes;
   final List<RecipeCookEvent> cookEvents;
 
   const Recipe({
@@ -112,6 +113,7 @@ class Recipe {
     this.prepTimeMinutes,
     this.cookTimeMinutes,
     this.notes = '',
+    this.confidenceNotes = const [],
     this.cookEvents = const [],
   });
 
@@ -146,6 +148,7 @@ class Recipe {
     int? prepTimeMinutes,
     int? cookTimeMinutes,
     String notes = '',
+    List<String> confidenceNotes = const [],
     List<RecipeCookEvent> cookEvents = const [],
   }) {
     final trimmedTitle = title.trim();
@@ -181,6 +184,10 @@ class Recipe {
       prepTimeMinutes: prepTimeMinutes,
       cookTimeMinutes: cookTimeMinutes,
       notes: notes.trim(),
+      confidenceNotes: confidenceNotes
+          .map((note) => note.trim())
+          .where((note) => note.isNotEmpty)
+          .toList(),
       cookEvents: cookEvents,
     );
   }
@@ -203,6 +210,7 @@ class Recipe {
     int? cookTimeMinutes,
     bool clearCookTime = false,
     String? notes,
+    List<String>? confidenceNotes,
     List<RecipeCookEvent>? cookEvents,
   }) {
     return Recipe(
@@ -224,6 +232,7 @@ class Recipe {
           ? null
           : cookTimeMinutes ?? this.cookTimeMinutes,
       notes: notes ?? this.notes,
+      confidenceNotes: confidenceNotes ?? this.confidenceNotes,
       cookEvents: cookEvents ?? this.cookEvents,
     );
   }
@@ -259,6 +268,7 @@ class Recipe {
       'prepTimeMinutes': prepTimeMinutes,
       'cookTimeMinutes': cookTimeMinutes,
       'notes': notes,
+      'confidenceNotes': confidenceNotes,
       'cookCount': cookCount,
       'lastCookedAt': lastCookedAt?.toIso8601String(),
       'cookEvents': cookEvents.map((event) => event.toJson()).toList(),
@@ -308,6 +318,10 @@ class Recipe {
       prepTimeMinutes: json['prepTimeMinutes'] as int?,
       cookTimeMinutes: json['cookTimeMinutes'] as int?,
       notes: json['notes'] as String? ?? '',
+      confidenceNotes: (json['confidenceNotes'] as List<dynamic>? ?? [])
+          .map((note) => note.toString().trim())
+          .where((note) => note.isNotEmpty)
+          .toList(),
       cookEvents: cookEvents,
     );
   }

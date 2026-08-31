@@ -282,6 +282,9 @@ class ApiRecipeRepository
       preparationTasks: (json['preparationTasks'] as List<dynamic>? ?? [])
           .map((task) => task.toString())
           .toList(),
+      confidenceNotes: (json['confidenceNotes'] as List<dynamic>? ?? [])
+          .map((note) => note.toString())
+          .toList(),
       tags: (json['tags'] as List<dynamic>? ?? [])
           .map((tag) => tag.toString())
           .followedBy(const ['needs_review'])

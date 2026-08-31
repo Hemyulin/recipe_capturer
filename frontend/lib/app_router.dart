@@ -88,11 +88,12 @@ final router = GoRouter(
       builder: (context, state) {
         final draft = state.extra is Recipe ? state.extra as Recipe : null;
         return NewRecipePage(
-          title: draft == null ? 'Neues Rezept' : 'Rezeptentwurf',
+          title: draft == null ? 'Neues Rezept' : 'KI-Import prüfen',
           repo: repo,
           mealPlanRepo: mealPlanRepo,
           initialRecipe: draft,
           saveAsNew: draft != null,
+          isAiImportReview: draft != null,
         );
       },
     ),

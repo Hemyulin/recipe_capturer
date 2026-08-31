@@ -74,6 +74,42 @@ void main() {
     expect(find.text('Neues Rezept'), findsOneWidget);
   });
 
+  testWidgets('shows AI import review framing for imported drafts', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NewRecipePage(
+          title: 'KI-Import prüfen',
+          repo: InMemoryRecipeRepository(),
+          initialRecipe: Recipe.create(
+            'Foto Pasta',
+            ingredients: const [RecipeIngredient(name: 'Pasta')],
+            instructions: const ['Kochen.'],
+            imagePaths: const ['assets/demo_recipes/pesto_pasta_peas.png'],
+            confidenceNotes: const ['Menge war schwer lesbar.'],
+          ),
+          saveAsNew: true,
+          isAiImportReview: true,
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('KI-Import prüfen'), findsOneWidget);
+    expect(find.text('Bitte kurz prüfen'), findsOneWidget);
+    expect(find.text('Unsichere Stellen'), findsOneWidget);
+    expect(find.text('Menge war schwer lesbar.'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('Rezept speichern'),
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Rezept speichern'), findsOneWidget);
+  });
+
   testWidgets('clears a Today meal after revealing trash action', (
     WidgetTester tester,
   ) async {

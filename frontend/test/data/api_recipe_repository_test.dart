@@ -331,6 +331,7 @@ void main() {
     expect(draft.ingredients.first.name, 'Pasta');
     expect(draft.ingredients.last.excludeFromShopping, true);
     expect(draft.instructions, ['Kochen.', 'Servieren.']);
+    expect(draft.confidenceNotes, ['Menge war schwer lesbar.']);
     expect(draft.tags, contains('quick'));
     expect(draft.mainImagePath, file.path);
 
