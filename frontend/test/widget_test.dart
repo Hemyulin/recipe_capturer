@@ -200,7 +200,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Heute vorbereiten'), findsOneWidget);
+    expect(find.textContaining('Vorbereitung'), findsOneWidget);
     expect(find.textContaining('Madjadra'), findsOneWidget);
     expect(find.textContaining('Morgen · Abendessen'), findsOneWidget);
     expect(
@@ -288,14 +288,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Heute vorbereiten'), findsNothing);
+    expect(find.textContaining('Vorbereitung'), findsNothing);
 
     await tester.tap(find.text('Nichts geplant').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Linsen Dal').last);
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Heute vorbereiten'), findsOneWidget);
+    expect(find.textContaining('Vorbereitung'), findsOneWidget);
     expect(find.textContaining('Linsen 3 Stunden'), findsOneWidget);
   });
 
@@ -518,6 +518,7 @@ void main() {
         RecipeIngredient(name: 'Haferflocken', quantity: '80', unit: 'g'),
         RecipeIngredient(name: 'Ei'),
         RecipeIngredient(name: 'Eier', quantity: '2'),
+        RecipeIngredient(name: '1 Stück Ei'),
         RecipeIngredient(name: 'Magerquark', quantity: '250', unit: 'g'),
         RecipeIngredient(
           name: 'Backpapier',
@@ -535,6 +536,8 @@ void main() {
         RecipeIngredient(name: 'Ei (Gr. M)'),
         RecipeIngredient(name: 'Mehl', quantity: '0,5', unit: 'kg'),
         RecipeIngredient(name: 'Mehl', quantity: '200', unit: 'g'),
+        RecipeIngredient(name: '1/2 Zwiebel'),
+        RecipeIngredient(name: '½ Stück Zwiebel'),
       ],
       instructions: const ['Backen.'],
       tags: const ['dessert'],
@@ -572,19 +575,20 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Einkauf'), findsOneWidget);
-    expect(find.text('2 Rezepte, 5 Zutaten'), findsOneWidget);
+    expect(find.text('2 Rezepte, 6 Zutaten'), findsOneWidget);
     expect(find.text('200 g Haferflocken'), findsOneWidget);
-    expect(find.text('4 Eier'), findsOneWidget);
+    expect(find.text('5 Eier'), findsOneWidget);
     expect(find.text('700 g Mehl'), findsOneWidget);
     expect(find.text('250 g Magerquark'), findsOneWidget);
     expect(find.text('1 Banane'), findsOneWidget);
+    expect(find.text('1 Zwiebel'), findsOneWidget);
     expect(find.text('1 Backpapier'), findsNothing);
     expect(find.text('560 ml boiling water'), findsNothing);
 
     await tester.tap(find.text('200 g Haferflocken'));
     await tester.pumpAndSettle();
 
-    expect(find.text('1/5'), findsOneWidget);
+    expect(find.text('1/6'), findsOneWidget);
   });
 
   testWidgets('copies the shopping list as plain text', (

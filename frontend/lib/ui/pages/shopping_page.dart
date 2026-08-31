@@ -1891,6 +1891,7 @@ class _ShoppingItem {
           normalizedIngredient.key,
           () => _ShoppingItemBuilder(
             name: normalizedIngredient.displayName,
+            singularName: normalizedIngredient.singularDisplayName,
             unit: normalizedIngredient.displayUnit,
             storeId: knowledge?.storeId,
             storeName: knowledge?.storeName,
@@ -1909,6 +1910,7 @@ class _ShoppingItem {
         key,
         () => _ShoppingItemBuilder(
           name: name,
+          singularName: name,
           unit: '',
           storeId: knowledge?.storeId,
           storeName: knowledge?.storeName,
@@ -1924,6 +1926,7 @@ class _ShoppingItem {
         key,
         () => _ShoppingItemBuilder(
           name: name,
+          singularName: name,
           unit: '',
           storeId: manualItem.storeId,
           storeName: manualItem.storeName,
@@ -2018,6 +2021,7 @@ class _NormalizedShoppingIngredient {
     required this.key,
     required this.knowledgeKey,
     required this.displayName,
+    required this.singularDisplayName,
     required this.displayUnit,
     required this.quantity,
   });
@@ -2025,13 +2029,17 @@ class _NormalizedShoppingIngredient {
   final String key;
   final String knowledgeKey;
   final String displayName;
+  final String singularDisplayName;
   final String displayUnit;
   final String quantity;
 
   static _NormalizedShoppingIngredient from(RecipeIngredient ingredient) {
-    final rawName = ingredient.name.trim();
+    final leadingAmount = _splitLeadingIngredientAmount(ingredient.name);
+    final rawName = leadingAmount.name.trim();
     final rawUnit = ingredient.unit.trim();
-    final rawQuantity = ingredient.quantity.trim();
+    final rawQuantity = ingredient.quantity.trim().isEmpty
+        ? leadingAmount.quantity
+        : ingredient.quantity.trim();
     final normalizedName = _ShoppingItem._normalizeName(rawName);
     final countable = _CountableIngredient.match(normalizedName);
 
@@ -2040,18 +2048,22 @@ class _NormalizedShoppingIngredient {
         key: '${countable.canonicalKey}|count',
         knowledgeKey: countable.knowledgeKey,
         displayName: countable.displayName,
+        singularDisplayName: countable.singularDisplayName,
         displayUnit: '',
-        quantity: _countQuantity(rawQuantity, rawUnit),
+        quantity: _countQuantity(rawQuantity, rawUnit, leadingAmount.unit),
       );
     }
 
-    final unit = _NormalizedShoppingUnit.from(rawUnit);
+    final unit = _NormalizedShoppingUnit.from(
+      rawUnit.isEmpty ? leadingAmount.unit : rawUnit,
+    );
     if (unit != null) {
       final convertedQuantity = unit.convert(rawQuantity);
       return _NormalizedShoppingIngredient(
         key: '$normalizedName|${unit.displayUnit}',
         knowledgeKey: normalizedName,
         displayName: rawName,
+        singularDisplayName: rawName,
         displayUnit: unit.displayUnit,
         quantity: convertedQuantity,
       );
@@ -2061,18 +2073,26 @@ class _NormalizedShoppingIngredient {
       key: '$normalizedName|${rawUnit.toLowerCase()}',
       knowledgeKey: normalizedName,
       displayName: rawName,
+      singularDisplayName: rawName,
       displayUnit: rawUnit,
       quantity: rawQuantity,
     );
   }
 
-  static String _countQuantity(String rawQuantity, String rawUnit) {
+  static String _countQuantity(
+    String rawQuantity,
+    String rawUnit,
+    String leadingUnit,
+  ) {
     final parsedQuantity = _parseNumber(rawQuantity);
     if (parsedQuantity != null) return _formatNumber(parsedQuantity);
 
     final normalizedUnit = _ShoppingItem._normalizeName(rawUnit);
     final parsedUnit = _parseNumber(normalizedUnit);
     if (parsedUnit != null) return _formatNumber(parsedUnit);
+
+    final parsedLeadingUnit = _parseNumber(leadingUnit);
+    if (parsedLeadingUnit != null) return _formatNumber(parsedLeadingUnit);
 
     return '1';
   }
@@ -2083,12 +2103,14 @@ class _CountableIngredient {
     required this.canonicalKey,
     required this.knowledgeKey,
     required this.displayName,
+    required this.singularDisplayName,
     required this.aliases,
   });
 
   final String canonicalKey;
   final String knowledgeKey;
   final String displayName;
+  final String singularDisplayName;
   final Set<String> aliases;
 
   static const _items = [
@@ -2096,6 +2118,7 @@ class _CountableIngredient {
       canonicalKey: 'egg',
       knowledgeKey: 'eier',
       displayName: 'Eier',
+      singularDisplayName: 'Ei',
       aliases: {
         'ei',
         'eier',
@@ -2111,18 +2134,21 @@ class _CountableIngredient {
       canonicalKey: 'onion',
       knowledgeKey: 'zwiebeln',
       displayName: 'Zwiebeln',
+      singularDisplayName: 'Zwiebel',
       aliases: {'zwiebel', 'zwiebeln'},
     ),
     _CountableIngredient(
       canonicalKey: 'lemon',
       knowledgeKey: 'zitronen',
       displayName: 'Zitronen',
+      singularDisplayName: 'Zitrone',
       aliases: {'zitrone', 'zitronen'},
     ),
     _CountableIngredient(
       canonicalKey: 'garlic_clove',
       knowledgeKey: 'knoblauchzehen',
       displayName: 'Knoblauchzehen',
+      singularDisplayName: 'Knoblauchzehe',
       aliases: {'knoblauchzehe', 'knoblauchzehen'},
     ),
   ];
@@ -2136,6 +2162,42 @@ class _CountableIngredient {
     }
     return null;
   }
+}
+
+({String quantity, String unit, String name}) _splitLeadingIngredientAmount(
+  String value,
+) {
+  final cleaned = value.trim();
+  final match = RegExp(
+    r'^((?:\d+(?:[,.]\d+)?)|(?:\d+\s*/\s*\d+)|[¼½¾])(?:\s+([^\s]+))?\s+(.+)$',
+    caseSensitive: false,
+  ).firstMatch(cleaned);
+  if (match == null) return (quantity: '', unit: '', name: cleaned);
+
+  final quantity = _normalizeFraction(match.group(1)!);
+  final possibleUnit = match.group(2)?.trim() ?? '';
+  final remainder = match.group(3)?.trim() ?? '';
+  final normalizedPossibleUnit = _ShoppingItem._normalizeName(possibleUnit);
+  final unit = const {
+    'g',
+    'gr',
+    'gramm',
+    'gram',
+    'kg',
+    'kilogramm',
+    'kilogram',
+    'ml',
+    'milliliter',
+    'l',
+    'liter',
+    'stueck',
+    'stück',
+    'stk',
+  }.contains(normalizedPossibleUnit);
+
+  return unit
+      ? (quantity: quantity, unit: possibleUnit, name: remainder)
+      : (quantity: quantity, unit: '', name: '$possibleUnit $remainder');
 }
 
 class _NormalizedShoppingUnit {
@@ -2176,9 +2238,26 @@ class _NormalizedShoppingUnit {
 }
 
 double? _parseNumber(String value) {
-  final normalized = value.trim().replaceAll(',', '.');
+  final normalized = _normalizeFraction(value).trim().replaceAll(',', '.');
   if (normalized.isEmpty) return null;
+  final fractionMatch = RegExp(r'^(\d+)\s*/\s*(\d+)$').firstMatch(normalized);
+  if (fractionMatch != null) {
+    final numerator = double.tryParse(fractionMatch.group(1)!);
+    final denominator = double.tryParse(fractionMatch.group(2)!);
+    if (numerator == null || denominator == null || denominator == 0) {
+      return null;
+    }
+    return numerator / denominator;
+  }
   return double.tryParse(normalized);
+}
+
+String _normalizeFraction(String value) {
+  return value
+      .trim()
+      .replaceAll('¼', '0.25')
+      .replaceAll('½', '0.5')
+      .replaceAll('¾', '0.75');
 }
 
 String _formatNumber(double value) {
@@ -2189,6 +2268,7 @@ String _formatNumber(double value) {
 class _ShoppingItemBuilder {
   _ShoppingItemBuilder({
     required this.name,
+    required this.singularName,
     required this.unit,
     this.storeId,
     this.storeName,
@@ -2196,6 +2276,7 @@ class _ShoppingItemBuilder {
   });
 
   final String name;
+  final String singularName;
   final String unit;
   final String? storeId;
   final String? storeName;
@@ -2221,7 +2302,7 @@ class _ShoppingItemBuilder {
   _ShoppingItem build(String key) {
     return _ShoppingItem(
       key: key,
-      name: name,
+      name: _displayName(),
       quantityLabel: _quantityLabel(),
       sources: sources.toList()..sort(),
       storeId: storeId,
@@ -2239,5 +2320,12 @@ class _ShoppingItemBuilder {
 
     final quantities = rawQuantities.toSet().join(' + ');
     return [quantities, unit].where((part) => part.isNotEmpty).join(' ');
+  }
+
+  String _displayName() {
+    if (unit.isNotEmpty || !onlyNumericQuantities || rawQuantities.isEmpty) {
+      return name;
+    }
+    return total == 1 ? singularName : name;
   }
 }
