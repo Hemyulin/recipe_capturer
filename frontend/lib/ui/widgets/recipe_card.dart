@@ -8,11 +8,13 @@ class RecipeCard extends StatelessWidget {
     required this.recipe,
     this.onTap,
     this.onDelete,
+    this.onPlan,
   });
 
   final Recipe recipe;
   final VoidCallback? onTap;
   final VoidCallback? onDelete;
+  final VoidCallback? onPlan;
 
   @override
   Widget build(BuildContext context) {
@@ -67,6 +69,13 @@ class RecipeCard extends StatelessWidget {
                           Icons.favorite,
                           size: 18,
                           color: colorScheme.secondary,
+                        ),
+                      if (onPlan != null)
+                        IconButton(
+                          onPressed: onPlan,
+                          icon: const Icon(Icons.event_available_outlined),
+                          tooltip: 'Zum Wochenplan',
+                          visualDensity: VisualDensity.compact,
                         ),
                       if (onDelete != null)
                         IconButton(
