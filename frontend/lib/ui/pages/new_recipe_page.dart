@@ -18,6 +18,7 @@ class NewRecipePage extends StatefulWidget {
     this.mealPlanRepo,
     this.initialRecipe,
     this.saveAsNew = false,
+    this.isAiImportReview = false,
   });
 
   final String title;
@@ -25,6 +26,7 @@ class NewRecipePage extends StatefulWidget {
   final MealPlanRepository? mealPlanRepo;
   final Recipe? initialRecipe;
   final bool saveAsNew;
+  final bool isAiImportReview;
 
   @override
   State<NewRecipePage> createState() => _NewRecipePageState();
@@ -292,6 +294,114 @@ class _EditableImageThumb extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _AiImportReviewHeader extends StatelessWidget {
+  const _AiImportReviewHeader({required this.recipe});
+
+  final Recipe recipe;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final confidenceNotes = recipe.confidenceNotes
+        .map((note) => note.trim())
+        .where((note) => note.isNotEmpty)
+        .toList();
+
+    return Card(
+      color: colorScheme.primaryContainer.withValues(alpha: 0.55),
+      elevation: 0,
+      surfaceTintColor: Colors.transparent,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.auto_awesome_outlined,
+                  color: colorScheme.onPrimaryContainer,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Bitte kurz prüfen',
+                        style: textTheme.titleMedium?.copyWith(
+                          color: colorScheme.onPrimaryContainer,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Die KI hat aus den Fotos einen Entwurf gebaut. Zutaten, Vorbereitung und Schritte kannst du hier direkt korrigieren, bevor das Rezept gespeichert wird.',
+                        style: textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onPrimaryContainer.withValues(
+                            alpha: 0.82,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (recipe.imagePaths.length > 1) ...[
+              const SizedBox(height: 12),
+              Text(
+                '${recipe.imagePaths.length} Fotos wurden als ein Rezept gelesen.',
+                style: textTheme.labelLarge?.copyWith(
+                  color: colorScheme.onPrimaryContainer,
+                ),
+              ),
+            ],
+            if (confidenceNotes.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Text(
+                'Unsichere Stellen',
+                style: textTheme.labelLarge?.copyWith(
+                  color: colorScheme.onPrimaryContainer,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ...confidenceNotes
+                  .take(4)
+                  .map(
+                    (note) => Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.error_outline_rounded,
+                            size: 16,
+                            color: colorScheme.onPrimaryContainer,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              note,
+                              style: textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onPrimaryContainer
+                                    .withValues(alpha: 0.86),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -878,6 +988,7 @@ class _NewRecipePageState extends State<NewRecipePage> {
           prepTimeMinutes: prepTime,
           cookTimeMinutes: cookTime,
           notes: _notesController.text,
+          confidenceNotes: const [],
         );
 
         final savedRecipe = await widget.repo.add(recipe);
@@ -914,6 +1025,7 @@ class _NewRecipePageState extends State<NewRecipePage> {
           cookTimeMinutes: cookTime,
           clearCookTime: cookTime == null,
           notes: _notesController.text.trim(),
+          confidenceNotes: const [],
         );
 
         final savedRecipe = await widget.repo.update(updatedRecipe);
@@ -1254,6 +1366,10 @@ class _NewRecipePageState extends State<NewRecipePage> {
         body: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
           children: [
+            if (widget.isAiImportReview && widget.initialRecipe != null) ...[
+              _AiImportReviewHeader(recipe: widget.initialRecipe!),
+              const SizedBox(height: 16),
+            ],
             _buildPhotoPicker(colorScheme),
             const SizedBox(height: 16),
             _buildSection(
@@ -1512,6 +1628,20 @@ class _NewRecipePageState extends State<NewRecipePage> {
                 decoration: const InputDecoration(hintText: 'Optional'),
               ),
             ),
+            if (widget.isAiImportReview) ...[
+              const SizedBox(height: 18),
+              FilledButton.icon(
+                onPressed: _isSaving ? null : _save,
+                icon: _isSaving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.check_rounded),
+                label: const Text('Rezept speichern'),
+              ),
+            ],
           ],
         ),
       ),
