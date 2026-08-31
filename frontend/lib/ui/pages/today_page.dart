@@ -344,7 +344,7 @@ class _TodayPageState extends State<TodayPage> {
       if (mealCompare != 0) return mealCompare;
       return a.recipeTitle.compareTo(b.recipeTitle);
     });
-    return tasks.take(6).toList();
+    return tasks;
   }
 
   void _addPreparationTasksForRecipe({
@@ -651,7 +651,7 @@ class _PreparationIsland extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Heute vorbereiten · ${tasks.length} ${tasks.length == 1 ? 'Aufgabe' : 'Aufgaben'}',
+                        'Vorbereitung · ${tasks.length} ${tasks.length == 1 ? 'Aufgabe' : 'Aufgaben'}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.titleSmall,
@@ -696,12 +696,12 @@ class _PreparationIsland extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
             children: [
               Text(
-                'Heute vorbereiten',
+                'Vorbereitung',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 4),
               Text(
-                'Alles, was euch später Küchenzeit spart.',
+                'Alles, was euch heute und die nächsten Tage Küchenzeit spart.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
