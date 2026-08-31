@@ -311,6 +311,101 @@ class _StepRowData {
   }
 }
 
+enum _LeaveRecipeEditorAction { cancel, discard, save }
+
+class _RecipeEditorSnapshot {
+  const _RecipeEditorSnapshot({
+    required this.title,
+    required this.servings,
+    required this.prepTime,
+    required this.cookTime,
+    required this.season,
+    required this.notes,
+    required this.tags,
+    required this.imagePaths,
+    required this.ingredients,
+    required this.preparationTasks,
+    required this.steps,
+  });
+
+  final String title;
+  final String servings;
+  final String prepTime;
+  final String cookTime;
+  final String season;
+  final String notes;
+  final List<String> tags;
+  final List<String> imagePaths;
+  final List<RecipeIngredient> ingredients;
+  final List<String> preparationTasks;
+  final List<String> steps;
+
+  @override
+  bool operator ==(Object other) {
+    return other is _RecipeEditorSnapshot &&
+        title == other.title &&
+        servings == other.servings &&
+        prepTime == other.prepTime &&
+        cookTime == other.cookTime &&
+        season == other.season &&
+        notes == other.notes &&
+        _sameStringList(tags, other.tags) &&
+        _sameStringList(imagePaths, other.imagePaths) &&
+        _sameIngredients(ingredients, other.ingredients) &&
+        _sameStringList(preparationTasks, other.preparationTasks) &&
+        _sameStringList(steps, other.steps);
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    title,
+    servings,
+    prepTime,
+    cookTime,
+    season,
+    notes,
+    Object.hashAll(tags),
+    Object.hashAll(imagePaths),
+    Object.hashAll(
+      ingredients.map(
+        (ingredient) => Object.hash(
+          ingredient.name,
+          ingredient.quantity,
+          ingredient.unit,
+          ingredient.note,
+          ingredient.excludeFromShopping,
+        ),
+      ),
+    ),
+    Object.hashAll(preparationTasks),
+    Object.hashAll(steps),
+  );
+}
+
+bool _sameStringList(List<String> a, List<String> b) {
+  if (a.length != b.length) return false;
+  for (var index = 0; index < a.length; index++) {
+    if (a[index] != b[index]) return false;
+  }
+  return true;
+}
+
+bool _sameIngredients(List<RecipeIngredient> a, List<RecipeIngredient> b) {
+  if (a.length != b.length) return false;
+  for (var index = 0; index < a.length; index++) {
+    final left = a[index];
+    final right = b[index];
+    if (left.name != right.name ||
+        left.quantity != right.quantity ||
+        left.unit != right.unit ||
+        left.note != right.note ||
+        left.excludeFromShopping != right.excludeFromShopping) {
+      return false;
+    }
+  }
+  return true;
+}
+
 class _NewRecipePageState extends State<NewRecipePage> {
   static const _seasonOptions = [
     'Ganzjährig',
@@ -334,9 +429,12 @@ class _NewRecipePageState extends State<NewRecipePage> {
   final Set<String> _selectedTags = {};
 
   List<String> _imagePaths = [];
+  late _RecipeEditorSnapshot _initialSnapshot;
   int _imageRevision = 0;
   bool _isPolishing = false;
   bool _isGeneratingImage = false;
+  bool _isSaving = false;
+  bool _allowPop = false;
 
   @override
   void initState() {
@@ -378,6 +476,7 @@ class _NewRecipePageState extends State<NewRecipePage> {
     if (!_seasonOptions.contains(_seasonController.text.trim())) {
       _seasonController.text = _seasonOptions.first;
     }
+    _initialSnapshot = _currentSnapshot();
   }
 
   @override
@@ -747,7 +846,9 @@ class _NewRecipePageState extends State<NewRecipePage> {
     });
   }
 
-  Future<void> _save() async {
+  Future<bool> _save() async {
+    if (_isSaving) return false;
+    setState(() => _isSaving = true);
     try {
       final initialRecipe = widget.initialRecipe;
       final servings = _parsePositiveInt(_servingsController);
@@ -835,13 +936,21 @@ class _NewRecipePageState extends State<NewRecipePage> {
         await _saveUploadedImageOrder(currentRecipe, uploadedPaths);
       }
 
-      if (!mounted) return;
+      if (!mounted) return false;
+      setState(() {
+        _initialSnapshot = _currentSnapshot();
+        _allowPop = true;
+      });
       context.pop(true);
+      return true;
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) return false;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(_saveErrorMessage(error))));
+      return false;
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -861,12 +970,72 @@ class _NewRecipePageState extends State<NewRecipePage> {
     );
   }
 
-  bool _sameStringList(List<String> a, List<String> b) {
-    if (a.length != b.length) return false;
-    for (var index = 0; index < a.length; index++) {
-      if (a[index] != b[index]) return false;
+  _RecipeEditorSnapshot _currentSnapshot() {
+    final tags = _selectedTags.map((tag) => tag.trim()).toList()..sort();
+    return _RecipeEditorSnapshot(
+      title: _titleController.text.trim(),
+      servings: _servingsController.text.trim(),
+      prepTime: _prepTimeController.text.trim(),
+      cookTime: _cookTimeController.text.trim(),
+      season: _seasonController.text.trim(),
+      notes: _notesController.text.trim(),
+      tags: tags,
+      imagePaths: [..._imagePaths],
+      ingredients: _collectIngredients(),
+      preparationTasks: _collectPreparationTasks(),
+      steps: _collectSteps(),
+    );
+  }
+
+  bool _hasUnsavedChanges() => _currentSnapshot() != _initialSnapshot;
+
+  Future<void> _handleBackNavigation() async {
+    if (_isSaving) return;
+    if (!_hasUnsavedChanges()) {
+      setState(() => _allowPop = true);
+      context.pop(false);
+      return;
     }
-    return true;
+
+    final action = await showDialog<_LeaveRecipeEditorAction>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Änderungen speichern?'),
+        content: const Text(
+          'Du hast dieses Rezept geändert. Möchtest du speichern, verwerfen oder weiter bearbeiten?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () =>
+                Navigator.of(context).pop(_LeaveRecipeEditorAction.discard),
+            child: const Text('Verwerfen'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.of(context).pop(_LeaveRecipeEditorAction.cancel),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton.icon(
+            onPressed: () =>
+                Navigator.of(context).pop(_LeaveRecipeEditorAction.save),
+            icon: const Icon(Icons.save_outlined),
+            label: const Text('Speichern'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted ||
+        action == null ||
+        action == _LeaveRecipeEditorAction.cancel) {
+      return;
+    }
+    if (action == _LeaveRecipeEditorAction.discard) {
+      setState(() => _allowPop = true);
+      context.pop(false);
+      return;
+    }
+    await _save();
   }
 
   String _saveErrorMessage(Object error) {
@@ -1046,280 +1215,305 @@ class _NewRecipePageState extends State<NewRecipePage> {
       ],
     );
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title),
-        actions: [
-          if (widget.mealPlanRepo != null)
-            BackendConnectionIcon(mealPlanRepo: widget.mealPlanRepo!),
-          IconButton(
-            icon: _isPolishing
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.auto_fix_high_outlined),
-            onPressed: _isPolishing ? null : _polishRecipe,
-            tooltip: 'Mit KI aufräumen',
-          ),
-          IconButton(
-            icon: const Icon(Icons.save_outlined),
-            onPressed: _save,
-            tooltip: 'Speichern',
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-        children: [
-          _buildPhotoPicker(colorScheme),
-          const SizedBox(height: 16),
-          _buildSection(
-            title: 'Grundlagen',
-            child: Column(
-              children: [
-                TextField(
-                  controller: _titleController,
-                  decoration: const InputDecoration(labelText: 'Titel'),
-                  textInputAction: TextInputAction.next,
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _servingsController,
-                        decoration: const InputDecoration(
-                          labelText: 'Portionen',
-                        ),
-                        keyboardType: TextInputType.number,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue:
-                            _seasonOptions.contains(_seasonController.text)
-                            ? _seasonController.text
-                            : _seasonOptions.first,
-                        decoration: const InputDecoration(labelText: 'Saison'),
-                        items: [
-                          for (final season in _seasonOptions)
-                            DropdownMenuItem(
-                              value: season,
-                              child: Text(season),
-                            ),
-                        ],
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setState(() => _seasonController.text = value);
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _prepTimeController,
-                        decoration: const InputDecoration(
-                          labelText: 'Vorbereitung',
-                        ),
-                        keyboardType: TextInputType.number,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        controller: _cookTimeController,
-                        decoration: const InputDecoration(labelText: 'Kochen'),
-                        keyboardType: TextInputType.number,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+    return PopScope(
+      canPop: _allowPop,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        unawaited(_handleBackNavigation());
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.title),
+          actions: [
+            if (widget.mealPlanRepo != null)
+              BackendConnectionIcon(mealPlanRepo: widget.mealPlanRepo!),
+            IconButton(
+              icon: _isPolishing
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.auto_fix_high_outlined),
+              onPressed: _isPolishing ? null : _polishRecipe,
+              tooltip: 'Mit KI aufräumen',
             ),
-          ),
-          const SizedBox(height: 14),
-          _buildSection(
-            title: 'Zutaten',
-            child: Column(
-              children: [
-                ...List.generate(_ingredients.length, (index) {
-                  final row = _ingredients[index];
-                  return _IngredientEditorTile(
-                    row: row,
-                    nameHint: index == _ingredients.length - 1
-                        ? 'Zutat'
-                        : 'Name',
-                    onRemove: () => _removeIngredientRow(index),
-                    onNameSubmitted: (_) => _appendIngredientAndFocus(),
-                  );
-                }),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: OutlinedButton.icon(
-                    onPressed: _appendIngredientAndFocus,
-                    icon: const Icon(Icons.add_rounded),
-                    label: const Text('Zutat'),
+            IconButton(
+              icon: _isSaving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save_outlined),
+              onPressed: _isSaving ? null : _save,
+              tooltip: 'Speichern',
+            ),
+          ],
+        ),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+          children: [
+            _buildPhotoPicker(colorScheme),
+            const SizedBox(height: 16),
+            _buildSection(
+              title: 'Grundlagen',
+              child: Column(
+                children: [
+                  TextField(
+                    controller: _titleController,
+                    decoration: const InputDecoration(labelText: 'Titel'),
+                    textInputAction: TextInputAction.next,
                   ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          _buildSection(
-            title: 'Vorbereitung',
-            child: Column(
-              children: [
-                ...List.generate(_preparationTasks.length, (index) {
-                  final row = _preparationTasks[index];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: 14),
-                          child: Icon(
-                            Icons.hourglass_bottom_rounded,
-                            color: Theme.of(context).colorScheme.primary,
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _servingsController,
+                          decoration: const InputDecoration(
+                            labelText: 'Portionen',
                           ),
+                          keyboardType: TextInputType.number,
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            controller: row.controller,
-                            focusNode: row.focusNode,
-                            minLines: 1,
-                            maxLines: 3,
-                            decoration: const InputDecoration(
-                              hintText:
-                                  'z.B. Linsen 3 Stunden einweichen lassen',
-                            ),
-                            textInputAction: TextInputAction.next,
-                            onSubmitted: (_) =>
-                                _appendPreparationTaskAndFocus(),
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () => _removePreparationTaskRow(index),
-                          icon: const Icon(Icons.delete_outline),
-                          tooltip: 'Vorbereitung entfernen',
-                        ),
-                      ],
-                    ),
-                  );
-                }),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: OutlinedButton.icon(
-                    onPressed: _appendPreparationTaskAndFocus,
-                    icon: const Icon(Icons.add_rounded),
-                    label: const Text('Vorbereitung'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          _buildSection(
-            title: 'Zubereitung',
-            child: Column(
-              children: [
-                ...List.generate(_steps.length, (index) {
-                  final row = _steps[index];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: 14),
-                          child: CircleAvatar(
-                            radius: 14,
-                            child: Text('${index + 1}'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            controller: row.controller,
-                            focusNode: row.focusNode,
-                            minLines: 1,
-                            maxLines: 4,
-                            decoration: const InputDecoration(
-                              hintText: 'Schritt',
-                            ),
-                            textInputAction: TextInputAction.next,
-                            onSubmitted: (_) => _appendStepAndFocus(),
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () => _removeStepRow(index),
-                          icon: const Icon(Icons.delete_outline),
-                          tooltip: 'Schritt entfernen',
-                        ),
-                      ],
-                    ),
-                  );
-                }),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: OutlinedButton.icon(
-                    onPressed: _appendStepAndFocus,
-                    icon: const Icon(Icons.add_rounded),
-                    label: const Text('Schritt'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          _buildSection(
-            title: 'Tags',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                tagChips,
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _tagController,
-                        decoration: const InputDecoration(
-                          hintText: 'Eigener Tag',
-                        ),
-                        onSubmitted: (_) => _addCustomTag(),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      onPressed: _addCustomTag,
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue:
+                              _seasonOptions.contains(_seasonController.text)
+                              ? _seasonController.text
+                              : _seasonOptions.first,
+                          decoration: const InputDecoration(
+                            labelText: 'Saison',
+                          ),
+                          items: [
+                            for (final season in _seasonOptions)
+                              DropdownMenuItem(
+                                value: season,
+                                child: Text(season),
+                              ),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() => _seasonController.text = value);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _prepTimeController,
+                          decoration: const InputDecoration(
+                            labelText: 'Vorbereitung',
+                          ),
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: _cookTimeController,
+                          decoration: const InputDecoration(
+                            labelText: 'Kochen',
+                          ),
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            _buildSection(
+              title: 'Zutaten',
+              child: Column(
+                children: [
+                  ...List.generate(_ingredients.length, (index) {
+                    final row = _ingredients[index];
+                    return _IngredientEditorTile(
+                      row: row,
+                      nameHint: index == _ingredients.length - 1
+                          ? 'Zutat'
+                          : 'Name',
+                      onRemove: () => _removeIngredientRow(index),
+                      onNameSubmitted: (_) => _appendIngredientAndFocus(),
+                    );
+                  }),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      onPressed: _appendIngredientAndFocus,
                       icon: const Icon(Icons.add_rounded),
-                      tooltip: 'Tag hinzufügen',
+                      label: const Text('Zutat'),
                     ),
-                  ],
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 14),
-          _buildSection(
-            title: 'Notizen',
-            child: TextField(
-              controller: _notesController,
-              minLines: 3,
-              maxLines: 6,
-              decoration: const InputDecoration(hintText: 'Optional'),
+            const SizedBox(height: 14),
+            _buildSection(
+              title: 'Vorbereitung',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Nur Dinge, die ihr vor dem eigentlichen Kochen erledigen wollt.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ...List.generate(_preparationTasks.length, (index) {
+                    final row = _preparationTasks[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(top: 14),
+                            child: Icon(
+                              Icons.hourglass_bottom_rounded,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              controller: row.controller,
+                              focusNode: row.focusNode,
+                              minLines: 1,
+                              maxLines: 3,
+                              decoration: const InputDecoration(
+                                hintText:
+                                    'z.B. Lachs morgens aus dem Tiefkühler nehmen',
+                              ),
+                              textInputAction: TextInputAction.next,
+                              onSubmitted: (_) =>
+                                  _appendPreparationTaskAndFocus(),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => _removePreparationTaskRow(index),
+                            icon: const Icon(Icons.delete_outline),
+                            tooltip: 'Vorbereitung entfernen',
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      onPressed: _appendPreparationTaskAndFocus,
+                      icon: const Icon(Icons.add_rounded),
+                      label: const Text('Vorbereitung'),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 14),
+            _buildSection(
+              title: 'Zubereitung',
+              child: Column(
+                children: [
+                  ...List.generate(_steps.length, (index) {
+                    final row = _steps[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(top: 14),
+                            child: CircleAvatar(
+                              radius: 14,
+                              child: Text('${index + 1}'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              controller: row.controller,
+                              focusNode: row.focusNode,
+                              minLines: 1,
+                              maxLines: 4,
+                              decoration: const InputDecoration(
+                                hintText: 'Schritt',
+                              ),
+                              textInputAction: TextInputAction.next,
+                              onSubmitted: (_) => _appendStepAndFocus(),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => _removeStepRow(index),
+                            icon: const Icon(Icons.delete_outline),
+                            tooltip: 'Schritt entfernen',
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      onPressed: _appendStepAndFocus,
+                      icon: const Icon(Icons.add_rounded),
+                      label: const Text('Schritt'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            _buildSection(
+              title: 'Tags',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  tagChips,
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _tagController,
+                          decoration: const InputDecoration(
+                            hintText: 'Eigener Tag',
+                          ),
+                          onSubmitted: (_) => _addCustomTag(),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        onPressed: _addCustomTag,
+                        icon: const Icon(Icons.add_rounded),
+                        tooltip: 'Tag hinzufügen',
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            _buildSection(
+              title: 'Notizen',
+              child: TextField(
+                controller: _notesController,
+                minLines: 3,
+                maxLines: 6,
+                decoration: const InputDecoration(hintText: 'Optional'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

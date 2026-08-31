@@ -745,10 +745,11 @@ class _WeekMealCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final currentRecipe = recipe;
     final imagePath = isLeftovers
         ? MealChoiceSheet.leftoversImagePath
-        : recipe?.mainImagePath;
-    final isPlanned = recipe != null || isLeftovers;
+        : currentRecipe?.mainImagePath;
+    final isPlanned = currentRecipe != null || isLeftovers;
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -766,7 +767,10 @@ class _WeekMealCard extends StatelessWidget {
                   child: isPlanned
                       ? RecipeImage(
                           path: imagePath,
-                          placeholderSeed: recipe?.id ?? meal.id,
+                          placeholderSeed: currentRecipe?.id ?? meal.id,
+                          cacheKey: currentRecipe == null
+                              ? null
+                              : recipeImageCacheKey(currentRecipe),
                         )
                       : UnplannedMealImage(title: meal.label),
                 ),

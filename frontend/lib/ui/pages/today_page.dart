@@ -354,18 +354,8 @@ class _TodayPageState extends State<TodayPage> {
     required Recipe recipe,
     bool isSide = false,
   }) {
-    final candidates = recipe.preparationTasks.isNotEmpty
-        ? recipe.preparationTasks
-        : [
-            ...recipe.instructions,
-            if (recipe.notes.trim().isNotEmpty) recipe.notes,
-          ];
-
-    for (final candidate in candidates) {
-      final instruction = recipe.preparationTasks.isNotEmpty
-          ? candidate.trim().replaceAll(RegExp(r'\s+'), ' ')
-          : _preparationInstruction(candidate);
-      if (instruction == null) continue;
+    for (final candidate in recipe.preparationTasks) {
+      final instruction = candidate.trim().replaceAll(RegExp(r'\s+'), ' ');
       if (instruction.isEmpty) continue;
       final key =
           '${slot.plannedFor.toIso8601String()}|${slot.meal}|${recipe.id}|$instruction|$isSide';
@@ -392,15 +382,6 @@ class _TodayPageState extends State<TodayPage> {
     final hour = due.hour.toString().padLeft(2, '0');
     final minute = due.minute.toString().padLeft(2, '0');
     return 'bis $hour:$minute';
-  }
-
-  String? _preparationInstruction(String value) {
-    final normalized = value.trim().replaceAll(RegExp(r'\s+'), ' ');
-    if (normalized.isEmpty) return null;
-    final lower = normalized.toLowerCase();
-    final hasPreparationSignal = _preparationSignals.any(lower.contains);
-    if (!hasPreparationSignal) return null;
-    return normalized;
   }
 
   String? _preparationDurationLabel(String instruction) {
@@ -599,31 +580,6 @@ class _TodayPageState extends State<TodayPage> {
     );
   }
 }
-
-const _preparationSignals = [
-  'einweich',
-  'quell',
-  'kühl',
-  'kuehl',
-  'kalt stell',
-  'kaltstellen',
-  'ziehen lass',
-  'ruhe',
-  'ruhen',
-  'marinier',
-  'auftau',
-  'vorkoch',
-  'vorbereit',
-  'über nacht',
-  'ueber nacht',
-  'soak',
-  'chill',
-  'refrigerate',
-  'rest',
-  'marinate',
-  'thaw',
-  'overnight',
-];
 
 class _PreparationTask {
   const _PreparationTask({
@@ -937,10 +893,11 @@ class _MealSlotCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final currentRecipe = recipe;
     final imagePath = isLeftovers
         ? MealChoiceSheet.leftoversImagePath
-        : recipe?.mainImagePath;
-    final isPlanned = recipe != null || isLeftovers;
+        : currentRecipe?.mainImagePath;
+    final isPlanned = currentRecipe != null || isLeftovers;
 
     final card = Card(
       clipBehavior: Clip.antiAlias,
@@ -958,7 +915,10 @@ class _MealSlotCard extends StatelessWidget {
                   child: isPlanned
                       ? RecipeImage(
                           path: imagePath,
-                          placeholderSeed: recipe?.id ?? title,
+                          placeholderSeed: currentRecipe?.id ?? title,
+                          cacheKey: currentRecipe == null
+                              ? null
+                              : recipeImageCacheKey(currentRecipe),
                         )
                       : UnplannedMealImage(title: title),
                 ),

@@ -153,6 +153,7 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
                   child: RecipeImage(
                     path: imagePath,
                     placeholderSeed: recipe.id,
+                    cacheKey: recipeImageCacheKey(recipe),
                   ),
                 ),
               ),
@@ -195,6 +196,7 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
               separatorBuilder: (_, _) => const SizedBox(width: 8),
               itemBuilder: (context, index) => _ImageThumb(
                 path: imagePaths[index],
+                cacheKey: recipeImageCacheKey(recipe),
                 isMain: index == 0,
                 onTap: () => _openImageViewer(initialIndex: index),
               ),
@@ -215,6 +217,7 @@ class _RecipeDetailsPageState extends State<RecipeDetailsPage> {
           imagePaths: recipe.imagePaths,
           initialIndex: initialIndex,
           placeholderSeed: recipe.id,
+          cacheKey: recipeImageCacheKey(recipe),
           onSetMainImage: _setMainImage,
         ),
       ),
@@ -467,11 +470,13 @@ class _ImageCountBadge extends StatelessWidget {
 class _ImageThumb extends StatelessWidget {
   const _ImageThumb({
     required this.path,
+    required this.cacheKey,
     required this.isMain,
     required this.onTap,
   });
 
   final String path;
+  final Object cacheKey;
   final bool isMain;
   final VoidCallback onTap;
 
@@ -494,7 +499,7 @@ class _ImageThumb extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            RecipeImage(path: path, placeholderSeed: path),
+            RecipeImage(path: path, placeholderSeed: path, cacheKey: cacheKey),
             if (isMain)
               Positioned(
                 left: 4,
@@ -532,6 +537,7 @@ class _RecipeImageViewer extends StatefulWidget {
     required this.imagePaths,
     required this.initialIndex,
     required this.placeholderSeed,
+    required this.cacheKey,
     required this.onSetMainImage,
   });
 
@@ -539,6 +545,7 @@ class _RecipeImageViewer extends StatefulWidget {
   final List<String> imagePaths;
   final int initialIndex;
   final String placeholderSeed;
+  final Object cacheKey;
   final Future<Recipe?> Function(int index) onSetMainImage;
 
   @override
@@ -606,6 +613,7 @@ class _RecipeImageViewerState extends State<_RecipeImageViewer> {
                   path: widget.imagePaths[index],
                   fit: BoxFit.contain,
                   placeholderSeed: widget.placeholderSeed,
+                  cacheKey: widget.cacheKey,
                 ),
               ),
             ),

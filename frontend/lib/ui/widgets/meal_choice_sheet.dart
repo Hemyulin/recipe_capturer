@@ -123,6 +123,7 @@ class _MealChoiceSheetState extends State<MealChoiceSheet> {
                 child: RecipeImage(
                   path: recipe.mainImagePath,
                   placeholderSeed: recipe.id,
+                  cacheKey: recipeImageCacheKey(recipe),
                 ),
               ),
             ),

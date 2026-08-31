@@ -400,11 +400,11 @@ class _RecipeListPageState extends State<RecipeListPage> {
                   crossAxisCount: columns,
                   crossAxisSpacing: 14,
                   mainAxisSpacing: 14,
-                  childAspectRatio: columns == 1
-                      ? 1.1
+                  mainAxisExtent: columns == 1
+                      ? 362
                       : columns == 2
-                      ? 1.08
-                      : 0.92,
+                      ? 330
+                      : 318,
                 ),
                 itemCount: filteredRecipes.length + (_isLoadingMore ? 1 : 0),
                 itemBuilder: (context, index) {
