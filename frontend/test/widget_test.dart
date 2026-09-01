@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:cookbuk/data/in_memory_meal_plan_repository.dart';
 import 'package:cookbuk/data/in_memory_recipe_repository.dart';
@@ -23,6 +24,7 @@ void main() {
   var clipboardText = '';
 
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
     clipboardText = '';
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, (call) async {
@@ -784,6 +786,53 @@ void main() {
 
     expect(find.text('Einstellungen'), findsOneWidget);
     expect(find.text('Lokaler Modus'), findsOneWidget);
+  });
+
+  testWidgets('applies standard meals to empty current week slots', (
+    WidgetTester tester,
+  ) async {
+    final repo = InMemoryRecipeRepository();
+    final mealPlanRepo = InMemoryMealPlanRepository();
+    await repo.add(testRecipes.first);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatusPage(mealPlanRepo: mealPlanRepo, recipeRepo: repo),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Standardmahlzeiten'), findsOneWidget);
+    await tester.tap(find.text('Frühstück'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Kein Standard').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Oatmeal mit Banane und Blaubeeren'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Speichern'));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Diese Woche anwenden'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Diese Woche anwenden'));
+    await tester.pumpAndSettle();
+
+    final today = DateTime.now();
+    final weekStart = DateTime(
+      today.year,
+      today.month,
+      today.day,
+    ).subtract(Duration(days: today.weekday - 1));
+    final slots = await mealPlanRepo.getRange(
+      from: weekStart,
+      to: weekStart.add(const Duration(days: 6)),
+    );
+    final breakfasts = slots.where((slot) => slot.meal == 'breakfast');
+    expect(breakfasts, hasLength(7));
+    expect(
+      breakfasts.every((slot) => slot.recipeId == testRecipes.first.id),
+      true,
+    );
   });
 
   testWidgets(

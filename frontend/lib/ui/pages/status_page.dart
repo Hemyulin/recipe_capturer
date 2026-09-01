@@ -1,13 +1,16 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:external_app_launcher/external_app_launcher.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cookbuk/config/theme_controller.dart';
 import 'package:cookbuk/config/theme_presets.dart';
 import 'package:cookbuk/data/meal_plan_repository.dart';
 import 'package:cookbuk/data/recipe_repository.dart';
+import 'package:cookbuk/domain/recipe.dart';
 import 'package:cookbuk/ui/widgets/backend_connection_icon.dart';
 import 'package:go_router/go_router.dart';
 
@@ -167,6 +170,13 @@ class _StatusPageState extends State<StatusPage> {
           const SizedBox(height: 20),
           Text('Kochen', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 10),
+          if (widget.recipeRepo != null) ...[
+            _StandardMealsSettingsCard(
+              recipeRepo: widget.recipeRepo!,
+              mealPlanRepo: widget.mealPlanRepo,
+            ),
+            const SizedBox(height: 12),
+          ],
           _SettingsActionCard(
             icon: Icons.query_stats_outlined,
             title: 'Statistiken',
@@ -559,6 +569,438 @@ class _ThemeChoice extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _StandardMealRule {
+  const _StandardMealRule({this.recipeId, this.weekdays = const {}});
+
+  final String? recipeId;
+  final Set<int> weekdays;
+
+  bool get isActive => recipeId != null && weekdays.isNotEmpty;
+
+  Map<String, dynamic> toJson() {
+    return {'recipeId': recipeId, 'weekdays': weekdays.toList()..sort()};
+  }
+
+  factory _StandardMealRule.fromJson(Map<String, dynamic> json) {
+    return _StandardMealRule(
+      recipeId: (json['recipeId'] as String?)?.trim(),
+      weekdays: (json['weekdays'] as List<dynamic>? ?? const [])
+          .map((value) => value is int ? value : int.tryParse('$value'))
+          .whereType<int>()
+          .where((value) => value >= 1 && value <= 7)
+          .toSet(),
+    );
+  }
+}
+
+class _StandardMealsSettingsCard extends StatefulWidget {
+  const _StandardMealsSettingsCard({
+    required this.recipeRepo,
+    required this.mealPlanRepo,
+  });
+
+  final RecipeRepository recipeRepo;
+  final MealPlanRepository mealPlanRepo;
+
+  @override
+  State<_StandardMealsSettingsCard> createState() =>
+      _StandardMealsSettingsCardState();
+}
+
+class _StandardMealsSettingsCardState
+    extends State<_StandardMealsSettingsCard> {
+  static const _preferenceKey = 'cookbuk_standard_meals_v1';
+  static const _meals = [
+    (id: 'breakfast', label: 'Frühstück', icon: Icons.wb_sunny_outlined),
+    (id: 'lunch', label: 'Mittagessen', icon: Icons.light_mode_outlined),
+    (id: 'dinner', label: 'Abendessen', icon: Icons.nights_stay_outlined),
+  ];
+
+  List<Recipe> _recipes = const [];
+  Map<String, _StandardMealRule> _rules = const {};
+  bool _isLoading = true;
+  bool _isApplying = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    final recipesFuture = widget.recipeRepo.getAll();
+    final prefs = await SharedPreferences.getInstance();
+    final rules = _decodeRules(prefs.getString(_preferenceKey));
+    final recipes = await recipesFuture;
+    recipes.sort(
+      (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
+    );
+    if (!mounted) return;
+    setState(() {
+      _recipes = recipes;
+      _rules = rules;
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _editMeal(String meal) async {
+    if (_isLoading) return;
+    final current = _rules[meal] ?? const _StandardMealRule();
+    final result = await showModalBottomSheet<_StandardMealRule>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => _StandardMealEditSheet(
+        mealLabel: _mealLabel(meal),
+        recipes: _recipes,
+        initial: current,
+      ),
+    );
+    if (result == null || !mounted) return;
+
+    final nextRules = Map<String, _StandardMealRule>.from(_rules);
+    if (result.isActive) {
+      nextRules[meal] = result;
+    } else {
+      nextRules.remove(meal);
+    }
+    setState(() => _rules = nextRules);
+    await _saveRules(nextRules);
+  }
+
+  Future<void> _applyCurrentWeek() async {
+    if (_isApplying || _rules.values.every((rule) => !rule.isActive)) return;
+    setState(() => _isApplying = true);
+
+    final today = _dateOnly(DateTime.now());
+    final weekStart = today.subtract(Duration(days: today.weekday - 1));
+    final weekEnd = weekStart.add(const Duration(days: 6));
+    var plannedCount = 0;
+    var queuedCount = 0;
+
+    try {
+      final existingSlots = await widget.mealPlanRepo.getRange(
+        from: weekStart,
+        to: weekEnd,
+      );
+      final occupied = {
+        for (final slot in existingSlots)
+          if (!slot.isEmpty) _slotKey(slot.plannedFor, slot.meal),
+      };
+
+      for (final entry in _rules.entries) {
+        final rule = entry.value;
+        final recipeId = rule.recipeId;
+        if (recipeId == null || rule.weekdays.isEmpty) continue;
+        for (final weekday in rule.weekdays) {
+          final date = weekStart.add(Duration(days: weekday - 1));
+          final key = _slotKey(date, entry.key);
+          if (occupied.contains(key)) continue;
+          try {
+            await widget.mealPlanRepo.setRecipe(
+              date: date,
+              meal: entry.key,
+              recipeId: recipeId,
+            );
+            occupied.add(key);
+            plannedCount += 1;
+          } catch (error) {
+            if (error is MealPlanQueuedException) {
+              queuedCount += 1;
+              occupied.add(key);
+              continue;
+            }
+            rethrow;
+          }
+        }
+      }
+      if (!mounted) return;
+      final queuedText = queuedCount == 0
+          ? ''
+          : ' $queuedCount warten auf Verbindung.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$plannedCount Standards eingetragen.$queuedText'),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Standards konnten nicht eingetragen werden.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isApplying = false);
+    }
+  }
+
+  Future<void> _saveRules(Map<String, _StandardMealRule> rules) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _preferenceKey,
+      jsonEncode({
+        for (final entry in rules.entries) entry.key: entry.value.toJson(),
+      }),
+    );
+  }
+
+  static Map<String, _StandardMealRule> _decodeRules(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return {};
+    try {
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      return {
+        for (final entry in decoded.entries)
+          if (entry.value is Map<String, dynamic>)
+            entry.key: _StandardMealRule.fromJson(
+              entry.value as Map<String, dynamic>,
+            ),
+      };
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Recipe? _recipeById(String? id) {
+    if (id == null) return null;
+    for (final recipe in _recipes) {
+      if (recipe.id == id) return recipe;
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final hasActiveRules = _rules.values.any((rule) => rule.isActive);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.event_repeat_outlined, color: colorScheme.primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Standardmahlzeiten',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Füllt leere Slots der aktuellen Woche, ohne manuelle Planung zu überschreiben.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            for (final meal in _meals)
+              _StandardMealRow(
+                icon: meal.icon,
+                label: meal.label,
+                recipeTitle: _recipeById(_rules[meal.id]?.recipeId)?.title,
+                weekdays: _rules[meal.id]?.weekdays ?? const {},
+                onTap: () => _editMeal(meal.id),
+              ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: hasActiveRules && !_isApplying
+                    ? _applyCurrentWeek
+                    : null,
+                icon: _isApplying
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.playlist_add_check_rounded),
+                label: const Text('Diese Woche anwenden'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _mealLabel(String meal) {
+    return switch (meal) {
+      'breakfast' => 'Frühstück',
+      'lunch' => 'Mittagessen',
+      'dinner' => 'Abendessen',
+      _ => meal,
+    };
+  }
+
+  static DateTime _dateOnly(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
+
+  static String _slotKey(DateTime date, String meal) {
+    final dateKey = [
+      date.year.toString().padLeft(4, '0'),
+      date.month.toString().padLeft(2, '0'),
+      date.day.toString().padLeft(2, '0'),
+    ].join('-');
+    return '$dateKey:$meal';
+  }
+}
+
+class _StandardMealRow extends StatelessWidget {
+  const _StandardMealRow({
+    required this.icon,
+    required this.label,
+    required this.recipeTitle,
+    required this.weekdays,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String? recipeTitle;
+  final Set<int> weekdays;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final subtitle = recipeTitle == null
+        ? 'Kein Standard'
+        : '${_weekdaySummary(weekdays)} · $recipeTitle';
+
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      minLeadingWidth: 28,
+      leading: Icon(icon, color: colorScheme.primary),
+      title: Text(label),
+      subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+      trailing: const Icon(Icons.chevron_right_rounded),
+      onTap: onTap,
+    );
+  }
+
+  static String _weekdaySummary(Set<int> weekdays) {
+    if (weekdays.length == 7) return 'Täglich';
+    const labels = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+    final sorted = weekdays.toList()..sort();
+    return sorted.map((weekday) => labels[weekday - 1]).join(', ');
+  }
+}
+
+class _StandardMealEditSheet extends StatefulWidget {
+  const _StandardMealEditSheet({
+    required this.mealLabel,
+    required this.recipes,
+    required this.initial,
+  });
+
+  final String mealLabel;
+  final List<Recipe> recipes;
+  final _StandardMealRule initial;
+
+  @override
+  State<_StandardMealEditSheet> createState() => _StandardMealEditSheetState();
+}
+
+class _StandardMealEditSheetState extends State<_StandardMealEditSheet> {
+  late String? _recipeId = widget.initial.recipeId;
+  late final Set<int> _weekdays = widget.initial.weekdays.isEmpty
+      ? {1, 2, 3, 4, 5, 6, 7}
+      : {...widget.initial.weekdays};
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.mealLabel,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 14),
+            DropdownButtonFormField<String?>(
+              initialValue: _recipeId,
+              decoration: const InputDecoration(labelText: 'Standardrezept'),
+              isExpanded: true,
+              items: [
+                const DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text('Kein Standard'),
+                ),
+                for (final recipe in widget.recipes)
+                  DropdownMenuItem<String?>(
+                    value: recipe.id,
+                    child: Text(
+                      recipe.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: (value) => setState(() => _recipeId = value),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Tage',
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (var weekday = 1; weekday <= 7; weekday++)
+                  FilterChip(
+                    label: Text(_weekdayLabel(weekday)),
+                    selected: _weekdays.contains(weekday),
+                    onSelected: (_) => setState(() {
+                      if (_weekdays.contains(weekday)) {
+                        _weekdays.remove(weekday);
+                      } else {
+                        _weekdays.add(weekday);
+                      }
+                    }),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () => Navigator.of(context).pop(
+                  _StandardMealRule(recipeId: _recipeId, weekdays: _weekdays),
+                ),
+                child: const Text('Speichern'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _weekdayLabel(int weekday) {
+    const labels = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+    return labels[weekday - 1];
   }
 }
 
