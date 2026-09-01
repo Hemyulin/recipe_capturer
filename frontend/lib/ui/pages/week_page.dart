@@ -189,7 +189,13 @@ class _WeekPageState extends State<WeekPage> {
   Future<void> _clearSlot(DateTime date, String meal) async {
     final key = _slotKey(date, meal);
     final previousValue = _slotValues[key];
-    setState(() => _slotValues[key] = null);
+    final previousExtras = _slotExtras[key] ?? const <String>[];
+    final previousRecipeExtraIds = _slotRecipeExtraIds[key] ?? const <String>[];
+    setState(() {
+      _slotValues[key] = null;
+      _slotExtras[key] = const [];
+      _slotRecipeExtraIds[key] = const [];
+    });
 
     try {
       await widget.mealPlanRepo.setEmpty(date: date, meal: meal);
@@ -199,7 +205,11 @@ class _WeekPageState extends State<WeekPage> {
         _showPlanMessage(error.userMessage);
         return;
       }
-      setState(() => _slotValues[key] = previousValue);
+      setState(() {
+        _slotValues[key] = previousValue;
+        _slotExtras[key] = previousExtras;
+        _slotRecipeExtraIds[key] = previousRecipeExtraIds;
+      });
       _showPlanMessage(_mealPlanErrorMessage(error));
     }
   }
@@ -713,6 +723,7 @@ class _SelectedDayPlan extends StatelessWidget {
             isLeftovers: isLeftoversForMeal(meal.id),
             extras: extrasForMeal(meal.id),
             onTap: () => onChooseMeal(meal.id),
+            onChange: () => onChooseMeal(meal.id),
             onClear: () => onClearMeal(meal.id),
             onExtras: () => onEditExtras(meal.id),
           ),
@@ -730,6 +741,7 @@ class _WeekMealCard extends StatelessWidget {
     required this.isLeftovers,
     this.extras = const [],
     required this.onTap,
+    required this.onChange,
     required this.onClear,
     required this.onExtras,
   });
@@ -739,6 +751,7 @@ class _WeekMealCard extends StatelessWidget {
   final bool isLeftovers;
   final List<String> extras;
   final VoidCallback onTap;
+  final VoidCallback onChange;
   final VoidCallback onClear;
   final VoidCallback onExtras;
 
@@ -751,7 +764,7 @@ class _WeekMealCard extends StatelessWidget {
         : currentRecipe?.mainImagePath;
     final isPlanned = currentRecipe != null || isLeftovers;
 
-    return Card(
+    final card = Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
@@ -809,20 +822,6 @@ class _WeekMealCard extends StatelessWidget {
                           onPressed: onExtras,
                           hasExtras: extras.isNotEmpty,
                         ),
-                        if (isPlanned) ...[
-                          const SizedBox(width: 4),
-                          IconButton(
-                            onPressed: onClear,
-                            icon: const Icon(Icons.close_rounded),
-                            tooltip: 'Mahlzeit leeren',
-                            visualDensity: VisualDensity.compact,
-                            constraints: const BoxConstraints.tightFor(
-                              width: 38,
-                              height: 38,
-                            ),
-                            padding: EdgeInsets.zero,
-                          ),
-                        ],
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -857,6 +856,160 @@ class _WeekMealCard extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+
+    if (!isPlanned) return card;
+
+    return _RevealableWeekMealCard(
+      onChange: onChange,
+      onClear: onClear,
+      child: card,
+    );
+  }
+}
+
+class _RevealableWeekMealCard extends StatefulWidget {
+  const _RevealableWeekMealCard({
+    required this.child,
+    required this.onChange,
+    required this.onClear,
+  });
+
+  final Widget child;
+  final VoidCallback onChange;
+  final VoidCallback onClear;
+
+  @override
+  State<_RevealableWeekMealCard> createState() =>
+      _RevealableWeekMealCardState();
+}
+
+class _RevealableWeekMealCardState extends State<_RevealableWeekMealCard> {
+  static const double _actionWidth = 92;
+  static const double _openThreshold = 42;
+
+  double _dragOffset = 0;
+  bool _dragStartedFromDeleteReveal = false;
+
+  bool get _isDeleteRevealed => _dragOffset < -0.5;
+
+  void _close() {
+    if (!_isDeleteRevealed) return;
+    setState(() => _dragOffset = 0);
+  }
+
+  void _handleDragStart(DragStartDetails details) {
+    _dragStartedFromDeleteReveal = _isDeleteRevealed;
+  }
+
+  void _handleDragUpdate(DragUpdateDetails details) {
+    setState(() {
+      _dragOffset = (_dragOffset + details.delta.dx).clamp(
+        -_actionWidth,
+        _actionWidth,
+      );
+    });
+  }
+
+  void _handleDragEnd(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    final shouldChange = _dragOffset > _openThreshold || velocity > 600;
+    final shouldRevealDelete = _dragOffset < -_openThreshold || velocity < -600;
+
+    if (_dragStartedFromDeleteReveal &&
+        (velocity > 0 || _dragOffset >= -_openThreshold)) {
+      setState(() => _dragOffset = 0);
+      _dragStartedFromDeleteReveal = false;
+      return;
+    }
+
+    _dragStartedFromDeleteReveal = false;
+
+    setState(() {
+      if (shouldRevealDelete) {
+        _dragOffset = -_actionWidth;
+      } else {
+        _dragOffset = 0;
+      }
+    });
+
+    if (shouldChange) {
+      widget.onChange();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _RevealAction(
+                icon: Icons.swap_horiz_rounded,
+                color: colorScheme.primaryContainer,
+                foregroundColor: colorScheme.onPrimaryContainer,
+              ),
+              const Spacer(),
+              _RevealAction(
+                icon: Icons.delete_outline,
+                color: colorScheme.errorContainer,
+                foregroundColor: colorScheme.onErrorContainer,
+                onTap: () {
+                  _close();
+                  widget.onClear();
+                },
+              ),
+            ],
+          ),
+        ),
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          transform: Matrix4.translationValues(_dragOffset, 0, 0),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _isDeleteRevealed ? _close : null,
+            onHorizontalDragStart: _handleDragStart,
+            onHorizontalDragUpdate: _handleDragUpdate,
+            onHorizontalDragEnd: _handleDragEnd,
+            child: widget.child,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RevealAction extends StatelessWidget {
+  const _RevealAction({
+    required this.icon,
+    required this.color,
+    required this.foregroundColor,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final Color color;
+  final Color foregroundColor;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: _RevealableWeekMealCardState._actionWidth,
+      child: Material(
+        color: color,
+        borderRadius: BorderRadius.circular(24),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Icon(icon, color: foregroundColor),
         ),
       ),
     );
