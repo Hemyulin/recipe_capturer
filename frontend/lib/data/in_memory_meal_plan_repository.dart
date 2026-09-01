@@ -46,6 +46,22 @@ class InMemoryMealPlanRepository implements MealPlanRepository {
   }
 
   @override
+  Future<void> setAway({
+    required DateTime date,
+    required String meal,
+    String reason = '',
+  }) {
+    _slots[_slotKey(date, meal)] = MealPlanSlot(
+      plannedFor: _dateOnly(date),
+      meal: meal,
+      slotType: 'away',
+      extras: _normalizeExtras([reason]),
+      recipeExtraIds: const [],
+    );
+    return Future.value();
+  }
+
+  @override
   Future<void> setEmpty({required DateTime date, required String meal}) {
     _slots[_slotKey(date, meal)] = MealPlanSlot(
       plannedFor: _dateOnly(date),

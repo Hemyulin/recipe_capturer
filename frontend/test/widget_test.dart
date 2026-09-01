@@ -321,6 +321,32 @@ void main() {
     );
   });
 
+  testWidgets('sets no-cooking for a Today meal', (WidgetTester tester) async {
+    final repo = InMemoryRecipeRepository();
+    final mealPlanRepo = InMemoryMealPlanRepository();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TodayPage(repo: repo, mealPlanRepo: mealPlanRepo),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Nichts geplant').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Kein Kochen').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Kein Kochen · Nicht zuhause'), findsOneWidget);
+    final slots = await mealPlanRepo.getRange(
+      from: DateTime.now(),
+      to: DateTime.now(),
+    );
+    final breakfast = slots.singleWhere((slot) => slot.meal == 'breakfast');
+    expect(breakfast.isAway, true);
+    expect(breakfast.awayReason, 'Nicht zuhause');
+  });
+
   testWidgets('sets a recipe for a Today meal', (WidgetTester tester) async {
     final repo = InMemoryRecipeRepository();
     final mealPlanRepo = InMemoryMealPlanRepository();
@@ -336,6 +362,12 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Nichts geplant').at(1));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'oatmeal');
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.text('Oatmeal mit Banane und Blaubeeren').last,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Oatmeal mit Banane und Blaubeeren').last);
     await tester.pumpAndSettle();
@@ -546,6 +578,12 @@ void main() {
     expect(find.text('Woche'), findsOneWidget);
     await tester.tap(find.text('Nichts geplant').first);
     await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'oatmeal');
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.text('Oatmeal mit Banane und Blaubeeren').last,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Oatmeal mit Banane und Blaubeeren').last);
     await tester.pumpAndSettle();
 
@@ -588,6 +626,41 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Nichts geplant'), findsNWidgets(3));
+    final slots = await mealPlanRepo.getRange(
+      from: selectedDate,
+      to: selectedDate,
+    );
+    expect(slots.singleWhere((slot) => slot.meal == 'breakfast').isEmpty, true);
+  });
+
+  testWidgets('shows and deletes no-cooking in the Week planner', (
+    WidgetTester tester,
+  ) async {
+    final repo = InMemoryRecipeRepository();
+    final mealPlanRepo = InMemoryMealPlanRepository();
+
+    final today = DateTime.now();
+    final selectedDate = DateTime(today.year, today.month, today.day);
+    await mealPlanRepo.setAway(
+      date: selectedDate,
+      meal: 'breakfast',
+      reason: 'Nicht zuhause',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: WeekPage(repo: repo, mealPlanRepo: mealPlanRepo),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Kein Kochen · Nicht zuhause'), findsOneWidget);
+
+    await tester.drag(find.text('Frühstück'), const Offset(-180, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.delete_outline).first);
+    await tester.pumpAndSettle();
+
     final slots = await mealPlanRepo.getRange(
       from: selectedDate,
       to: selectedDate,
@@ -721,6 +794,11 @@ void main() {
       recipeExtraIds: [cakeRecipe.id],
       extras: const [],
     );
+    await mealPlanRepo.setAway(
+      date: selectedDate.add(const Duration(days: 1)),
+      meal: 'dinner',
+      reason: 'Nicht zuhause',
+    );
 
     await tester.pumpWidget(
       MaterialApp(
@@ -739,6 +817,7 @@ void main() {
     expect(find.text('1 Zwiebel'), findsOneWidget);
     expect(find.text('1 Backpapier'), findsNothing);
     expect(find.text('560 ml boiling water'), findsNothing);
+    expect(find.text('Nicht zuhause'), findsNothing);
 
     await tester.tap(find.text('200 g Haferflocken'));
     await tester.pumpAndSettle();
@@ -932,6 +1011,13 @@ class _FakeDiagnosticMealPlanRepository
   Future<void> setLeftovers({
     required DateTime date,
     required String meal,
+  }) async {}
+
+  @override
+  Future<void> setAway({
+    required DateTime date,
+    required String meal,
+    String reason = '',
   }) async {}
 
   @override

@@ -98,6 +98,12 @@ abstract class MealPlanRepository {
 
   Future<void> setLeftovers({required DateTime date, required String meal});
 
+  Future<void> setAway({
+    required DateTime date,
+    required String meal,
+    String reason = '',
+  });
+
   Future<void> setEmpty({required DateTime date, required String meal});
 
   Future<void> setExtras({

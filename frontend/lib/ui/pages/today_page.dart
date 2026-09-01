@@ -131,6 +131,17 @@ class _TodayPageState extends State<TodayPage> {
     return _mealRecipeIds[slotId] == MealChoiceSheet.leftoversValue;
   }
 
+  bool _isAwaySlot(String slotId) {
+    final value = _mealRecipeIds[slotId];
+    return value != null && MealChoiceSheet.isAwayValue(value);
+  }
+
+  String _awayReason(String slotId) {
+    final value = _mealRecipeIds[slotId];
+    if (value == null || !MealChoiceSheet.isAwayValue(value)) return '';
+    return MealChoiceSheet.awayReason(value);
+  }
+
   Future<void> _openRecipe(Recipe? recipe) async {
     if (recipe == null) return;
     await context.push('/details', extra: recipe);
@@ -149,6 +160,12 @@ class _TodayPageState extends State<TodayPage> {
     try {
       if (selected == MealChoiceSheet.leftoversValue) {
         await widget.mealPlanRepo.setLeftovers(date: _today, meal: slotId);
+      } else if (MealChoiceSheet.isAwayValue(selected)) {
+        await widget.mealPlanRepo.setAway(
+          date: _today,
+          meal: slotId,
+          reason: MealChoiceSheet.awayReason(selected),
+        );
       } else {
         await widget.mealPlanRepo.setRecipe(
           date: _today,
@@ -284,6 +301,8 @@ class _TodayPageState extends State<TodayPage> {
       for (final slot in slots)
         slot.meal: slot.isLeftovers
             ? MealChoiceSheet.leftoversValue
+            : slot.isAway
+            ? MealChoiceSheet.awayValue(slot.awayReason)
             : slot.isRecipe
             ? slot.recipeId
             : null,
@@ -482,6 +501,9 @@ class _TodayPageState extends State<TodayPage> {
     final breakfastIsLeftovers = _isLeftoversSlot('breakfast');
     final lunchIsLeftovers = _isLeftoversSlot('lunch');
     final dinnerIsLeftovers = _isLeftoversSlot('dinner');
+    final breakfastIsAway = _isAwaySlot('breakfast');
+    final lunchIsAway = _isAwaySlot('lunch');
+    final dinnerIsAway = _isAwaySlot('dinner');
 
     return Scaffold(
       appBar: AppBar(
@@ -514,14 +536,22 @@ class _TodayPageState extends State<TodayPage> {
                       time: '07:30',
                       recipe: breakfast,
                       isLeftovers: breakfastIsLeftovers,
+                      isAway: breakfastIsAway,
+                      awayReason: _awayReason('breakfast'),
                       extras: _extraLabels('breakfast'),
-                      onTap: breakfast == null || breakfastIsLeftovers
+                      onTap:
+                          breakfast == null ||
+                              breakfastIsLeftovers ||
+                              breakfastIsAway
                           ? () => _chooseRecipe('breakfast')
                           : () => _openRecipe(breakfast),
                       onChange: () => _chooseRecipe('breakfast'),
                       onClear: () => _clearRecipe('breakfast'),
                       onExtras: () => _editExtras('breakfast'),
-                      onRepeat: breakfast == null || breakfastIsLeftovers
+                      onRepeat:
+                          breakfast == null ||
+                              breakfastIsLeftovers ||
+                              breakfastIsAway
                           ? null
                           : () => _repeatRecipe(
                               'breakfast',
@@ -535,14 +565,16 @@ class _TodayPageState extends State<TodayPage> {
                       time: '12:30',
                       recipe: lunch,
                       isLeftovers: lunchIsLeftovers,
+                      isAway: lunchIsAway,
+                      awayReason: _awayReason('lunch'),
                       extras: _extraLabels('lunch'),
-                      onTap: lunch == null || lunchIsLeftovers
+                      onTap: lunch == null || lunchIsLeftovers || lunchIsAway
                           ? () => _chooseRecipe('lunch')
                           : () => _openRecipe(lunch),
                       onChange: () => _chooseRecipe('lunch'),
                       onClear: () => _clearRecipe('lunch'),
                       onExtras: () => _editExtras('lunch'),
-                      onRepeat: lunch == null || lunchIsLeftovers
+                      onRepeat: lunch == null || lunchIsLeftovers || lunchIsAway
                           ? null
                           : () => _repeatRecipe('lunch', 'Mittagessen', lunch),
                     ),
@@ -552,14 +584,17 @@ class _TodayPageState extends State<TodayPage> {
                       time: '18:30',
                       recipe: dinner,
                       isLeftovers: dinnerIsLeftovers,
+                      isAway: dinnerIsAway,
+                      awayReason: _awayReason('dinner'),
                       extras: _extraLabels('dinner'),
-                      onTap: dinner == null || dinnerIsLeftovers
+                      onTap: dinner == null || dinnerIsLeftovers || dinnerIsAway
                           ? () => _chooseRecipe('dinner')
                           : () => _openRecipe(dinner),
                       onChange: () => _chooseRecipe('dinner'),
                       onClear: () => _clearRecipe('dinner'),
                       onExtras: () => _editExtras('dinner'),
-                      onRepeat: dinner == null || dinnerIsLeftovers
+                      onRepeat:
+                          dinner == null || dinnerIsLeftovers || dinnerIsAway
                           ? null
                           : () => _repeatRecipe('dinner', 'Abendessen', dinner),
                     ),
@@ -871,6 +906,8 @@ class _MealSlotCard extends StatelessWidget {
     required this.time,
     this.recipe,
     this.isLeftovers = false,
+    this.isAway = false,
+    this.awayReason = '',
     this.extras = const [],
     this.onTap,
     this.onChange,
@@ -883,6 +920,8 @@ class _MealSlotCard extends StatelessWidget {
   final String time;
   final Recipe? recipe;
   final bool isLeftovers;
+  final bool isAway;
+  final String awayReason;
   final List<String> extras;
   final VoidCallback? onTap;
   final VoidCallback? onChange;
@@ -897,7 +936,15 @@ class _MealSlotCard extends StatelessWidget {
     final imagePath = isLeftovers
         ? MealChoiceSheet.leftoversImagePath
         : currentRecipe?.mainImagePath;
-    final isPlanned = currentRecipe != null || isLeftovers;
+    final isPlanned = currentRecipe != null || isLeftovers || isAway;
+    final titleText = isAway
+        ? [
+            'Kein Kochen',
+            if (awayReason.trim().isNotEmpty) awayReason.trim(),
+          ].join(' · ')
+        : isLeftovers
+        ? 'Reste'
+        : recipe?.title ?? 'Nichts geplant';
 
     final card = Card(
       clipBehavior: Clip.antiAlias,
@@ -913,13 +960,15 @@ class _MealSlotCard extends StatelessWidget {
                   width: 86,
                   height: 86,
                   child: isPlanned
-                      ? RecipeImage(
-                          path: imagePath,
-                          placeholderSeed: currentRecipe?.id ?? title,
-                          cacheKey: currentRecipe == null
-                              ? null
-                              : recipeImageCacheKey(currentRecipe),
-                        )
+                      ? isAway
+                            ? HandledMealImage(title: title)
+                            : RecipeImage(
+                                path: imagePath,
+                                placeholderSeed: currentRecipe?.id ?? title,
+                                cacheKey: currentRecipe == null
+                                    ? null
+                                    : recipeImageCacheKey(currentRecipe),
+                              )
                       : UnplannedMealImage(title: title),
                 ),
               ),
@@ -938,7 +987,7 @@ class _MealSlotCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      isLeftovers ? 'Reste' : recipe?.title ?? 'Nichts geplant',
+                      titleText,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyLarge,

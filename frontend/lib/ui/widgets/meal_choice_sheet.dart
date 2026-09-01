@@ -6,7 +6,17 @@ class MealChoiceSheet extends StatefulWidget {
   const MealChoiceSheet({super.key, required this.recipes});
 
   static const leftoversValue = '__leftovers__';
+  static const awayPrefix = '__away__';
   static const leftoversImagePath = 'assets/demo_recipes/leftovers.png';
+
+  static String awayValue(String reason) => '$awayPrefix:${reason.trim()}';
+
+  static bool isAwayValue(String value) => value.startsWith('$awayPrefix:');
+
+  static String awayReason(String value) {
+    if (!isAwayValue(value)) return '';
+    return value.substring(awayPrefix.length + 1).trim();
+  }
 
   final List<Recipe> recipes;
 
@@ -50,7 +60,7 @@ class _MealChoiceSheetState extends State<MealChoiceSheet> {
       child: ListView.separated(
         shrinkWrap: true,
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-        itemCount: filteredRecipes.isEmpty ? 4 : filteredRecipes.length + 3,
+        itemCount: filteredRecipes.isEmpty ? 5 : filteredRecipes.length + 4,
         separatorBuilder: (_, index) =>
             index <= 1 ? const SizedBox(height: 8) : const Divider(height: 1),
         itemBuilder: (context, index) {
@@ -85,6 +95,18 @@ class _MealChoiceSheetState extends State<MealChoiceSheet> {
           if (index == 2) {
             return ListTile(
               contentPadding: EdgeInsets.zero,
+              leading: const _ChoiceIcon(icon: Icons.event_busy_outlined),
+              title: const Text('Kein Kochen'),
+              subtitle: const Text('Nicht zuhause, eingeladen oder unterwegs'),
+              onTap: () => Navigator.of(
+                context,
+              ).pop(MealChoiceSheet.awayValue('Nicht zuhause')),
+            );
+          }
+
+          if (index == 3) {
+            return ListTile(
+              contentPadding: EdgeInsets.zero,
               leading: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: const SizedBox(
@@ -112,7 +134,7 @@ class _MealChoiceSheetState extends State<MealChoiceSheet> {
             );
           }
 
-          final recipe = filteredRecipes[index - 3];
+          final recipe = filteredRecipes[index - 4];
           return ListTile(
             contentPadding: EdgeInsets.zero,
             leading: ClipRRect(
@@ -143,6 +165,28 @@ class _MealChoiceSheetState extends State<MealChoiceSheet> {
   }
 }
 
+class _ChoiceIcon extends StatelessWidget {
+  const _ChoiceIcon({required this.icon});
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      width: 56,
+      height: 56,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(icon, color: colorScheme.onSurfaceVariant),
+      ),
+    );
+  }
+}
+
 class UnplannedMealImage extends StatelessWidget {
   const UnplannedMealImage({super.key, required this.title});
 
@@ -160,6 +204,29 @@ class UnplannedMealImage extends StatelessWidget {
           color: colorScheme.primary,
           size: 34,
           semanticLabel: '$title planen',
+        ),
+      ),
+    );
+  }
+}
+
+class HandledMealImage extends StatelessWidget {
+  const HandledMealImage({super.key, required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return ColoredBox(
+      color: colorScheme.surfaceContainerHigh,
+      child: Center(
+        child: Icon(
+          Icons.event_busy_outlined,
+          color: colorScheme.onSurfaceVariant,
+          size: 30,
+          semanticLabel: '$title erledigt',
         ),
       ),
     );
