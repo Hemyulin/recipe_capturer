@@ -165,6 +165,37 @@ class ApiMealPlanRepository
   }
 
   @override
+  Future<void> setAway({
+    required DateTime date,
+    required String meal,
+    String reason = '',
+  }) async {
+    await _ensurePendingWritesLoaded();
+    final normalizedExtras = _normalizeExtras([reason]);
+    final body = {'slotType': 'away', 'extras': normalizedExtras};
+    try {
+      await _upsert(date: date, meal: meal, body: body);
+    } on Object catch (error) {
+      if (!_isOfflineError(error)) rethrow;
+      await _queueWrite(
+        method: 'PUT',
+        path: '/meal-plan/${_dateKey(date)}/$meal',
+        body: body,
+        applyLocal: () {
+          _writeOfflineSlot(
+            date: date,
+            meal: meal,
+            slotType: 'away',
+            extras: normalizedExtras,
+            recipeExtraIds: const [],
+          );
+        },
+      );
+      throw MealPlanQueuedException(_queuedMessage());
+    }
+  }
+
+  @override
   Future<void> setEmpty({required DateTime date, required String meal}) async {
     await _ensurePendingWritesLoaded();
     const body = {'slotType': 'empty'};

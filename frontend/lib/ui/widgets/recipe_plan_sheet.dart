@@ -144,6 +144,12 @@ Future<void> _restoreSlot(
     }
     if (slot.isLeftovers) {
       await mealPlanRepo.setLeftovers(date: selection.date, meal: slot.meal);
+    } else if (slot.isAway) {
+      await mealPlanRepo.setAway(
+        date: selection.date,
+        meal: slot.meal,
+        reason: slot.awayReason,
+      );
     } else if (slot.isRecipe && slot.recipeId != null) {
       await mealPlanRepo.setRecipe(
         date: selection.date,

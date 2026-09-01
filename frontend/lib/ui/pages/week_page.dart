@@ -168,6 +168,12 @@ class _WeekPageState extends State<WeekPage> {
     try {
       if (selected == MealChoiceSheet.leftoversValue) {
         await widget.mealPlanRepo.setLeftovers(date: date, meal: meal);
+      } else if (MealChoiceSheet.isAwayValue(selected)) {
+        await widget.mealPlanRepo.setAway(
+          date: date,
+          meal: meal,
+          reason: MealChoiceSheet.awayReason(selected),
+        );
       } else {
         await widget.mealPlanRepo.setRecipe(
           date: date,
@@ -261,6 +267,8 @@ class _WeekPageState extends State<WeekPage> {
       for (final slot in slots)
         _slotKey(slot.plannedFor, slot.meal): slot.isLeftovers
             ? MealChoiceSheet.leftoversValue
+            : slot.isAway
+            ? MealChoiceSheet.awayValue(slot.awayReason)
             : slot.isRecipe
             ? slot.recipeId
             : null,
@@ -370,6 +378,19 @@ class _WeekPageState extends State<WeekPage> {
                     isLeftoversForMeal: (meal) =>
                         _slotValue(_selectedDate, meal) ==
                         MealChoiceSheet.leftoversValue,
+                    isAwayForMeal: (meal) {
+                      final value = _slotValue(_selectedDate, meal);
+                      return value != null &&
+                          MealChoiceSheet.isAwayValue(value);
+                    },
+                    awayReasonForMeal: (meal) {
+                      final value = _slotValue(_selectedDate, meal);
+                      if (value == null ||
+                          !MealChoiceSheet.isAwayValue(value)) {
+                        return '';
+                      }
+                      return MealChoiceSheet.awayReason(value);
+                    },
                     extrasForMeal: (meal) => _extraLabels(_selectedDate, meal),
                     onChooseMeal: (meal) => _chooseSlot(_selectedDate, meal),
                     onClearMeal: (meal) => _clearSlot(_selectedDate, meal),
@@ -697,6 +718,8 @@ class _SelectedDayPlan extends StatelessWidget {
     required this.meals,
     required this.recipeForMeal,
     required this.isLeftoversForMeal,
+    required this.isAwayForMeal,
+    required this.awayReasonForMeal,
     required this.extrasForMeal,
     required this.onChooseMeal,
     required this.onClearMeal,
@@ -707,6 +730,8 @@ class _SelectedDayPlan extends StatelessWidget {
   final List<_MealInfo> meals;
   final Recipe? Function(String meal) recipeForMeal;
   final bool Function(String meal) isLeftoversForMeal;
+  final bool Function(String meal) isAwayForMeal;
+  final String Function(String meal) awayReasonForMeal;
   final List<String> Function(String meal) extrasForMeal;
   final void Function(String meal) onChooseMeal;
   final void Function(String meal) onClearMeal;
@@ -721,6 +746,8 @@ class _SelectedDayPlan extends StatelessWidget {
             meal: meal,
             recipe: recipeForMeal(meal.id),
             isLeftovers: isLeftoversForMeal(meal.id),
+            isAway: isAwayForMeal(meal.id),
+            awayReason: awayReasonForMeal(meal.id),
             extras: extrasForMeal(meal.id),
             onTap: () => onChooseMeal(meal.id),
             onChange: () => onChooseMeal(meal.id),
@@ -739,6 +766,8 @@ class _WeekMealCard extends StatelessWidget {
     required this.meal,
     this.recipe,
     required this.isLeftovers,
+    required this.isAway,
+    required this.awayReason,
     this.extras = const [],
     required this.onTap,
     required this.onChange,
@@ -749,6 +778,8 @@ class _WeekMealCard extends StatelessWidget {
   final _MealInfo meal;
   final Recipe? recipe;
   final bool isLeftovers;
+  final bool isAway;
+  final String awayReason;
   final List<String> extras;
   final VoidCallback onTap;
   final VoidCallback onChange;
@@ -762,7 +793,15 @@ class _WeekMealCard extends StatelessWidget {
     final imagePath = isLeftovers
         ? MealChoiceSheet.leftoversImagePath
         : currentRecipe?.mainImagePath;
-    final isPlanned = currentRecipe != null || isLeftovers;
+    final isPlanned = currentRecipe != null || isLeftovers || isAway;
+    final titleText = isAway
+        ? [
+            'Kein Kochen',
+            if (awayReason.trim().isNotEmpty) awayReason.trim(),
+          ].join(' · ')
+        : isLeftovers
+        ? 'Reste'
+        : recipe?.title ?? 'Nichts geplant';
 
     final card = Card(
       clipBehavior: Clip.antiAlias,
@@ -778,13 +817,15 @@ class _WeekMealCard extends StatelessWidget {
                   width: 86,
                   height: 86,
                   child: isPlanned
-                      ? RecipeImage(
-                          path: imagePath,
-                          placeholderSeed: currentRecipe?.id ?? meal.id,
-                          cacheKey: currentRecipe == null
-                              ? null
-                              : recipeImageCacheKey(currentRecipe),
-                        )
+                      ? isAway
+                            ? HandledMealImage(title: meal.label)
+                            : RecipeImage(
+                                path: imagePath,
+                                placeholderSeed: currentRecipe?.id ?? meal.id,
+                                cacheKey: currentRecipe == null
+                                    ? null
+                                    : recipeImageCacheKey(currentRecipe),
+                              )
                       : UnplannedMealImage(title: meal.label),
                 ),
               ),
@@ -826,7 +867,7 @@ class _WeekMealCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      isLeftovers ? 'Reste' : recipe?.title ?? 'Nichts geplant',
+                      titleText,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyLarge,

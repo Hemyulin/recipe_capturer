@@ -198,7 +198,8 @@ class _ShoppingPageState extends State<ShoppingPage> {
     ].whereType<Recipe>().toList();
     final extras = [
       for (final slot in sortedSlots)
-        for (final extra in slot.extras) extra,
+        if (!slot.isAway)
+          for (final extra in slot.extras) extra,
     ];
     final items = _ShoppingItem.fromRecipesAndExtras(
       [...plannedRecipes, ...sideRecipes],
@@ -799,20 +800,22 @@ class _ShoppingPageState extends State<ShoppingPage> {
         );
       }
 
-      final extraItems = _ShoppingItem.fromRecipesAndExtras(
-        const [],
-        slot.extras,
-        knowledgeByName,
-        const [],
-      ).scoped('extras:${slot.plannedFor}:${slot.meal}');
-      if (extraItems.isNotEmpty) {
-        groups.add(
-          _ShoppingGroup(
-            title: 'Extras',
-            subtitle: subtitle,
-            items: extraItems,
-          ),
-        );
+      if (!slot.isAway) {
+        final extraItems = _ShoppingItem.fromRecipesAndExtras(
+          const [],
+          slot.extras,
+          knowledgeByName,
+          const [],
+        ).scoped('extras:${slot.plannedFor}:${slot.meal}');
+        if (extraItems.isNotEmpty) {
+          groups.add(
+            _ShoppingGroup(
+              title: 'Extras',
+              subtitle: subtitle,
+              items: extraItems,
+            ),
+          );
+        }
       }
     }
 
@@ -838,7 +841,8 @@ class _ShoppingPageState extends State<ShoppingPage> {
       ].whereType<Recipe>().toList();
       final extras = [
         for (final slot in daySlots)
-          for (final extra in slot.extras) extra,
+          if (!slot.isAway)
+            for (final extra in slot.extras) extra,
       ];
       final items = _ShoppingItem.fromRecipesAndExtras(
         recipes,

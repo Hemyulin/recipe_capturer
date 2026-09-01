@@ -1,8 +1,8 @@
 import { IsArray, IsIn, IsOptional, IsString } from "class-validator";
 
 export class UpsertMealSlotDto {
-  @IsIn(["recipe", "leftovers", "empty"])
-  slotType!: "recipe" | "leftovers" | "empty";
+  @IsIn(["recipe", "leftovers", "away", "empty"])
+  slotType!: "recipe" | "leftovers" | "away" | "empty";
 
   @IsOptional()
   @IsString()

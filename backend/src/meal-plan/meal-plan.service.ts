@@ -57,6 +57,18 @@ export class MealPlanService {
         "empty",
         null,
         input.extras == null ? [] : this.normalizeExtras(input.extras),
+        [],
+      );
+    }
+
+    if (input.slotType === "away") {
+      return this.writeSlot(
+        plannedFor,
+        normalizedMeal,
+        "away",
+        null,
+        input.extras == null ? [] : this.normalizeExtras(input.extras),
+        [],
       );
     }
 
@@ -118,7 +130,7 @@ export class MealPlanService {
     return this.writeSlot(
       plannedFor,
       normalizedMeal,
-      existing.slot_type as "recipe" | "leftovers" | "empty",
+      existing.slot_type as "recipe" | "leftovers" | "away" | "empty",
       existing.recipe_id,
       extras,
       recipeExtraIds.filter((id) => id !== existing.recipe_id),
@@ -207,7 +219,7 @@ export class MealPlanService {
   private writeSlot(
     plannedFor: string,
     meal: string,
-    slotType: "recipe" | "leftovers" | "empty",
+    slotType: "recipe" | "leftovers" | "away" | "empty",
     recipeId: string | null,
     extras?: string[],
     recipeExtraIds?: string[],

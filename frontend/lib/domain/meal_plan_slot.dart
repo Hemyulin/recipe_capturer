@@ -17,7 +17,9 @@ class MealPlanSlot {
 
   bool get isRecipe => slotType == 'recipe';
   bool get isLeftovers => slotType == 'leftovers';
+  bool get isAway => slotType == 'away';
   bool get isEmpty => slotType == 'empty';
+  String get awayReason => isAway && extras.isNotEmpty ? extras.first : '';
 
   factory MealPlanSlot.fromJson(Map<String, dynamic> json) {
     return MealPlanSlot(

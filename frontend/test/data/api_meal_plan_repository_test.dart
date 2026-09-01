@@ -129,6 +129,11 @@ void main() {
       recipeId: 'recipe-1',
     );
     await repository.setLeftovers(date: date, meal: 'lunch');
+    await repository.setAway(
+      date: date,
+      meal: 'dinner',
+      reason: 'Nicht zuhause',
+    );
     await repository.setEmpty(date: date, meal: 'dinner');
     await repository.setExtras(
       date: date,
@@ -142,10 +147,12 @@ void main() {
       'PUT',
       'PUT',
       'PUT',
+      'PUT',
     ]);
     expect(requests.map((request) => request.path), [
       '/meal-plan/2026-08-23/breakfast',
       '/meal-plan/2026-08-23/lunch',
+      '/meal-plan/2026-08-23/dinner',
       '/meal-plan/2026-08-23/dinner',
       '/meal-plan/2026-08-23/dinner/extras',
     ]);
@@ -154,8 +161,12 @@ void main() {
       'recipeId': 'recipe-1',
     });
     expect(jsonDecode(requests[1].body), {'slotType': 'leftovers'});
-    expect(jsonDecode(requests[2].body), {'slotType': 'empty'});
-    expect(jsonDecode(requests[3].body), {
+    expect(jsonDecode(requests[2].body), {
+      'slotType': 'away',
+      'extras': ['Nicht zuhause'],
+    });
+    expect(jsonDecode(requests[3].body), {'slotType': 'empty'});
+    expect(jsonDecode(requests[4].body), {
       'extras': ['Brot', 'Butter'],
       'recipeExtraIds': ['recipe-side'],
     });
