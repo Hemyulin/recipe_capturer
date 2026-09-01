@@ -558,6 +558,77 @@ void main() {
     expect(breakfast.recipeId, testRecipes.first.id);
   });
 
+  testWidgets('swipes left on a Week meal to reveal delete', (
+    WidgetTester tester,
+  ) async {
+    final repo = InMemoryRecipeRepository();
+    final mealPlanRepo = InMemoryMealPlanRepository();
+    await repo.add(testRecipes.first);
+
+    final today = DateTime.now();
+    final selectedDate = DateTime(today.year, today.month, today.day);
+    await mealPlanRepo.setRecipe(
+      date: selectedDate,
+      meal: 'breakfast',
+      recipeId: testRecipes.first.id,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: WeekPage(repo: repo, mealPlanRepo: mealPlanRepo),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.text('Frühstück'), const Offset(-180, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.delete_outline).first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nichts geplant'), findsNWidgets(3));
+    final slots = await mealPlanRepo.getRange(
+      from: selectedDate,
+      to: selectedDate,
+    );
+    expect(slots.singleWhere((slot) => slot.meal == 'breakfast').isEmpty, true);
+  });
+
+  testWidgets('swipes right on a Week meal to change immediately', (
+    WidgetTester tester,
+  ) async {
+    final repo = InMemoryRecipeRepository();
+    final mealPlanRepo = InMemoryMealPlanRepository();
+    await repo.add(testRecipes.first);
+    await repo.add(testRecipes[1]);
+
+    final today = DateTime.now();
+    final selectedDate = DateTime(today.year, today.month, today.day);
+    await mealPlanRepo.setRecipe(
+      date: selectedDate,
+      meal: 'breakfast',
+      recipeId: testRecipes.first.id,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: WeekPage(repo: repo, mealPlanRepo: mealPlanRepo),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.text('Frühstück'), const Offset(180, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Kichererbsen-Couscous-Bowl').last);
+    await tester.pumpAndSettle();
+
+    final slots = await mealPlanRepo.getRange(
+      from: selectedDate,
+      to: selectedDate,
+    );
+    final breakfast = slots.singleWhere((slot) => slot.meal == 'breakfast');
+    expect(breakfast.recipeId, testRecipes[1].id);
+  });
+
   testWidgets('swipes the Week day strip to the next week', (
     WidgetTester tester,
   ) async {
